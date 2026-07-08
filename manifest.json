@@ -1,0 +1,15 @@
+{
+  "name": "Veiling Analyser",
+  "short_name": "Veiling",
+  "description": "Analyseer veilingkavels: marktprijzen, kosten en marge per veilinghuis.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#ebebeb",
+  "theme_color": "#242424",
+  "orientation": "portrait-primary",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}
