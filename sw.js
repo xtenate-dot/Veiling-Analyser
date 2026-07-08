@@ -4,7 +4,7 @@
  * internet opstart. API-aanroepen naar Anthropic gaan altijd rechtstreeks
  * over het netwerk — die cachen we bewust niet.
  */
-var CACHE_NAAM = 'veiling-analyser-v1';
+var CACHE_NAAM = 'veiling-analyser-v2';
 var APP_SHELL = [
   './',
   './index.html',

@@ -271,33 +271,32 @@
     var terug = App.ui.maakButton('\u2190 Terug', 'back-btn', function () { container.style.display = 'none'; });
     container.appendChild(terug);
 
-    var kop = document.createElement('div'); kop.className = 'card'; kop.style.borderLeft = '4px solid var(--brand)';
+    var kop = document.createElement('div'); kop.className = 'card'; kop.style.borderTop = '3px solid var(--gold)';
     var kopTop = document.createElement('div'); kopTop.style.cssText = 'display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;margin-bottom:6px';
     var kopLinks = document.createElement('div');
     var h2 = document.createElement('h2'); h2.style.cssText = 'font-size:17px;font-weight:700;margin-bottom:3px'; h2.textContent = d.titel || '';
     kopLinks.appendChild(h2);
-    var kopMeta = document.createElement('div'); kopMeta.style.cssText = 'font-size:12px;color:var(--muted)';
+    var kopMeta = document.createElement('div'); kopMeta.style.cssText = 'font-size:12px;color:var(--text-secondary)';
     kopMeta.textContent = 'Kavel ' + (d.kavelnummer || '-') + ' \u00B7 ' + (d.veiling || 'Onbekend');
     if (d.url) {
       kopMeta.appendChild(document.createTextNode(' \u00B7 '));
       var a = document.createElement('a'); a.href = d.url; a.target = '_blank'; a.rel = 'noopener noreferrer';
-      a.style.color = 'var(--brand)'; a.textContent = '\u2197 Bekijk kavel';
+      a.style.color = 'var(--gold)'; a.textContent = '\u2197 Bekijk kavel';
       kopMeta.appendChild(a);
     }
     kopLinks.appendChild(kopMeta);
     kopTop.appendChild(kopLinks);
     if (d.prijzen && d.prijzen.categorie) {
       var catBadge = document.createElement('span');
-      catBadge.style.cssText = 'background:var(--brand-light);color:var(--brand);font-size:12px;font-weight:600;padding:3px 10px;border-radius:20px';
+      catBadge.style.cssText = 'background:var(--gold-soft);color:var(--gold-ink);border:1px solid var(--gold-border);font-size:12px;font-weight:600;padding:3px 10px;border-radius:999px';
       catBadge.textContent = d.prijzen.categorie;
       kopTop.appendChild(catBadge);
     }
     kop.appendChild(kopTop);
     container.appendChild(kop);
 
-    container.appendChild(App.ui.maakVerdict(d.advies, d.adviesReden, d.maxBod));
+    container.appendChild(App.ui.maakSamenvatting(d));
     if (d.kosten) container.appendChild(App.ui.maakKostenBox(d.kosten, d.eigen_bod));
-    container.appendChild(App.ui.maakROI(d.roi));
 
     if (d.prijzen && d.prijzen.nieuwprijs) {
       var refCard = document.createElement('div'); refCard.className = 'card'; refCard.style.marginBottom = '16px';
@@ -306,15 +305,15 @@
       var refRow = document.createElement('div'); refRow.style.cssText = 'display:flex;gap:20px;flex-wrap:wrap';
       function refBlok(label, waarde, kleur, sub) {
         var b = document.createElement('div');
-        var l = document.createElement('div'); l.style.cssText = 'font-size:11px;color:var(--muted);text-transform:uppercase'; l.textContent = label;
+        var l = document.createElement('div'); l.style.cssText = 'font-size:11px;color:var(--text-secondary);text-transform:uppercase'; l.textContent = label;
         var w = document.createElement('div'); w.style.cssText = 'font-size:19px;font-weight:700' + (kleur ? ';color:' + kleur : ''); w.textContent = waarde;
         b.appendChild(l); b.appendChild(w);
-        if (sub) { var s = document.createElement('div'); s.style.cssText = 'font-size:11px;color:var(--muted)'; s.textContent = sub; b.appendChild(s); }
+        if (sub) { var s = document.createElement('div'); s.style.cssText = 'font-size:11px;color:var(--text-secondary)'; s.textContent = sub; b.appendChild(s); }
         return b;
       }
       refRow.appendChild(refBlok('Nieuwprijs', h.fmt(d.prijzen.nieuwprijs), null, d.prijzen.nieuwprijs_bron || ''));
-      if (mp) refRow.appendChild(refBlok('2e hands MP', h.fmt(mp.gemiddeld), '#e0954a'));
-      if (eb) refRow.appendChild(refBlok('eBay', h.fmt(eb.gemiddeld), '#0064d2'));
+      if (mp) refRow.appendChild(refBlok('2e hands MP', h.fmt(mp.gemiddeld), 'var(--text-secondary)'));
+      if (eb) refRow.appendChild(refBlok('eBay', h.fmt(eb.gemiddeld), 'var(--text-secondary)'));
       refCard.appendChild(refRow);
       container.appendChild(refCard);
     }

@@ -112,17 +112,17 @@
     box.appendChild(rij('Totale inkoopprijs', h.fmt(kosten.totaal)));
     if (kosten.marge != null) {
       var margeRij = rij('Verwachte marge (MP gem.)', (kosten.marge > 0 ? '+' : '') + h.fmt(kosten.marge), kosten.marge > 0 ? 'c-pos' : 'c-neg');
-      margeRij.style.cssText = 'margin-top:6px;padding-top:8px;border-top:1px solid #4a3f22';
+      margeRij.style.cssText = 'margin-top:6px;padding-top:8px;border-top:1px solid var(--border)';
       box.appendChild(margeRij);
     }
     return box;
   }
 
   function maakROI(roi) {
-    var kleur = roi >= 70 ? '#6fae74' : roi >= 40 ? '#d9b46a' : '#c0605a';
+    var kleur = roi >= 70 ? 'var(--green)' : roi >= 40 ? 'var(--orange)' : 'var(--red)';
     var wrap = document.createElement('div'); wrap.className = 'roi-wrap';
     var top = document.createElement('div'); top.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:4px';
-    var lbl = document.createElement('span'); lbl.style.cssText = 'font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px'; lbl.textContent = 'Handelspotentieel';
+    var lbl = document.createElement('span'); lbl.style.cssText = 'font-size:11px;font-weight:700;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.5px'; lbl.textContent = 'Handelspotentieel';
     var val = document.createElement('span'); val.style.cssText = 'font-size:20px;font-weight:800;color:' + kleur; val.textContent = roi + '/100';
     top.appendChild(lbl); top.appendChild(val); wrap.appendChild(top);
     var bar = document.createElement('div'); bar.className = 'roi-bar';
@@ -146,6 +146,79 @@
       box.appendChild(p2);
     }
     return box;
+  }
+
+  // ── Samenvattingskaart ────────────────────────────────────────────────────
+  // De belangrijkste cijfers (koopadvies, verwachte winst, ROI, totale kosten)
+  // samen bovenaan het analyseresultaat, in één overzichtelijke kaart.
+  function maakSamenvatting(d) {
+    var kosten = d.kosten;
+    var advies = d.advies;
+    var cls = advies === 'kopen' ? 'sum-kopen' : advies === 'twijfel' ? 'sum-twijfel' : 'sum-skip';
+    var icon = advies === 'kopen' ? '\u2713' : advies === 'twijfel' ? '~' : '\u2715';
+    var titelTekst = advies === 'kopen' ? 'Goede koop' : advies === 'twijfel' ? 'Twijfelgeval' : 'Beter overslaan';
+    var badgeTekst = advies === 'kopen' ? 'Bied' : advies === 'twijfel' ? 'Twijfel' : 'Skip';
+
+    var card = document.createElement('div'); card.className = 'summary-card ' + cls;
+
+    var head = document.createElement('div'); head.className = 'summary-head';
+    var iconEl = document.createElement('div'); iconEl.className = 'summary-icon'; iconEl.textContent = icon;
+    head.appendChild(iconEl);
+    var headTxt = document.createElement('div');
+    var titel = document.createElement('div'); titel.className = 'summary-title'; titel.textContent = titelTekst;
+    headTxt.appendChild(titel);
+    if (d.adviesReden) {
+      var reden = document.createElement('div'); reden.className = 'summary-reason'; reden.textContent = d.adviesReden;
+      headTxt.appendChild(reden);
+    }
+    if (d.maxBod) {
+      var maxb = document.createElement('div'); maxb.className = 'summary-maxbod';
+      maxb.textContent = '\uD83D\uDCA1 Maximaal rendabel bieden: ' + h.fmt(d.maxBod);
+      headTxt.appendChild(maxb);
+    }
+    head.appendChild(headTxt);
+    card.appendChild(head);
+
+    var grid = document.createElement('div'); grid.className = 'summary-grid';
+
+    function tile(label, valueText, valueClass) {
+      var t = document.createElement('div'); t.className = 'summary-tile';
+      var l = document.createElement('div'); l.className = 'summary-tile-label'; l.textContent = label;
+      var v = document.createElement('div'); v.className = 'summary-tile-value' + (valueClass ? ' ' + valueClass : ''); v.textContent = valueText;
+      t.appendChild(l); t.appendChild(v);
+      return t;
+    }
+
+    var t1 = document.createElement('div'); t1.className = 'summary-tile';
+    var l1 = document.createElement('div'); l1.className = 'summary-tile-label'; l1.textContent = 'Koopadvies';
+    var badge = document.createElement('span'); badge.className = 'summary-badge'; badge.textContent = badgeTekst;
+    t1.appendChild(l1); t1.appendChild(badge);
+    grid.appendChild(t1);
+
+    if (kosten && kosten.marge != null) {
+      grid.appendChild(tile('Verwachte winst', (kosten.marge > 0 ? '+' : '') + h.fmt(kosten.marge), kosten.marge > 0 ? 'pos' : 'neg'));
+    } else {
+      grid.appendChild(tile('Verwachte winst', '\u2014'));
+    }
+
+    var t3 = document.createElement('div'); t3.className = 'summary-tile';
+    var l3 = document.createElement('div'); l3.className = 'summary-tile-label'; l3.textContent = 'Handelspotentieel';
+    var v3 = document.createElement('div'); v3.className = 'summary-tile-value'; v3.textContent = d.roi + '/100';
+    var roiKleur = d.roi >= 70 ? 'var(--green)' : d.roi >= 40 ? 'var(--orange)' : 'var(--red)';
+    var bar = document.createElement('div'); bar.className = 'summary-bar';
+    var fill = document.createElement('div'); fill.className = 'summary-bar-fill'; fill.style.width = d.roi + '%'; fill.style.background = roiKleur;
+    bar.appendChild(fill);
+    t3.appendChild(l3); t3.appendChild(v3); t3.appendChild(bar);
+    grid.appendChild(t3);
+
+    if (kosten) {
+      grid.appendChild(tile('Totale kosten', h.fmt(kosten.totaal)));
+    } else {
+      grid.appendChild(tile('Totale kosten', '\u2014'));
+    }
+
+    card.appendChild(grid);
+    return card;
   }
 
   // ── Tabs ───────────────────────────────────────────────────────────────────
@@ -186,16 +259,16 @@
       return box;
     }
     rij.appendChild(stat(actieveKavels.length, 'Totaal'));
-    rij.appendChild(stat(nBied, 'Aanraders', '#6fae74'));
-    rij.appendChild(stat(nTwij, 'Twijfel', '#d9b46a'));
-    rij.appendChild(stat(nSkip, 'Skip', '#c0605a'));
-    rij.appendChild(stat(nEigen, 'Mijn biedingen', '#6ea8e0'));
-    rij.appendChild(stat(h.fmt(totaleWinst), 'Totale winst', totaleWinst >= 0 ? '#6fae74' : '#c0605a'));
+    rij.appendChild(stat(nBied, 'Aanraders', 'var(--green)'));
+    rij.appendChild(stat(nTwij, 'Twijfel', 'var(--orange)'));
+    rij.appendChild(stat(nSkip, 'Skip', 'var(--red)'));
+    rij.appendChild(stat(nEigen, 'Mijn biedingen', 'var(--gold-ink)'));
+    rij.appendChild(stat(h.fmt(totaleWinst), 'Totale winst', totaleWinst >= 0 ? 'var(--green)' : 'var(--red)'));
     rij.appendChild(stat(Math.round(gemRoi) + '/100', 'Gem. ROI'));
-    rij.appendChild(stat(h.fmt(gemMarge), 'Gem. marge'));
+    rij.appendChild(stat(h.fmt(gemMarge), 'Gem. marge', gemMarge >= 0 ? 'var(--green)' : 'var(--red)'));
     if (gewonnen.length) rij.appendChild(stat(h.fmt(totaalGeinvesteerd), 'Totaal geïnvesteerd'));
-    if (beste) rij.appendChild(stat(h.fmt(beste.kosten.marge), 'Beste koop', '#6fae74'));
-    if (slechtste && slechtste !== beste) rij.appendChild(stat(h.fmt(slechtste.kosten.marge), 'Slechtste koop', '#c0605a'));
+    if (beste) rij.appendChild(stat(h.fmt(beste.kosten.marge), 'Beste koop', 'var(--green)'));
+    if (slechtste && slechtste !== beste) rij.appendChild(stat(h.fmt(slechtste.kosten.marge), 'Slechtste koop', 'var(--red)'));
   }
 
   // ── Overzicht met filter, zoeken en sorteren ────────────────────────────────
@@ -245,7 +318,7 @@
 
     if (gefilterd.length === 0) {
       var leegMsg = document.createElement('div');
-      leegMsg.style.cssText = 'text-align:center;padding:24px;color:var(--muted);font-size:14px';
+      leegMsg.style.cssText = 'text-align:center;padding:24px;color:var(--text-secondary);font-size:14px';
       leegMsg.textContent = 'Geen kavels gevonden voor dit filter/deze zoekterm.';
       list.appendChild(leegMsg);
       return;
@@ -280,8 +353,8 @@
     var main = document.createElement('div');
     var titel = document.createElement('div'); titel.className = 'kavel-titel'; titel.textContent = k.titel || 'Onbekend';
     if (k.eigen_bod && !isGewonnen) {
-      var b = maakBadge('Mijn bod', '');
-      b.style.cssText = 'font-size:11px;background:#1a2530;color:#6ea8e0;padding:2px 7px;border-radius:20px;font-weight:600;margin-left:6px;vertical-align:middle';
+      var b = maakBadge('Mijn bod', 'pill pill-eigen-bod');
+      b.style.cssText = 'margin-left:6px;vertical-align:middle';
       titel.appendChild(b);
     }
     main.appendChild(titel);
@@ -293,7 +366,7 @@
     if (!isGewonnen && k.url) {
       meta.appendChild(document.createTextNode(' \u00B7 '));
       var link = document.createElement('a'); link.href = k.url; link.target = '_blank'; link.rel = 'noopener noreferrer';
-      link.style.cssText = 'color:var(--brand);text-decoration:none'; link.textContent = '\u2197 Bekijk';
+      link.style.cssText = 'color:var(--gold);text-decoration:none'; link.textContent = '\u2197 Bekijk';
       meta.appendChild(link);
     }
     main.appendChild(meta);
@@ -326,7 +399,7 @@
       acties.appendChild(maakButton('X', 'btn-danger', function () { if (confirm('Definitief verwijderen?')) { verwijderKavel(echteIdx); renderGewonnen(); } }));
     } else {
       var btnG = maakButton('\uD83C\uDFC6 Gewonnen', 'btn-sm', function (e) { e.stopPropagation(); markeerGewonnen(echteIdx); });
-      btnG.style.background = '#2b2311'; btnG.style.color = '#e0954a';
+      btnG.style.background = 'var(--gold-soft)'; btnG.style.borderColor = 'var(--gold-border)'; btnG.style.color = 'var(--gold-ink)';
       acties.appendChild(btnG);
       acties.appendChild(maakButton('Heranalyseer', 'btn-sm', function (e) { e.stopPropagation(); App.analyse.heranalyseer(echteIdx); }));
       acties.appendChild(maakButton('X', 'btn-danger', function (e) { e.stopPropagation(); verwijderKavel(echteIdx); }));
@@ -526,6 +599,7 @@
     toast: toast, showError: showError, showSuccess: showSuccess, showLoading: showLoading,
     maakButton: maakButton, maakBadge: maakBadge, maakPill: maakPill, maakStatusPill: maakStatusPill,
     maakPrijskaart: maakPrijskaart, maakKostenBox: maakKostenBox, maakROI: maakROI, maakVerdict: maakVerdict,
+    maakSamenvatting: maakSamenvatting,
     switchTab: switchTab, renderOverzicht: renderOverzicht, renderGewonnen: renderGewonnen, renderStats: renderStats,
     setFilter: setFilter, setZoekterm: setZoekterm, setSortering: setSortering,
     toggleSelectie: toggleSelectie, selecteerRij: selecteerRij, allesAanvinken: allesAanvinken,
