@@ -1,103 +1,92 @@
 /**
- * helpers.js
- * Kleine, generieke hulpfuncties zonder afhankelijkheid van app-state.
- * Alles hangt onder window.App.helpers zodat er geen losse globals ontstaan.
+ * sheets.js
+ * Synchronisatie met een Google Apps Script Web App (optioneel).
+ * Verbeteringen t.o.v. de vorige versie: zichtbare sync-status, laatste
+ * sync-tijdstip, en één automatische herhaling bij een netwerkfout.
  */
 (function (App) {
   'use strict';
 
-  /** Formatteert een getal als euro-bedrag, bijv. 1234.5 -> "€1.235" */
-  function fmt(n) {
-    return (n != null && isFinite(n)) ? '\u20ac' + Math.round(n).toLocaleString('nl-NL') : '-';
+  function laadUrl() {
+    App.state.sheetsUrl = App.storage.getRaw(App.storage.KEYS.sheetsUrl, '');
+    App.state.lastSync = App.storage.get(App.storage.KEYS.lastSync, null);
   }
 
-  /** Formatteert een fractie (0.183) als percentage-string "18%" */
-  function formatPercentage(n, decimals) {
-    if (n == null || !isFinite(n)) return '-';
-    return n.toFixed(decimals || 0) + '%';
+  function setUrl(url) {
+    App.state.sheetsUrl = url;
+    App.storage.setRaw(App.storage.KEYS.sheetsUrl, url);
   }
 
-  /** Formatteert een timestamp (ms) als Nederlandse datum */
-  function formatDate(ts) {
-    if (!ts) return '';
-    try { return new Date(ts).toLocaleDateString('nl-NL'); } catch (e) { return ''; }
-  }
-
-  function formatDateTime(ts) {
-    if (!ts) return '';
-    try { return new Date(ts).toLocaleString('nl-NL'); } catch (e) { return ''; }
-  }
-
-  /** Leidt een leesbare productnaam af uit een kavel-URL (best-effort, mag falen) */
-  function naamUitUrl(u) {
+  async function fetchMetTimeout(url, options, timeoutMs) {
+    var controller = new AbortController();
+    var timer = setTimeout(function () { controller.abort(); }, timeoutMs || 15000);
     try {
-      var deel = (u.split('/veiling-kavel/')[1] || '').split('?')[0];
-      var slug = deel.replace(/\/\d+$/, '').replace(/-/g, ' ').trim();
-      if (!slug) return '';
-      return slug.charAt(0).toUpperCase() + slug.slice(1);
-    } catch (e) { return ''; }
-  }
-
-  /** Genereert een vrij-uniek id (voldoende voor lokale state, geen crypto-behoefte) */
-  function uid(prefix) {
-    return (prefix || 'id') + '_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
-  }
-
-  /** Knijpt een getal tussen min en max */
-  function clamp(n, min, max) {
-    return Math.max(min, Math.min(max, n));
-  }
-
-  /** Voorkomt te vaak achter elkaar dezelfde functie aanroepen (bijv. bij zoeken tijdens typen) */
-  function debounce(fn, wait) {
-    var t = null;
-    return function () {
-      var args = arguments, ctx = this;
-      clearTimeout(t);
-      t = setTimeout(function () { fn.apply(ctx, args); }, wait);
-    };
-  }
-
-  /** Kort querySelector helper */
-  function qs(sel, root) { return (root || document).querySelector(sel); }
-  function qsa(sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); }
-  function byId(id) { return document.getElementById(id); }
-
-  /**
-   * Parseert JSON die Claude soms met markdown-codeblokken of extra tekst eromheen terugstuurt.
-   * Probeert drie strategieën, van strikt naar coulant.
-   */
-  function parseLooseJSON(txt) {
-    if (!txt) return null;
-    var clean = txt.replace(/```json/gi, '').replace(/```/g, '').trim();
-    try { return JSON.parse(clean); } catch (e) { /* volgende poging */ }
-
-    var start = clean.indexOf('{');
-    var end = clean.lastIndexOf('}');
-    if (start !== -1 && end !== -1 && end > start) {
-      try { return JSON.parse(clean.slice(start, end + 1)); } catch (e) { /* volgende poging */ }
+      return await fetch(url, Object.assign({}, options, { signal: controller.signal }));
+    } finally {
+      clearTimeout(timer);
     }
-
-    var start2 = txt.indexOf('{');
-    var end2 = txt.lastIndexOf('}');
-    if (start2 !== -1 && end2 !== -1 && end2 > start2) {
-      try { return JSON.parse(txt.slice(start2, end2 + 1)); } catch (e) { /* geef op */ }
-    }
-    return null;
   }
 
-  App.helpers = {
-    fmt: fmt,
-    formatPercentage: formatPercentage,
-    formatDate: formatDate,
-    formatDateTime: formatDateTime,
-    naamUitUrl: naamUitUrl,
-    uid: uid,
-    clamp: clamp,
-    debounce: debounce,
-    qs: qs,
-    qsa: qsa,
-    byId: byId,
-    parseLooseJSON: parseLooseJSON
+  async function syncNaarSheets(pogingen) {
+    if (!App.state.sheetsUrl) return;
+    pogingen = pogingen == null ? 1 : pogingen;
+    App.state.syncBezig = true;
+    App.ui && App.ui.updateSyncStatus && App.ui.updateSyncStatus();
+    try {
+      var resp = await fetchMetTimeout(App.state.sheetsUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({ actie: 'opslaan', kavels: App.state.kavels })
+      });
+      await resp.json().catch(function () { return null; });
+      App.state.lastSync = Date.now();
+      App.storage.set(App.storage.KEYS.lastSync, App.state.lastSync);
+    } catch (e) {
+      App.logger.warn('Sync naar Sheets mislukt:', e.message);
+      if (pogingen < 2) {
+        await new Promise(function (r) { setTimeout(r, 1000); });
+        return syncNaarSheets(pogingen + 1);
+      }
+      App.ui && App.ui.showError && App.ui.showError('Synchroniseren met Google Sheets is niet gelukt. Je wijzigingen blijven lokaal bewaard.');
+    } finally {
+      App.state.syncBezig = false;
+      App.ui && App.ui.updateSyncStatus && App.ui.updateSyncStatus();
+    }
+  }
+
+  async function syncVanSheets() {
+    if (!App.state.sheetsUrl) return;
+    App.state.syncBezig = true;
+    App.ui && App.ui.updateSyncStatus && App.ui.updateSyncStatus();
+    try {
+      var resp = await fetchMetTimeout(App.state.sheetsUrl, {}, 15000);
+      var data = await resp.json();
+      if (data && data.kavels) {
+        App.state.kavels = data.kavels.map(function (k) {
+          try { if (typeof k.kosten === 'string' && k.kosten) k.kosten = JSON.parse(k.kosten); } catch (e) { /* laat staan */ }
+          try { if (typeof k.prijzen === 'string' && k.prijzen) k.prijzen = JSON.parse(k.prijzen); } catch (e) { /* laat staan */ }
+          k.eigen_bod = k.eigen_bod === true || k.eigen_bod === 'true' || k.eigen_bod === 'TRUE';
+          return k;
+        });
+        App.storage.set(App.storage.KEYS.kavels, App.state.kavels);
+        App.state.lastSync = Date.now();
+        App.storage.set(App.storage.KEYS.lastSync, App.state.lastSync);
+        App.ui && App.ui.updateBadge && App.ui.updateBadge();
+        App.ui && App.ui.renderOverzicht && App.ui.renderOverzicht();
+      }
+    } catch (e) {
+      App.logger.warn('Sync van Sheets mislukt:', e.message);
+      App.ui && App.ui.showError && App.ui.showError('Ophalen vanaf Google Sheets is niet gelukt.');
+    } finally {
+      App.state.syncBezig = false;
+      App.ui && App.ui.updateSyncStatus && App.ui.updateSyncStatus();
+    }
+  }
+
+  App.sheets = {
+    laadUrl: laadUrl,
+    setUrl: setUrl,
+    syncNaarSheets: syncNaarSheets,
+    syncVanSheets: syncVanSheets
   };
 })(window.App = window.App || {});

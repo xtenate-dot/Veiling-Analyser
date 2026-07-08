@@ -1,162 +1,103 @@
 /**
- * api.js
- * Enige plek in de app die fetch() aanroept naar de Anthropic API.
- * Bevat: timeout (AbortController), retry bij netwerkfouten (niet bij API-fouten),
- * en validatie van de teruggekregen prijzendata.
- *
- * Let op API-key veiligheid: de key staat noodgedwongen in localStorage van de
- * browser, omdat deze app geen eigen backend heeft. Dat is voor persoonlijk
- * gebruik op een vertrouwd apparaat te overzien, maar niet ideaal:
- *   Browser  -->  eigen backend (bewaart de key server-side)  -->  Claude API
- * is de veiligere opzet zodra de app door meerdere mensen gebruikt wordt of
- * ergens publiek gehost wordt. Zonder backend: deel de app-URL nooit met de
- * key erin, gebruik een key met een uitgavenlimiet, en wis 'm als je een device
- * niet meer vertrouwt.
+ * helpers.js
+ * Kleine, generieke hulpfuncties zonder afhankelijkheid van app-state.
+ * Alles hangt onder window.App.helpers zodat er geen losse globals ontstaan.
  */
 (function (App) {
   'use strict';
 
-  var ENDPOINT = 'https://api.anthropic.com/v1/messages';
-  var MODEL = 'claude-sonnet-4-6';
-  var TIMEOUT_MS = 30000;
-  var MAX_RETRIES = 2; // alleen bij netwerkfouten, niet bij API/HTTP-fouten
+  /** Formatteert een getal als euro-bedrag, bijv. 1234.5 -> "€1.235" */
+  function fmt(n) {
+    return (n != null && isFinite(n)) ? '\u20ac' + Math.round(n).toLocaleString('nl-NL') : '-';
+  }
 
-  function getApiKey() { return App.storage.getRaw(App.storage.KEYS.apiKey, ''); }
-  function setApiKey(key) { return App.storage.setRaw(App.storage.KEYS.apiKey, key); }
-  function clearApiKey() { App.storage.remove(App.storage.KEYS.apiKey); }
+  /** Formatteert een fractie (0.183) als percentage-string "18%" */
+  function formatPercentage(n, decimals) {
+    if (n == null || !isFinite(n)) return '-';
+    return n.toFixed(decimals || 0) + '%';
+  }
 
-  function sleep(ms) { return new Promise(function (res) { setTimeout(res, ms); }); }
+  /** Formatteert een timestamp (ms) als Nederlandse datum */
+  function formatDate(ts) {
+    if (!ts) return '';
+    try { return new Date(ts).toLocaleDateString('nl-NL'); } catch (e) { return ''; }
+  }
 
-  /**
-   * Eén poging tot een API-call, met timeout via AbortController.
-   * Gooit een Error met duidelijke .code ('timeout' | 'network' | 'api') zodat
-   * de aanroeper weet of een retry zinvol is.
-   */
-  async function eenPoging(system, userText, maxTokens, images) {
-    var key = getApiKey();
-    if (!key) { var e = new Error('Voer eerst een API key in.'); e.code = 'no-key'; throw e; }
+  function formatDateTime(ts) {
+    if (!ts) return '';
+    try { return new Date(ts).toLocaleString('nl-NL'); } catch (e) { return ''; }
+  }
 
-    var controller = new AbortController();
-    var timer = setTimeout(function () { controller.abort(); }, TIMEOUT_MS);
-
-    var content = [];
-    if (images && images.length) {
-      images.forEach(function (img) {
-        content.push({ type: 'image', source: { type: 'base64', media_type: img.mediaType, data: img.base64 } });
-      });
-    }
-    content.push({ type: 'text', text: userText });
-
-    var resp;
+  /** Leidt een leesbare productnaam af uit een kavel-URL (best-effort, mag falen) */
+  function naamUitUrl(u) {
     try {
-      resp = await fetch(ENDPOINT, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': key,
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true'
-        },
-        body: JSON.stringify({
-          model: MODEL,
-          max_tokens: maxTokens || 600,
-          system: system,
-          messages: [{ role: 'user', content: content }]
-        }),
-        signal: controller.signal
-      });
-    } catch (err) {
-      clearTimeout(timer);
-      if (err.name === 'AbortError') {
-        var te = new Error('De AI reageerde niet binnen 30 seconden. Probeer het opnieuw.');
-        te.code = 'timeout';
-        throw te;
-      }
-      var ne = new Error('Netwerkfout: kon geen verbinding maken met de API.');
-      ne.code = 'network';
-      throw ne;
-    }
-    clearTimeout(timer);
-
-    var data;
-    try {
-      data = await resp.json();
-    } catch (err) {
-      var pe = new Error('Onverwacht antwoord van de API (geen geldig JSON).');
-      pe.code = 'api';
-      throw pe;
-    }
-
-    if (data.error) {
-      var ae = new Error(data.error.message || (data.error.type + ' fout van de API'));
-      ae.code = 'api';
-      throw ae;
-    }
-    if (!data.content) {
-      var ce = new Error('Onverwachte API-response: geen content veld.');
-      ce.code = 'api';
-      throw ce;
-    }
-    return data.content.map(function (b) { return b.text || ''; }).join('');
+      var deel = (u.split('/veiling-kavel/')[1] || '').split('?')[0];
+      var slug = deel.replace(/\/\d+$/, '').replace(/-/g, ' ').trim();
+      if (!slug) return '';
+      return slug.charAt(0).toUpperCase() + slug.slice(1);
+    } catch (e) { return ''; }
   }
+
+  /** Genereert een vrij-uniek id (voldoende voor lokale state, geen crypto-behoefte) */
+  function uid(prefix) {
+    return (prefix || 'id') + '_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+  }
+
+  /** Knijpt een getal tussen min en max */
+  function clamp(n, min, max) {
+    return Math.max(min, Math.min(max, n));
+  }
+
+  /** Voorkomt te vaak achter elkaar dezelfde functie aanroepen (bijv. bij zoeken tijdens typen) */
+  function debounce(fn, wait) {
+    var t = null;
+    return function () {
+      var args = arguments, ctx = this;
+      clearTimeout(t);
+      t = setTimeout(function () { fn.apply(ctx, args); }, wait);
+    };
+  }
+
+  /** Kort querySelector helper */
+  function qs(sel, root) { return (root || document).querySelector(sel); }
+  function qsa(sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); }
+  function byId(id) { return document.getElementById(id); }
 
   /**
-   * callClaude met automatische retry bij netwerk-/timeoutfouten (max 2 extra pogingen).
-   * API-fouten (bijv. ongeldige key, rate limit) worden NIET herhaald — die lossen
-   * zichzelf niet op door het nog een keer te proberen.
+   * Parseert JSON die Claude soms met markdown-codeblokken of extra tekst eromheen terugstuurt.
+   * Probeert drie strategieën, van strikt naar coulant.
    */
-  async function callClaude(system, userText, maxTokens, images) {
-    var laatsteFout = null;
-    for (var poging = 0; poging <= MAX_RETRIES; poging++) {
-      try {
-        return await eenPoging(system, userText, maxTokens, images);
-      } catch (err) {
-        laatsteFout = err;
-        var magOpnieuw = (err.code === 'network' || err.code === 'timeout') && poging < MAX_RETRIES;
-        if (!magOpnieuw) throw err;
-        App.logger.warn('API-poging', poging + 1, 'mislukt (' + err.code + '), opnieuw proberen...');
-        await sleep(500 * (poging + 1)); // korte oplopende pauze
-      }
+  function parseLooseJSON(txt) {
+    if (!txt) return null;
+    var clean = txt.replace(/```json/gi, '').replace(/```/g, '').trim();
+    try { return JSON.parse(clean); } catch (e) { /* volgende poging */ }
+
+    var start = clean.indexOf('{');
+    var end = clean.lastIndexOf('}');
+    if (start !== -1 && end !== -1 && end > start) {
+      try { return JSON.parse(clean.slice(start, end + 1)); } catch (e) { /* volgende poging */ }
     }
-    throw laatsteFout;
+
+    var start2 = txt.indexOf('{');
+    var end2 = txt.lastIndexOf('}');
+    if (start2 !== -1 && end2 !== -1 && end2 > start2) {
+      try { return JSON.parse(txt.slice(start2, end2 + 1)); } catch (e) { /* geef op */ }
+    }
+    return null;
   }
 
-  /**
-   * Controleert of de door Claude teruggegeven prijzendata bruikbaar is.
-   * Geeft { valid, errors[] } terug in plaats van te crashen op ontbrekende velden.
-   */
-  function validatePrijzenResponse(obj) {
-    var errors = [];
-    if (!obj || typeof obj !== 'object') { errors.push('Geen geldig JSON-object ontvangen.'); return { valid: false, errors: errors }; }
-    if (!obj.productnaam || typeof obj.productnaam !== 'string') errors.push('Productnaam ontbreekt.');
-    if (!obj.marktplaats || typeof obj.marktplaats !== 'object') {
-      errors.push('Marktplaats-prijzen ontbreken.');
-    } else {
-      ['laag', 'gemiddeld', 'hoog'].forEach(function (veld) {
-        if (typeof obj.marktplaats[veld] !== 'number' || !isFinite(obj.marktplaats[veld])) {
-          errors.push('Marktplaats.' + veld + ' is geen geldig getal.');
-        }
-      });
-    }
-    if (obj.nieuwprijs != null && (typeof obj.nieuwprijs !== 'number' || !isFinite(obj.nieuwprijs))) {
-      errors.push('Nieuwprijs is geen geldig getal.');
-    }
-    if (obj.ebay && typeof obj.ebay === 'object') {
-      ['laag', 'gemiddeld', 'hoog'].forEach(function (veld) {
-        if (obj.ebay[veld] != null && (typeof obj.ebay[veld] !== 'number' || !isFinite(obj.ebay[veld]))) {
-          errors.push('eBay.' + veld + ' is geen geldig getal.');
-        }
-      });
-    }
-    return { valid: errors.length === 0, errors: errors };
-  }
-
-  App.api = {
-    callClaude: callClaude,
-    getApiKey: getApiKey,
-    setApiKey: setApiKey,
-    clearApiKey: clearApiKey,
-    validatePrijzenResponse: validatePrijzenResponse,
-    parseJSON: function (txt) { return App.helpers.parseLooseJSON(txt); }
+  App.helpers = {
+    fmt: fmt,
+    formatPercentage: formatPercentage,
+    formatDate: formatDate,
+    formatDateTime: formatDateTime,
+    naamUitUrl: naamUitUrl,
+    uid: uid,
+    clamp: clamp,
+    debounce: debounce,
+    qs: qs,
+    qsa: qsa,
+    byId: byId,
+    parseLooseJSON: parseLooseJSON
   };
 })(window.App = window.App || {});

@@ -8,20 +8,20 @@ var CACHE_NAAM = 'veiling-analyser-v1';
 var APP_SHELL = [
   './',
   './index.html',
-  './css/style.css',
+  './style.css',
   './manifest.json',
   './icon.svg',
-  './js/helpers.js',
-  './js/logger.js',
-  './js/storage.js',
-  './js/state.js',
-  './js/veilinghuizen.js',
-  './js/api.js',
-  './js/sheets.js',
-  './js/ui.js',
-  './js/analyse.js',
-  './js/exportImport.js',
-  './js/app.js'
+  './helpers.js',
+  './logger.js',
+  './storage.js',
+  './state.js',
+  './veilinghuizen.js',
+  './api.js',
+  './sheets.js',
+  './ui.js',
+  './analyse.js',
+  './exportImport.js',
+  './app.js'
 ];
 
 self.addEventListener('install', function (event) {

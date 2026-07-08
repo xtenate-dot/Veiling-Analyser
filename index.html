@@ -1,92 +1,252 @@
-/**
- * sheets.js
- * Synchronisatie met een Google Apps Script Web App (optioneel).
- * Verbeteringen t.o.v. de vorige versie: zichtbare sync-status, laatste
- * sync-tijdstip, en één automatische herhaling bij een netwerkfout.
- */
-(function (App) {
-  'use strict';
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Veiling">
+<meta name="theme-color" content="#242424">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon.svg">
+<title>Veiling Analyser</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
 
-  function laadUrl() {
-    App.state.sheetsUrl = App.storage.getRaw(App.storage.KEYS.sheetsUrl, '');
-    App.state.lastSync = App.storage.get(App.storage.KEYS.lastSync, null);
-  }
+<div id="apikey-bar" class="apikey-bar" style="display:none">
+  <span>&#128273; <strong>API Key vereist</strong> &mdash; haal op via <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener noreferrer" style="color:var(--brand)">console.anthropic.com</a></span>
+  <input type="password" id="apikey-input" placeholder="sk-ant-..." autocomplete="off" />
+  <button class="save-btn" id="apikey-save-btn">Opslaan</button>
+</div>
+<div id="apikey-ok" class="apikey-ok" style="display:none">
+  &#9989; API Key ingesteld &mdash; <a href="#" id="apikey-reset-link" style="color:var(--brand);margin-left:8px">Wijzigen</a>
+</div>
 
-  function setUrl(url) {
-    App.state.sheetsUrl = url;
-    App.storage.setRaw(App.storage.KEYS.sheetsUrl, url);
-  }
+<header>
+  <div class="logo">&#128296;</div>
+  <div>
+    <h1>Veiling Analyser</h1>
+    <p>Kavels analyseren &middot; Prijzen opzoeken &middot; Marge berekenen</p>
+    <div id="sync-status"></div>
+  </div>
+  <div class="hdr-r">
+    <button class="hbtn hbtn-ghost" id="install-btn" style="display:none">&#8615; Installeer app</button>
+    <button class="hbtn hbtn-ghost" id="sync-btn">&#9729; Sync</button>
+    <button class="hbtn hbtn-ghost" id="veilinghuizen-btn">&#127974; Veilinghuizen</button>
+    <button class="hbtn hbtn-ghost" id="selecteer-btn">&#9745; Selecteren</button>
+    <button class="hbtn hbtn-accent" id="add-kavel-btn">+ Kavel toevoegen</button>
+  </div>
+</header>
 
-  async function fetchMetTimeout(url, options, timeoutMs) {
-    var controller = new AbortController();
-    var timer = setTimeout(function () { controller.abort(); }, timeoutMs || 15000);
-    try {
-      return await fetch(url, Object.assign({}, options, { signal: controller.signal }));
-    } finally {
-      clearTimeout(timer);
-    }
-  }
+<div class="sel-balk" id="sel-balk">
+  <span id="sel-aantal">0 geselecteerd</span>
+  <button class="sel-del-btn" id="sel-del-btn">&#128465; Verwijder</button>
+  <button class="sel-action" id="sel-alles-btn">&#10003; Alles</button>
+  <button class="sel-action" id="sel-geen-btn">&#10007; Geen</button>
+  <button class="sel-action" style="margin-left:auto" id="sel-annuleer-btn">Annuleren</button>
+</div>
 
-  async function syncNaarSheets(pogingen) {
-    if (!App.state.sheetsUrl) return;
-    pogingen = pogingen == null ? 1 : pogingen;
-    App.state.syncBezig = true;
-    App.ui && App.ui.updateSyncStatus && App.ui.updateSyncStatus();
-    try {
-      var resp = await fetchMetTimeout(App.state.sheetsUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify({ actie: 'opslaan', kavels: App.state.kavels })
-      });
-      await resp.json().catch(function () { return null; });
-      App.state.lastSync = Date.now();
-      App.storage.set(App.storage.KEYS.lastSync, App.state.lastSync);
-    } catch (e) {
-      App.logger.warn('Sync naar Sheets mislukt:', e.message);
-      if (pogingen < 2) {
-        await new Promise(function (r) { setTimeout(r, 1000); });
-        return syncNaarSheets(pogingen + 1);
-      }
-      App.ui && App.ui.showError && App.ui.showError('Synchroniseren met Google Sheets is niet gelukt. Je wijzigingen blijven lokaal bewaard.');
-    } finally {
-      App.state.syncBezig = false;
-      App.ui && App.ui.updateSyncStatus && App.ui.updateSyncStatus();
-    }
-  }
+<div class="tabs">
+  <div class="tab active">&#128203; Overzicht <span class="tab-badge" id="badge">0</span></div>
+  <div class="tab">&#128269; Kavel analyseren</div>
+  <div class="tab">&#127942; Gewonnen <span class="tab-badge" id="badge-gewonnen">0</span></div>
+  <div class="tab">&#128214; Handleiding</div>
+</div>
 
-  async function syncVanSheets() {
-    if (!App.state.sheetsUrl) return;
-    App.state.syncBezig = true;
-    App.ui && App.ui.updateSyncStatus && App.ui.updateSyncStatus();
-    try {
-      var resp = await fetchMetTimeout(App.state.sheetsUrl, {}, 15000);
-      var data = await resp.json();
-      if (data && data.kavels) {
-        App.state.kavels = data.kavels.map(function (k) {
-          try { if (typeof k.kosten === 'string' && k.kosten) k.kosten = JSON.parse(k.kosten); } catch (e) { /* laat staan */ }
-          try { if (typeof k.prijzen === 'string' && k.prijzen) k.prijzen = JSON.parse(k.prijzen); } catch (e) { /* laat staan */ }
-          k.eigen_bod = k.eigen_bod === true || k.eigen_bod === 'true' || k.eigen_bod === 'TRUE';
-          return k;
-        });
-        App.storage.set(App.storage.KEYS.kavels, App.state.kavels);
-        App.state.lastSync = Date.now();
-        App.storage.set(App.storage.KEYS.lastSync, App.state.lastSync);
-        App.ui && App.ui.updateBadge && App.ui.updateBadge();
-        App.ui && App.ui.renderOverzicht && App.ui.renderOverzicht();
-      }
-    } catch (e) {
-      App.logger.warn('Sync van Sheets mislukt:', e.message);
-      App.ui && App.ui.showError && App.ui.showError('Ophalen vanaf Google Sheets is niet gelukt.');
-    } finally {
-      App.state.syncBezig = false;
-      App.ui && App.ui.updateSyncStatus && App.ui.updateSyncStatus();
-    }
-  }
+<div class="main">
 
-  App.sheets = {
-    laadUrl: laadUrl,
-    setUrl: setUrl,
-    syncNaarSheets: syncNaarSheets,
-    syncVanSheets: syncVanSheets
-  };
-})(window.App = window.App || {});
+<div id="tab-overzicht" class="panel active">
+  <div id="ov-leeg" class="empty" style="display:none">
+    <div class="empty-icon">&#127991;</div>
+    <h3>Nog geen kavels</h3>
+    <p>Ga naar "Kavel analyseren" en voeg je eerste kavel toe.</p>
+    <button class="btn-sm" id="overzicht-toevoegen-btn">+ Kavel toevoegen</button>
+  </div>
+  <div id="ov-inhoud" style="display:none">
+    <div class="stats-row" id="stats-row"></div>
+    <div class="overzicht-tools">
+      <input type="text" id="kavel-zoeken" placeholder="Zoek op titel of veilinghuis..." />
+      <select id="kavel-sorteren">
+        <option value="nieuwste">Nieuwste eerst</option>
+        <option value="oudste">Oudste eerst</option>
+        <option value="marge-hoog">Hoogste marge eerst</option>
+        <option value="marge-laag">Laagste marge eerst</option>
+        <option value="roi">Beste ROI eerst</option>
+      </select>
+    </div>
+    <div class="filter-bar">
+      <button class="filter-btn active" data-filter="alles">Alles</button>
+      <button class="filter-btn" data-filter="kopen">&#10003; Aanraders</button>
+      <button class="filter-btn" data-filter="twijfel">~ Twijfel</button>
+      <button class="filter-btn" data-filter="skip">&#10007; Skip</button>
+      <button class="filter-btn" data-filter="wacht">&#8987; Niet geanalyseerd</button>
+      <button class="filter-btn" data-filter="eigen">&#128587; Mijn kavels</button>
+    </div>
+    <div class="kavel-list" id="kavel-list"></div>
+    <div class="card" style="margin-top:16px">
+      <div class="card-title">Exporteren / Importeren</div>
+      <div class="export-row">
+        <button class="btn-sm" id="export-json-btn">&#8595; JSON (volledige back-up)</button>
+        <button class="btn-sm" id="export-csv-btn">&#8595; CSV</button>
+        <button class="btn-sm" id="export-excel-btn">&#8595; Excel</button>
+        <label class="import-label">&#8593; Back-up importeren<input type="file" id="import-input" accept="application/json" /></label>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="tab-analyse" class="panel">
+  <div id="analyse-result" style="display:none"></div>
+  <div class="card" id="analyse-form">
+    <div class="card-title">&#128279; Kavel toevoegen</div>
+    <label>Veiling kavel URL</label>
+    <input type="text" id="kavel-url" placeholder="https://www.hnvi.nl/veiling-kavel/..." />
+    <label style="margin-top:14px">&#127974; Veilinghuis</label>
+    <select id="veilinghuis-select"></select>
+    <div class="hint" id="veilinghuis-hint">Wordt automatisch herkend aan de hand van de URL. Klopt het niet? Kies hierboven het juiste veilinghuis, of voeg er een toe via "Veilinghuizen" bovenin.</div>
+    <label style="margin-top:14px">&#128182; Bod (euro)</label>
+    <div class="bod-row">
+      <button class="bod-btn active" id="bod-ander">&#128100; Huidig bod (iemand anders)</button>
+      <button class="bod-btn" id="bod-eigen">&#128587; Mijn bod</button>
+    </div>
+    <div class="hint" id="bod-hint">Huidig hoogste bod op de veiling</div>
+    <div style="position:relative">
+      <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);font-weight:700;color:var(--muted)">&#8364;</span>
+      <input type="text" id="huidig-bod" placeholder="bijv. 250" style="padding-left:26px;font-size:16px;font-weight:700" />
+    </div>
+    <label style="margin-top:14px">&#128247; Foto's <span style="font-weight:400;font-size:11px;color:#9ab39e">- optioneel, max 5, worden gebruikt bij de AI-analyse</span></label>
+    <div class="upload-zone" id="upload-zone">
+      <input type="file" id="foto-input" accept="image/*" multiple />
+      <p>&#128247; Sleep foto's hierheen of <strong style="color:var(--brand)">klik om te uploaden</strong></p>
+    </div>
+    <div class="previews" id="previews"></div>
+    <label style="margin-top:14px">&#128221; Extra opmerkingen <span style="font-weight:400;font-size:11px;color:#9ab39e">- optioneel</span></label>
+    <textarea id="extra-txt" placeholder="Eigen observaties, bijzonderheden..."></textarea>
+    <button class="btn-primary" id="analyse-btn">
+      <span id="analyse-btn-txt">&#128269; Analyseer kavel</span>
+    </button>
+    <div class="msg err" id="analyse-err"></div>
+    <div id="stappen" style="display:none">
+      <div class="steps">
+        <div class="step" id="stap1"><span>&#128269;</span> Productnaam bepalen</div>
+        <div class="step" id="stap2"><span>&#128176;</span> Marktprijzen ophalen</div>
+        <div class="step" id="stap3"><span>&#128202;</span> Advies berekenen</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="tab-gewonnen" class="panel">
+  <div id="gew-leeg" class="empty" style="display:none">
+    <div class="empty-icon">&#127942;</div>
+    <h3>Nog geen gewonnen kavels</h3>
+    <p>Markeer een kavel als "Gewonnen" in het overzicht om hem hier te zien.</p>
+  </div>
+  <div id="gew-inhoud" style="display:none">
+    <div class="kavel-list" id="gewonnen-list"></div>
+  </div>
+</div>
+
+<div id="tab-handleiding" class="panel">
+  <div class="card">
+    <div class="card-title">Hoe werkt het</div>
+    <div style="display:flex;flex-direction:column;gap:16px">
+      <div style="display:flex;gap:12px;align-items:flex-start">
+        <div style="width:28px;height:28px;background:var(--brand);color:white;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0;font-size:13px">1</div>
+        <div><strong>Kavel URL plakken</strong><br><span style="font-size:13px;color:var(--muted)">Kopieer de link van het kavel (HNVI, Troostwijk, BVA, of een ander veilinghuis) en plak hem in de app.</span></div>
+      </div>
+      <div style="display:flex;gap:12px;align-items:flex-start">
+        <div style="width:28px;height:28px;background:var(--brand);color:white;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0;font-size:13px">2</div>
+        <div><strong>Veilinghuis controleren</strong><br><span style="font-size:13px;color:var(--muted)">De app herkent het veilinghuis meestal automatisch aan de URL. Klopt het niet, of ken je de site nog niet? Kies het juiste veilinghuis handmatig, of voeg het toe via de knop "Veilinghuizen" bovenin.</span></div>
+      </div>
+      <div style="display:flex;gap:12px;align-items:flex-start">
+        <div style="width:28px;height:28px;background:var(--brand);color:white;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0;font-size:13px">3</div>
+        <div><strong>Bod invullen</strong><br><span style="font-size:13px;color:var(--muted)">Vul het huidig bod in. Kies "Mijn bod" als het jouw eigen bieding is.</span></div>
+      </div>
+      <div style="display:flex;gap:12px;align-items:flex-start">
+        <div style="width:28px;height:28px;background:var(--brand);color:white;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0;font-size:13px">4</div>
+        <div><strong>Analyseer</strong><br><span style="font-size:13px;color:var(--muted)">De AI bepaalt de productnaam, haalt marktprijzen op (met behulp van je foto's, als je die toevoegde) en berekent je marge met de kostenstructuur van het gekozen veilinghuis.</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">Kostenberekening</div>
+    <div style="font-size:14px;line-height:2;color:var(--muted)">
+      Bod: <strong style="color:var(--text)">&#8364;1.000</strong><br>
+      + opgeld (bijv. 17%) = <strong style="color:var(--text)">&#8364;170</strong> (totaal: &#8364;1.170)<br>
+      + BTW (bijv. 21%) = <strong style="color:var(--text)">&#8364;245,70</strong> (totaal: &#8364;1.415,70)<br>
+      <span style="border-top:1px solid var(--border);display:block;margin:6px 0"></span>
+      = Totale inkoopprijs: <strong style="color:var(--brand);font-size:16px">&#8364;1.415,70</strong>
+    </div>
+    <div class="small-note">Let op: het opgeld-percentage en de manier waarop BTW berekend wordt (over het hele bedrag, of alleen over het opgeld) verschilt per veilinghuis &mdash; en soms zelfs per veiling binnen hetzelfde huis. Controleer dit altijd bij de veilingvoorwaarden van de specifieke veiling. Via "Veilinghuizen" bovenin kun je de percentages per huis aanpassen.</div>
+  </div>
+  <div class="card">
+    <div class="card-title">Over de API-key</div>
+    <div class="small-note">Je API-key wordt lokaal in je browser bewaard (localStorage) en gaat rechtstreeks naar Anthropic — deze app heeft geen eigen server. Dat is prima voor persoonlijk gebruik op een vertrouwd toestel, maar deel de app-link nooit samen met je key, gebruik bij voorkeur een key met een uitgavenlimiet, en verwijder de key (knop "Wijzigen" bovenin) op een apparaat dat je niet meer gebruikt.</div>
+  </div>
+</div>
+
+</div>
+
+<!-- Veilinghuizen beheer modal -->
+<div class="modal-overlay" id="vh-modal">
+  <div class="modal-box">
+    <div class="modal-head">
+      <h2>&#127974; Veilinghuizen beheren</h2>
+      <button class="modal-close" id="vh-modal-close">&times;</button>
+    </div>
+    <div class="small-note" style="margin-bottom:12px">Elk veilinghuis (en soms elke veiling) hanteert eigen percentages. Pas hier de bekende veilinghuizen aan, of voeg een nieuwe toe. De app herkent een veilinghuis aan een stukje van de URL (bijv. "troostwijkauctions.com").</div>
+    <div id="vh-list"></div>
+    <div class="card" style="margin-top:14px;background:var(--bg)">
+      <div class="card-title" id="vh-form-title">Nieuw veilinghuis toevoegen</div>
+      <input type="hidden" id="vh-edit-id" value="" />
+      <div class="vh-form-grid">
+        <div>
+          <label>Naam</label>
+          <input type="text" id="vh-naam" placeholder="bijv. Troostwijk Auctions" />
+        </div>
+        <div>
+          <label>URL-herkenning</label>
+          <input type="text" id="vh-url" placeholder="bijv. troostwijkauctions.com" />
+        </div>
+        <div>
+          <label>Opgeld (%)</label>
+          <input type="number" id="vh-opgeld" placeholder="bijv. 17" step="0.1" min="0" max="100" />
+        </div>
+        <div>
+          <label>BTW (%)</label>
+          <input type="number" id="vh-btw" placeholder="bijv. 21" step="0.1" min="0" max="100" />
+        </div>
+      </div>
+      <label style="margin-top:12px">BTW berekenen over</label>
+      <select id="vh-btw-basis">
+        <option value="totaal">Bod + opgeld (meest gebruikelijk)</option>
+        <option value="opgeld">Alleen het opgeld</option>
+        <option value="geen">Geen BTW (bijv. particuliere verkoop)</option>
+      </select>
+      <div style="display:flex;gap:8px;margin-top:14px">
+        <button class="btn-primary" style="margin-top:0" id="vh-opslaan-btn">Opslaan</button>
+        <button class="btn-sm" style="padding:0 14px" id="vh-annuleer-btn">Annuleren</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="app-toast" class="toast" role="status" aria-live="polite"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
+<script src="helpers.js"></script>
+<script src="logger.js"></script>
+<script src="storage.js"></script>
+<script src="state.js"></script>
+<script src="veilinghuizen.js"></script>
+<script src="api.js"></script>
+<script src="sheets.js"></script>
+<script src="ui.js"></script>
+<script src="analyse.js"></script>
+<script src="exportImport.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

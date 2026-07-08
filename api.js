@@ -1,93 +1,162 @@
 /**
- * storage.js
- * Enige plek in de app die rechtstreeks met localStorage praat.
- * Alle andere modules gaan via App.storage.get/set/remove, zodat een defecte
- * of volle localStorage nooit een onverwachte crash geeft (alles zit in try/catch).
+ * api.js
+ * Enige plek in de app die fetch() aanroept naar de Anthropic API.
+ * Bevat: timeout (AbortController), retry bij netwerkfouten (niet bij API-fouten),
+ * en validatie van de teruggekregen prijzendata.
+ *
+ * Let op API-key veiligheid: de key staat noodgedwongen in localStorage van de
+ * browser, omdat deze app geen eigen backend heeft. Dat is voor persoonlijk
+ * gebruik op een vertrouwd apparaat te overzien, maar niet ideaal:
+ *   Browser  -->  eigen backend (bewaart de key server-side)  -->  Claude API
+ * is de veiligere opzet zodra de app door meerdere mensen gebruikt wordt of
+ * ergens publiek gehost wordt. Zonder backend: deel de app-URL nooit met de
+ * key erin, gebruik een key met een uitgavenlimiet, en wis 'm als je een device
+ * niet meer vertrouwt.
  */
 (function (App) {
   'use strict';
 
-  var PREFIX = 'hnvi_';
-  var KEYS = {
-    apiKey: PREFIX + 'apikey',
-    kavels: PREFIX + 'kavels',
-    veilinghuizen: PREFIX + 'veilinghuizen',
-    sheetsUrl: PREFIX + 'sheets_url',
-    lastSync: PREFIX + 'last_sync'
-  };
+  var ENDPOINT = 'https://api.anthropic.com/v1/messages';
+  var MODEL = 'claude-sonnet-4-6';
+  var TIMEOUT_MS = 30000;
+  var MAX_RETRIES = 2; // alleen bij netwerkfouten, niet bij API/HTTP-fouten
 
-  function get(key, fallback) {
-    try {
-      var raw = localStorage.getItem(key);
-      if (raw == null) return fallback;
-      return JSON.parse(raw);
-    } catch (e) {
-      App.logger && App.logger.warn('storage.get mislukt voor', key, e.message);
-      return fallback;
+  function getApiKey() { return App.storage.getRaw(App.storage.KEYS.apiKey, ''); }
+  function setApiKey(key) { return App.storage.setRaw(App.storage.KEYS.apiKey, key); }
+  function clearApiKey() { App.storage.remove(App.storage.KEYS.apiKey); }
+
+  function sleep(ms) { return new Promise(function (res) { setTimeout(res, ms); }); }
+
+  /**
+   * Eén poging tot een API-call, met timeout via AbortController.
+   * Gooit een Error met duidelijke .code ('timeout' | 'network' | 'api') zodat
+   * de aanroeper weet of een retry zinvol is.
+   */
+  async function eenPoging(system, userText, maxTokens, images) {
+    var key = getApiKey();
+    if (!key) { var e = new Error('Voer eerst een API key in.'); e.code = 'no-key'; throw e; }
+
+    var controller = new AbortController();
+    var timer = setTimeout(function () { controller.abort(); }, TIMEOUT_MS);
+
+    var content = [];
+    if (images && images.length) {
+      images.forEach(function (img) {
+        content.push({ type: 'image', source: { type: 'base64', media_type: img.mediaType, data: img.base64 } });
+      });
     }
-  }
+    content.push({ type: 'text', text: userText });
 
-  function set(key, value) {
+    var resp;
     try {
-      localStorage.setItem(key, JSON.stringify(value));
-      return true;
-    } catch (e) {
-      // Vol quotum of privémodus zonder opslag: app moet blijven werken, alleen niet persisteren.
-      App.logger && App.logger.warn('storage.set mislukt voor', key, e.message);
-      return false;
+      resp = await fetch(ENDPOINT, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': key,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
+        body: JSON.stringify({
+          model: MODEL,
+          max_tokens: maxTokens || 600,
+          system: system,
+          messages: [{ role: 'user', content: content }]
+        }),
+        signal: controller.signal
+      });
+    } catch (err) {
+      clearTimeout(timer);
+      if (err.name === 'AbortError') {
+        var te = new Error('De AI reageerde niet binnen 30 seconden. Probeer het opnieuw.');
+        te.code = 'timeout';
+        throw te;
+      }
+      var ne = new Error('Netwerkfout: kon geen verbinding maken met de API.');
+      ne.code = 'network';
+      throw ne;
     }
-  }
+    clearTimeout(timer);
 
-  function getRaw(key, fallback) {
+    var data;
     try {
-      var v = localStorage.getItem(key);
-      return v == null ? fallback : v;
-    } catch (e) { return fallback; }
+      data = await resp.json();
+    } catch (err) {
+      var pe = new Error('Onverwacht antwoord van de API (geen geldig JSON).');
+      pe.code = 'api';
+      throw pe;
+    }
+
+    if (data.error) {
+      var ae = new Error(data.error.message || (data.error.type + ' fout van de API'));
+      ae.code = 'api';
+      throw ae;
+    }
+    if (!data.content) {
+      var ce = new Error('Onverwachte API-response: geen content veld.');
+      ce.code = 'api';
+      throw ce;
+    }
+    return data.content.map(function (b) { return b.text || ''; }).join('');
   }
 
-  function setRaw(key, value) {
-    try { localStorage.setItem(key, value); return true; }
-    catch (e) { App.logger && App.logger.warn('storage.setRaw mislukt voor', key, e.message); return false; }
+  /**
+   * callClaude met automatische retry bij netwerk-/timeoutfouten (max 2 extra pogingen).
+   * API-fouten (bijv. ongeldige key, rate limit) worden NIET herhaald — die lossen
+   * zichzelf niet op door het nog een keer te proberen.
+   */
+  async function callClaude(system, userText, maxTokens, images) {
+    var laatsteFout = null;
+    for (var poging = 0; poging <= MAX_RETRIES; poging++) {
+      try {
+        return await eenPoging(system, userText, maxTokens, images);
+      } catch (err) {
+        laatsteFout = err;
+        var magOpnieuw = (err.code === 'network' || err.code === 'timeout') && poging < MAX_RETRIES;
+        if (!magOpnieuw) throw err;
+        App.logger.warn('API-poging', poging + 1, 'mislukt (' + err.code + '), opnieuw proberen...');
+        await sleep(500 * (poging + 1)); // korte oplopende pauze
+      }
+    }
+    throw laatsteFout;
   }
 
-  function remove(key) {
-    try { localStorage.removeItem(key); } catch (e) { /* niets te doen */ }
+  /**
+   * Controleert of de door Claude teruggegeven prijzendata bruikbaar is.
+   * Geeft { valid, errors[] } terug in plaats van te crashen op ontbrekende velden.
+   */
+  function validatePrijzenResponse(obj) {
+    var errors = [];
+    if (!obj || typeof obj !== 'object') { errors.push('Geen geldig JSON-object ontvangen.'); return { valid: false, errors: errors }; }
+    if (!obj.productnaam || typeof obj.productnaam !== 'string') errors.push('Productnaam ontbreekt.');
+    if (!obj.marktplaats || typeof obj.marktplaats !== 'object') {
+      errors.push('Marktplaats-prijzen ontbreken.');
+    } else {
+      ['laag', 'gemiddeld', 'hoog'].forEach(function (veld) {
+        if (typeof obj.marktplaats[veld] !== 'number' || !isFinite(obj.marktplaats[veld])) {
+          errors.push('Marktplaats.' + veld + ' is geen geldig getal.');
+        }
+      });
+    }
+    if (obj.nieuwprijs != null && (typeof obj.nieuwprijs !== 'number' || !isFinite(obj.nieuwprijs))) {
+      errors.push('Nieuwprijs is geen geldig getal.');
+    }
+    if (obj.ebay && typeof obj.ebay === 'object') {
+      ['laag', 'gemiddeld', 'hoog'].forEach(function (veld) {
+        if (obj.ebay[veld] != null && (typeof obj.ebay[veld] !== 'number' || !isFinite(obj.ebay[veld]))) {
+          errors.push('eBay.' + veld + ' is geen geldig getal.');
+        }
+      });
+    }
+    return { valid: errors.length === 0, errors: errors };
   }
 
-  function clearAll() {
-    Object.keys(KEYS).forEach(function (k) { remove(KEYS[k]); });
-  }
-
-  /** Exporteert alle app-data als één JSON-blob (voor backup/export-functie) */
-  function exportAll() {
-    var data = {};
-    Object.keys(KEYS).forEach(function (name) {
-      data[name] = get(KEYS[name], null);
-    });
-    data._exportVersion = 1;
-    data._exportedAt = new Date().toISOString();
-    return data;
-  }
-
-  /** Importeert een eerder geëxporteerde JSON-blob, met structuurcontrole */
-  function importAll(data) {
-    if (!data || typeof data !== 'object') throw new Error('Ongeldig back-upbestand.');
-    if (data._exportVersion == null) throw new Error('Dit bestand lijkt geen HNVI-back-up te zijn.');
-    if (Array.isArray(data.kavels)) set(KEYS.kavels, data.kavels);
-    if (Array.isArray(data.veilinghuizen)) set(KEYS.veilinghuizen, data.veilinghuizen);
-    if (typeof data.sheetsUrl === 'string') setRaw(KEYS.sheetsUrl, data.sheetsUrl);
-    return true;
-  }
-
-  App.storage = {
-    KEYS: KEYS,
-    get: get,
-    set: set,
-    getRaw: getRaw,
-    setRaw: setRaw,
-    remove: remove,
-    clearAll: clearAll,
-    exportAll: exportAll,
-    importAll: importAll
+  App.api = {
+    callClaude: callClaude,
+    getApiKey: getApiKey,
+    setApiKey: setApiKey,
+    clearApiKey: clearApiKey,
+    validatePrijzenResponse: validatePrijzenResponse,
+    parseJSON: function (txt) { return App.helpers.parseLooseJSON(txt); }
   };
 })(window.App = window.App || {});
