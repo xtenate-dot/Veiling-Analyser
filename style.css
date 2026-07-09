@@ -51,7 +51,7 @@
 }
 
 html{-webkit-text-size-adjust:100%}
-body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:100vh;font-size:14px;line-height:1.45;-webkit-font-smoothing:antialiased}
+body{font-family:var(--font);background:var(--gold-soft);color:var(--text);min-height:100vh;font-size:14px;line-height:1.45;-webkit-font-smoothing:antialiased}
 
 /* ── Header ─────────────────────────────────────────────────────────── */
 header{background:var(--surface);color:var(--text);padding:14px 24px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:100;border-bottom:1px solid var(--border)}
@@ -92,7 +92,7 @@ header p{font-size:12px;color:var(--text-secondary);margin-top:1px}
 .sel-action:hover{background:var(--gold-soft)}
 
 /* ── Layout ─────────────────────────────────────────────────────────── */
-.main{max-width:960px;margin:0 auto;padding:28px 20px 60px}
+.main{max-width:960px;margin:0 auto;padding:28px 20px 60px;background:var(--bg)}
 .panel{display:none}.panel.active{display:block}
 
 /* ── Card system — every card shares radius, border, padding, shadow ─── */
