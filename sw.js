@@ -4,7 +4,7 @@
  * internet opstart. API-aanroepen naar Anthropic gaan altijd rechtstreeks
  * over het netwerk — die cachen we bewust niet.
  */
-var CACHE_NAAM = 'veiling-analyser-v2';
+var CACHE_NAAM = 'veiling-analyser-v3';
 var APP_SHELL = [
   './',
   './index.html',
@@ -47,15 +47,14 @@ self.addEventListener('fetch', function (event) {
   if (event.request.method !== 'GET') return;
 
   event.respondWith(
-    caches.match(event.request).then(function (cached) {
-      var netwerkFetch = fetch(event.request).then(function (resp) {
-        if (resp && resp.status === 200) {
-          var kopie = resp.clone();
-          caches.open(CACHE_NAAM).then(function (cache) { cache.put(event.request, kopie); });
-        }
-        return resp;
-      }).catch(function () { return cached; });
-      return cached || netwerkFetch;
+    fetch(event.request).then(function (resp) {
+      if (resp && resp.status === 200) {
+        var kopie = resp.clone();
+        caches.open(CACHE_NAAM).then(function (cache) { cache.put(event.request, kopie); });
+      }
+      return resp;
+    }).catch(function () {
+      return caches.match(event.request);
     })
   );
 });
