@@ -30,6 +30,8 @@
         Titel: k.titel || '',
         Veilinghuis: k.veiling || '',
         Kavelnummer: k.kavelnummer || '',
+        Sluitdag: h.formatInvoerDatum(k.sluitdag),
+        Ophaaldag: h.formatInvoerDatum(k.ophaaldag),
         URL: k.url || '',
         Status: k.status || '',
         Advies: k.advies || '',

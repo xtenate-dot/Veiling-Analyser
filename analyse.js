@@ -172,7 +172,10 @@
     var urlNaam = url ? h.naamUitUrl(url) : '';
     var product = (extra || urlNaam || 'onbekend product').replace(/["']/g, '').trim();
     var bod = bodStr ? parseFloat(bodStr.replace(',', '.')) : null;
-    var kavelnr = url ? ((url.match(/\/(\d+)(?:\?|$)/) || [])[1]) : null;
+    var kavelnrHandmatig = h.byId('kavel-nummer').value.trim();
+    var kavelnr = kavelnrHandmatig || (url ? ((url.match(/\/(\d+)(?:\?|$)/) || [])[1]) : null);
+    var sluitdag = h.byId('kavel-sluitdag').value || null;
+    var ophaaldag = h.byId('kavel-ophaaldag').value || null;
     var veilinghuisId = h.byId('veilinghuis-select').value;
     var veilinghuis = App.state.veilinghuizen.find(function (v) { return v.id === veilinghuisId; }) || App.state.veilinghuizen[0];
 
@@ -237,7 +240,8 @@
 
       var kavelData = {
         id: Date.now(), url: url, titel: prijzen.productnaam || product,
-        veiling: veilinghuis.naam, veilinghuisId: veilinghuis.id, kavelnummer: kavelnr, huidig_bod: bod,
+        veiling: veilinghuis.naam, veilinghuisId: veilinghuis.id, kavelnummer: kavelnr,
+        sluitdag: sluitdag, ophaaldag: ophaaldag, huidig_bod: bod,
         kosten: kosten, mp_gemiddeld: mp.gemiddeld, mp_laag: mp.laag, mp_hoog: mp.hoog,
         ebay_gemiddeld: prijzen.ebay ? prijzen.ebay.gemiddeld : null,
         nieuwprijs: prijzen.nieuwprijs, advies: advies, adviesReden: adviesReden,
@@ -278,6 +282,8 @@
     kopLinks.appendChild(h2);
     var kopMeta = document.createElement('div'); kopMeta.style.cssText = 'font-size:12px;color:var(--text-secondary)';
     kopMeta.textContent = 'Kavel ' + (d.kavelnummer || '-') + ' \u00B7 ' + (d.veiling || 'Onbekend');
+    if (d.sluitdag) kopMeta.textContent += ' \u00B7 Sluit ' + h.formatInvoerDatum(d.sluitdag);
+    if (d.ophaaldag) kopMeta.textContent += ' \u00B7 Ophalen ' + h.formatInvoerDatum(d.ophaaldag);
     if (d.url) {
       kopMeta.appendChild(document.createTextNode(' \u00B7 '));
       var a = document.createElement('a'); a.href = d.url; a.target = '_blank'; a.rel = 'noopener noreferrer';
@@ -367,6 +373,9 @@
     var k = App.state.kavels[idx];
     App.ui.switchTab('analyse');
     h.byId('kavel-url').value = k.url || '';
+    h.byId('kavel-nummer').value = k.kavelnummer || '';
+    h.byId('kavel-sluitdag').value = k.sluitdag || '';
+    h.byId('kavel-ophaaldag').value = k.ophaaldag || '';
     if (k.huidig_bod) h.byId('huidig-bod').value = String(k.huidig_bod);
     h.byId('analyse-result').style.display = 'none';
     var type = k.eigen_bod ? 'eigen' : 'ander';

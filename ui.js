@@ -383,6 +383,13 @@
       pills.appendChild(maakPill((k.kosten.marge > 0 ? '+' : '') + h.fmt(k.kosten.marge) + ' marge', k.kosten.marge > 0 ? 'pill-marge-pos' : 'pill-marge-neg'));
     }
     if (k.mp_gemiddeld) pills.appendChild(maakPill((isGewonnen ? 'Verwachte verkoop: ' : 'MP ~') + h.fmt(k.mp_gemiddeld), 'pill-mp'));
+    if (!isGewonnen && k.sluitdag) {
+      var dagenSluit = h.dagenTot(k.sluitdag);
+      var sluitUrgent = dagenSluit != null && dagenSluit <= 2;
+      var sluitLabel = '\uD83D\uDCC6 Sluit ' + h.formatInvoerDatum(k.sluitdag) + (dagenSluit != null && dagenSluit >= 0 ? ' (' + (dagenSluit === 0 ? 'vandaag' : dagenSluit === 1 ? 'morgen' : 'over ' + dagenSluit + ' dagen') + ')' : '');
+      pills.appendChild(maakPill(sluitLabel, sluitUrgent ? 'pill-datum-urgent' : 'pill-datum'));
+    }
+    if (k.ophaaldag) pills.appendChild(maakPill('\uD83D\uDCE6 Ophalen ' + h.formatInvoerDatum(k.ophaaldag), 'pill-datum'));
     main.appendChild(pills);
 
     if (!isGewonnen && k.adviesReden) {

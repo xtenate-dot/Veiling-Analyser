@@ -103,6 +103,18 @@
     <div class="card-title">&#128279; Kavel toevoegen</div>
     <label>Veiling kavel URL</label>
     <input type="text" id="kavel-url" placeholder="https://www.hnvi.nl/veiling-kavel/..." />
+    <label style="margin-top:14px">&#128204; Kavelnummer <span style="font-weight:400;font-size:11px;color:var(--text-tertiary)">- wordt automatisch herkend uit de URL, hier eventueel aanpassen</span></label>
+    <input type="text" id="kavel-nummer" placeholder="bijv. 12" />
+    <div style="display:flex;gap:10px;margin-top:14px">
+      <div style="flex:1">
+        <label>&#128198; Sluitdag veiling</label>
+        <input type="date" id="kavel-sluitdag" />
+      </div>
+      <div style="flex:1">
+        <label>&#128230; Ophaaldag</label>
+        <input type="date" id="kavel-ophaaldag" />
+      </div>
+    </div>
     <label style="margin-top:14px">&#127974; Veilinghuis</label>
     <select id="veilinghuis-select"></select>
     <div class="hint" id="veilinghuis-hint">Wordt automatisch herkend aan de hand van de URL. Klopt het niet? Kies hierboven het juiste veilinghuis, of voeg er een toe via "Veilinghuizen" bovenin.</div>

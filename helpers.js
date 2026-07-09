@@ -28,6 +28,25 @@
     try { return new Date(ts).toLocaleString('nl-NL'); } catch (e) { return ''; }
   }
 
+  /** Formatteert een "yyyy-mm-dd" datum-inputwaarde als "dd-mm-jjjj", zonder tijdzoneverschuiving */
+  function formatInvoerDatum(isoDatum) {
+    if (!isoDatum) return '';
+    var delen = isoDatum.split('-');
+    if (delen.length !== 3) return isoDatum;
+    return delen[2] + '-' + delen[1] + '-' + delen[0];
+  }
+
+  /** Aantal hele dagen tussen vandaag en een "yyyy-mm-dd" datum (negatief = verleden) */
+  function dagenTot(isoDatum) {
+    if (!isoDatum) return null;
+    var delen = isoDatum.split('-').map(Number);
+    if (delen.length !== 3 || delen.some(isNaN)) return null;
+    var doel = new Date(delen[0], delen[1] - 1, delen[2]);
+    var vandaag = new Date();
+    vandaag.setHours(0, 0, 0, 0);
+    return Math.round((doel - vandaag) / 86400000);
+  }
+
   /** Leidt een leesbare productnaam af uit een kavel-URL (best-effort, mag falen) */
   function naamUitUrl(u) {
     try {
@@ -91,6 +110,8 @@
     formatPercentage: formatPercentage,
     formatDate: formatDate,
     formatDateTime: formatDateTime,
+    formatInvoerDatum: formatInvoerDatum,
+    dagenTot: dagenTot,
     naamUitUrl: naamUitUrl,
     uid: uid,
     clamp: clamp,
