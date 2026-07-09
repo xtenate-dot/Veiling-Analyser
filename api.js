@@ -18,7 +18,7 @@
 
   var ENDPOINT = 'https://api.anthropic.com/v1/messages';
   var MODEL = 'claude-sonnet-4-6';
-  var TIMEOUT_MS = 30000;
+  var TIMEOUT_MS = 45000;
   var MAX_RETRIES = 2; // alleen bij netwerkfouten, niet bij API/HTTP-fouten
 
   function getApiKey() { return App.storage.getRaw(App.storage.KEYS.apiKey, ''); }
@@ -71,7 +71,7 @@
     } catch (err) {
       clearTimeout(timer);
       if (err.name === 'AbortError') {
-        var te = new Error('De AI reageerde niet binnen 30 seconden. Probeer het opnieuw.');
+        var te = new Error('De AI reageerde niet binnen 45 seconden. Probeer het opnieuw.');
         te.code = 'timeout';
         throw te;
       }

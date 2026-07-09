@@ -236,18 +236,23 @@
 
     setStap(1);
 
-    var prijzenPrompt = 'Geef realistische marktprijzen voor: "' + product + '"\n\n' +
+    var prijzenPrompt = 'Zoek actief op internet naar actuele prijzen en geef realistische marktprijzen voor: "' + product + '"\n\n' +
       'BELANGRIJK voor nieuwprijs:\n' +
-      '- Gebruik de HUIDIGE winkelprijs (bol.com, coolblue, mediamarkt, amazon.nl)\n' +
-      '- NIET de officiele adviesprijs van de fabrikant\n' +
+      '- Zoek de HUIDIGE winkelprijs op (bol.com, coolblue, mediamarkt, amazon.nl)\n' +
+      '- NIET de originele adviesprijs/lanceerprijs van de fabrikant uit het verleden\n' +
       '- Als een winkel voor minder verkoopt dan de adviesprijs, gebruik die lagere prijs\n' +
-      '- Vermeld in nieuwprijs_bron welke winkel en prijs je kent\n\n' +
+      '- Als dit product NIET meer nieuw verkocht wordt (verouderd/discontinued model, bijv. oudere laptop/telefoon-generatie): ' +
+      'gebruik dan NIET de historische lanceerprijs. Zoek in plaats daarvan de prijs van een vergelijkbaar CURRENT nieuw model, ' +
+      'of \u2014 beter \u2014 de prijs bij een grote refurbished-winkel (bijv. iUsed, Backmarket, Coolblue Outlet, Amac) voor een vergelijkbare ' +
+      'uitvoering in goede staat, en vermeld dat expliciet in nieuwprijs_bron (bijv. "refurbished vanaf X bij Y, want niet meer nieuw verkrijgbaar")\n' +
+      '- Vermeld in nieuwprijs_bron altijd welke winkel/bron en welke prijs je gebruikt hebt\n\n' +
       'BELANGRIJK voor 2e hands:\n' +
-      '- Marktplaats prijs moet ALTIJD lager zijn dan huidige winkelprijs\n' +
-      '- Goede staat: 65-80% van huidige winkelprijs\n' +
-      '- Redelijke staat: 45-65% van huidige winkelprijs\n\n' +
+      '- Zoek naar echte, actuele advertenties/verkochte listings voor dit exacte model met deze specificaties (Marktplaats, eBay, refurbished-winkels)\n' +
+      '- Marktplaats prijs moet ALTIJD lager zijn dan de actuele nieuw/refurbished-prijs, nooit gebaseerd op de oude lanceerprijs\n' +
+      '- Goede staat: 65-80% van de actuele nieuw/refurbished-prijs\n' +
+      '- Redelijke staat: 45-65% van de actuele nieuw/refurbished-prijs\n\n' +
       (App.state.imgs.length ? 'Er zijn foto\'s van het kavel bijgevoegd — gebruik die om het product, merk, model en de staat zo goed mogelijk te identificeren.\n\n' : '') +
-      'Vul dit JSON object in met echte getallen:\n' +
+      'Vul dit JSON object in met echte getallen, gebaseerd op wat je daadwerkelijk vindt via zoeken:\n' +
       '{"productnaam":"' + product + '","categorie":"categorie","nieuwprijs":100,"nieuwprijs_bron":"winkel en prijs","marktplaats":{"laag":50,"gemiddeld":75,"hoog":100,"vertrouwen":"middel","tip":"verkooptip","verkooptijd":"1-4 weken","zoekwoorden":["woord"]},"ebay":{"laag":60,"gemiddeld":85,"hoog":110,"vertrouwen":"laag","tip":"ebay tip","verkooptijd":"2-6 weken","keywords":["word"]},"aandachtspunten":["punt"]}';
 
     setStap(2);
@@ -255,10 +260,11 @@
 
     try {
       var prijzenTxt = await App.api.callClaude(
-        'Je bent een Nederlandse marktprijsexpert. Geef ALLEEN een geldig JSON object terug. GEEN markdown code blocks (geen ```json```), GEEN tekst ervoor of erna. Begin direct met { en eindig met }.',
+        'Je bent een Nederlandse marktprijsexpert. Gebruik de zoekfunctie om actuele prijzen te verifi\u00ebren \u2014 vertrouw niet blind op wat je uit je geheugen weet, prijzen veranderen snel en oudere modellen worden vaak niet meer nieuw verkocht. Geef ALLEEN een geldig JSON object terug. GEEN markdown code blocks (geen ```json```), GEEN tekst ervoor of erna. Begin direct met { en eindig met }.',
         prijzenPrompt,
-        2000,
-        App.state.imgs
+        3000,
+        App.state.imgs,
+        [{ type: 'web_search_20250305', name: 'web_search' }]
       );
       var prijzen = App.api.parseJSON(prijzenTxt);
       var validatie = App.api.validatePrijzenResponse(prijzen);
