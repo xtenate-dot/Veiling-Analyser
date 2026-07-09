@@ -84,6 +84,7 @@
 
     // Analyseformulier
     h.byId('kavel-url').addEventListener('input', App.analyse.opUrlChange);
+    h.byId('kavel-url').addEventListener('blur', App.analyse.opUrlBlur);
     h.byId('veilinghuis-select').addEventListener('change', App.analyse.opVeilinghuisChange);
     h.byId('bod-ander').addEventListener('click', function () { App.analyse.setBodType('ander', h.byId('bod-ander')); });
     h.byId('bod-eigen').addEventListener('click', function () { App.analyse.setBodType('eigen', h.byId('bod-eigen')); });

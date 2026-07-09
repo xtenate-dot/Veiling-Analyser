@@ -32,7 +32,7 @@
    * Gooit een Error met duidelijke .code ('timeout' | 'network' | 'api') zodat
    * de aanroeper weet of een retry zinvol is.
    */
-  async function eenPoging(system, userText, maxTokens, images) {
+  async function eenPoging(system, userText, maxTokens, images, tools) {
     var key = getApiKey();
     if (!key) { var e = new Error('Voer eerst een API key in.'); e.code = 'no-key'; throw e; }
 
@@ -47,6 +47,14 @@
     }
     content.push({ type: 'text', text: userText });
 
+    var body = {
+      model: MODEL,
+      max_tokens: maxTokens || 600,
+      system: system,
+      messages: [{ role: 'user', content: content }]
+    };
+    if (tools && tools.length) body.tools = tools;
+
     var resp;
     try {
       resp = await fetch(ENDPOINT, {
@@ -57,12 +65,7 @@
           'anthropic-version': '2023-06-01',
           'anthropic-dangerous-direct-browser-access': 'true'
         },
-        body: JSON.stringify({
-          model: MODEL,
-          max_tokens: maxTokens || 600,
-          system: system,
-          messages: [{ role: 'user', content: content }]
-        }),
+        body: JSON.stringify(body),
         signal: controller.signal
       });
     } catch (err) {
@@ -105,11 +108,11 @@
    * API-fouten (bijv. ongeldige key, rate limit) worden NIET herhaald — die lossen
    * zichzelf niet op door het nog een keer te proberen.
    */
-  async function callClaude(system, userText, maxTokens, images) {
+  async function callClaude(system, userText, maxTokens, images, tools) {
     var laatsteFout = null;
     for (var poging = 0; poging <= MAX_RETRIES; poging++) {
       try {
-        return await eenPoging(system, userText, maxTokens, images);
+        return await eenPoging(system, userText, maxTokens, images, tools);
       } catch (err) {
         laatsteFout = err;
         var magOpnieuw = (err.code === 'network' || err.code === 'timeout') && poging < MAX_RETRIES;
@@ -119,6 +122,15 @@
       }
     }
     throw laatsteFout;
+  }
+
+  /**
+   * Zelfde als callClaude, maar met de web_search tool aan — gebruikt om bijv.
+   * de sluitdatum/ophaaldatum van een kavelpagina op te zoeken. Geen retry op
+   * API-fouten, wél op netwerk/timeout (via callClaude).
+   */
+  function callClaudeMetWebSearch(system, userText, maxTokens) {
+    return callClaude(system, userText, maxTokens, null, [{ type: 'web_search_20250305', name: 'web_search' }]);
   }
 
   /**
@@ -153,6 +165,7 @@
 
   App.api = {
     callClaude: callClaude,
+    callClaudeMetWebSearch: callClaudeMetWebSearch,
     getApiKey: getApiKey,
     setApiKey: setApiKey,
     clearApiKey: clearApiKey,
