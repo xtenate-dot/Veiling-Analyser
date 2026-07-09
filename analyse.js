@@ -138,51 +138,57 @@
     h.byId('veilinghuis-hint').textContent = 'Handmatig geselecteerd.' + (v && v.note ? ' ' + v.note : '');
   }
 
-  // ── Automatisch sluitdag/ophaaldag opzoeken via de Claude web-search tool ──
+  // ── Automatisch productnaam + sluitdag/ophaaldag opzoeken via de Claude web-search tool ──
   var laatstOpgezochteUrl = '';
   async function opUrlBlur() {
     var url = h.byId('kavel-url').value.trim();
     if (!url || url === laatstOpgezochteUrl) return;
-    if (h.byId('kavel-sluitdag').value || h.byId('kavel-ophaaldag').value) return; // niet overschrijven wat al is ingevuld
+    var datumsAlIngevuld = h.byId('kavel-sluitdag').value || h.byId('kavel-ophaaldag').value;
+    var naamAlIngevuld = h.byId('extra-txt').value.trim();
+    if (datumsAlIngevuld && naamAlIngevuld) return; // niks te doen, alles staat er al
     if (!App.api.getApiKey()) return; // stil overslaan, gebruiker ziet de apikey-balk al
     try { new URL(url); } catch (e) { return; }
 
     laatstOpgezochteUrl = url;
     var statusEl = h.byId('datum-status');
-    if (statusEl) { statusEl.textContent = '\uD83D\uDD0D Sluit- en ophaaldatum opzoeken...'; statusEl.style.display = 'block'; }
+    if (statusEl) { statusEl.textContent = '\uD83D\uDD0D Productinfo en datums opzoeken...'; statusEl.style.display = 'block'; }
 
     try {
-      var system = 'Je bent een assistent die met de zoekfunctie de sluitdatum en ophaaldatum van een online veilingkavel opzoekt. ' +
+      var system = 'Je bent een assistent die met de zoekfunctie een online veilingkavel-pagina opzoekt en leest. ' +
         'Geef ALLEEN een geldig JSON object terug, GEEN markdown code blocks, GEEN tekst ervoor of erna. Begin direct met { en eindig met }.';
       var userText = 'Kavelpagina: ' + url + '\n\n' +
         'Zoek deze pagina op (en zo nodig de bijbehorende veilingpagina) en bepaal:\n' +
+        '- productnaam: een specifieke, gedetailleerde omschrijving van het product zoals op de kavelpagina staat ' +
+        '(merk, model, type, belangrijkste specificaties zoals RAM/opslag/afmetingen indien van toepassing) \u2014 ' +
+        'NIET "onbekend" of een generieke omschrijving als de pagina specifieker is\n' +
         '- de sluitdatum: het moment waarop het bieden op dit kavel stopt\n' +
         '- de ophaaldatum: de (eerste) dag waarop gewonnen kavels afgehaald kunnen worden\n\n' +
-        'Antwoord in dit formaat: {"sluitdag":"JJJJ-MM-DD","ophaaldag":"JJJJ-MM-DD","gevonden":true}\n' +
-        'Gebruik null voor een datum die je niet met zekerheid kunt vinden, en zet "gevonden" op false als je niets bruikbaars vond.';
+        'Antwoord in dit formaat: {"productnaam":"...","sluitdag":"JJJJ-MM-DD","ophaaldag":"JJJJ-MM-DD","gevonden":true}\n' +
+        'Gebruik null voor een veld dat je niet met zekerheid kunt vinden, en zet "gevonden" op false als je helemaal niets bruikbaars vond.';
 
       var txt = await App.api.callClaudeMetWebSearch(system, userText, 1500);
       var resultaat = h.parseLooseJSON(txt);
 
       if (resultaat && resultaat.gevonden) {
         var gevuld = [];
+        if (resultaat.productnaam && !naamAlIngevuld) { h.byId('extra-txt').value = resultaat.productnaam; gevuld.push('productomschrijving'); }
         if (resultaat.sluitdag && !h.byId('kavel-sluitdag').value) { h.byId('kavel-sluitdag').value = resultaat.sluitdag; gevuld.push('sluitdatum'); }
         if (resultaat.ophaaldag && !h.byId('kavel-ophaaldag').value) { h.byId('kavel-ophaaldag').value = resultaat.ophaaldag; gevuld.push('ophaaldatum'); }
         if (gevuld.length) {
-          App.ui.showSuccess('Automatisch gevonden: ' + gevuld.join(' en ') + '.');
+          App.ui.showSuccess('Automatisch gevonden: ' + gevuld.join(', ') + '.');
         } else if (statusEl) {
-          statusEl.textContent = '\u2139\uFE0F Geen sluit-/ophaaldatum gevonden op de pagina \u2014 vul zo nodig zelf in.';
+          statusEl.textContent = '\u2139\uFE0F Niets nieuws gevonden op de pagina \u2014 vul zo nodig zelf aan.';
           setTimeout(function () { statusEl.style.display = 'none'; }, 4000);
           return;
         }
       } else if (statusEl) {
-        statusEl.textContent = '\u2139\uFE0F Geen sluit-/ophaaldatum gevonden op de pagina \u2014 vul zo nodig zelf in.';
+        statusEl.textContent = '\u2139\uFE0F Geen productinfo/datums gevonden op de pagina \u2014 vul zo nodig zelf in.';
         setTimeout(function () { statusEl.style.display = 'none'; }, 4000);
         return;
       }
       if (statusEl) statusEl.style.display = 'none';
     } catch (err) {
-      App.logger.warn('Automatisch datums opzoeken mislukt:', err.message);
+      App.logger.warn('Automatisch opzoeken mislukt:', err.message);
       if (statusEl) statusEl.style.display = 'none';
     }
   }

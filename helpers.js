@@ -47,13 +47,27 @@
     return Math.round((doel - vandaag) / 86400000);
   }
 
-  /** Leidt een leesbare productnaam af uit een kavel-URL (best-effort, mag falen) */
+  /** Leidt een leesbare productnaam af uit een kavel-URL (best-effort, mag falen).
+   *  Werkt generiek over veilinghuizen heen: pakt het langste, meest woord-achtige
+   *  padsegment (bijv. de beschrijvende slug), en negeert kavel-ID-achtige segmenten. */
   function naamUitUrl(u) {
     try {
-      var deel = (u.split('/veiling-kavel/')[1] || '').split('?')[0];
-      var slug = deel.replace(/\/\d+$/, '').replace(/-/g, ' ').trim();
-      if (!slug) return '';
-      return slug.charAt(0).toUpperCase() + slug.slice(1);
+      var pathname = new URL(u).pathname;
+      var segmenten = pathname.split('/').filter(Boolean);
+      var stopwoorden = ['veiling kavel', 'kavel', 'lot', 'item', 'product', 'products', 'auction', 'auctions', 'en', 'nl', 'w', 'l'];
+      var beste = '';
+      segmenten.forEach(function (seg) {
+        var woorden = seg.replace(/[-_]+/g, ' ').trim();
+        if (stopwoorden.indexOf(woorden.toLowerCase()) !== -1) return;
+        var letters = woorden.replace(/[^a-zA-Z]/g, '').length;
+        var letterRatio = letters / Math.max(1, woorden.length);
+        // Alleen segmenten met meerdere woorden en overwegend letters (geen kavel-ID zoals "a1-38888-6515-33")
+        if (woorden.split(' ').length >= 2 && letterRatio > 0.5 && woorden.length > beste.length) {
+          beste = woorden;
+        }
+      });
+      if (!beste) return '';
+      return beste.charAt(0).toUpperCase() + beste.slice(1);
     } catch (e) { return ''; }
   }
 
