@@ -492,8 +492,21 @@
         kosten.marge = mp.gemiddeld - kosten.totaal;
       }
 
+      // ── Betrouwbaarheidscheck vóór het advies ────────────────────────────────
+      // De AI levert al "vertrouwen" (per prijsblok) en "sanity_check_ok" op, maar die
+      // signalen werden tot nu toe nergens gebruikt: een "laag vertrouwen"-schatting kreeg
+      // gewoon een volwaardig kopen/skip-advies alsof de prijs hard was. Dat is de kern van
+      // situaties als "MacBook €1100 -> AI zegt €3000". Voortaan: bij een onzeker signaal
+      // GEEN kopen/skip-advies, wel de cijfers tonen (nuttig als indicatie) maar duidelijk
+      // gelabeld als niet-hard, zodat de gebruiker zelf moet controleren.
+      var onzekerePrijs = prijzen.sanity_check_ok === false || (mp && mp.vertrouwen === 'laag');
+
       var advies = 'twijfel', adviesReden = '', roi = 50;
-      if (kosten) {
+      if (onzekerePrijs) {
+        advies = 'onzeker';
+        adviesReden = 'Onvoldoende betrouwbare prijsdata gevonden \u2014 de schatting is niet hard genoeg voor een kopen/skip-advies. Controleer de prijs handmatig voordat je biedt.';
+        roi = null;
+      } else if (kosten) {
         var m = kosten.marge;
         var pct = Math.round((m / mp.gemiddeld) * 100);
         if (m > 0 && pct >= 20) { advies = 'kopen'; roi = Math.min(93, 55 + pct); }
@@ -518,7 +531,7 @@
         kosten: kosten, mp_gemiddeld: mp.gemiddeld, mp_laag: mp.laag, mp_hoog: mp.hoog,
         ebay_gemiddeld: prijzen.ebay ? prijzen.ebay.gemiddeld : null,
         nieuwprijs: prijzen.nieuwprijs, advies: advies, adviesReden: adviesReden,
-        roi: Math.round(roi), prijzen: prijzen, maxBod: maxBod,
+        roi: (roi == null ? null : Math.round(roi)), prijzen: prijzen, maxBod: maxBod,
         eigen_bod: App.state.bodType === 'eigen', toegevoegd: Date.now(), status: 'klaar'
       };
 

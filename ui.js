@@ -49,7 +49,10 @@
     var map = {
       kopen: ['s-klaar', 'Bied!'],
       twijfel: ['s-twijfel', 'Twijfel'],
-      skip: ['s-skip', 'Skip']
+      skip: ['s-skip', 'Skip'],
+      // Onzeker: de AI kon zelf geen betrouwbare prijs vaststellen (lage confidence /
+      // mislukte sanity check) — géén kopen/skip-advies, wel expliciet als zodanig tonen.
+      onzeker: ['s-twijfel', '\u26A0 Onzeker']
     };
     var conf = map[advies] || ['s-wacht', 'Wacht'];
     return maakBadge(conf[1], 'pill pill-status ' + conf[0]);
@@ -154,10 +157,10 @@
   function maakSamenvatting(d) {
     var kosten = d.kosten;
     var advies = d.advies;
-    var cls = advies === 'kopen' ? 'sum-kopen' : advies === 'twijfel' ? 'sum-twijfel' : 'sum-skip';
-    var icon = advies === 'kopen' ? '\u2713' : advies === 'twijfel' ? '~' : '\u2715';
-    var titelTekst = advies === 'kopen' ? 'Goede koop' : advies === 'twijfel' ? 'Twijfelgeval' : 'Beter overslaan';
-    var badgeTekst = advies === 'kopen' ? 'Bied' : advies === 'twijfel' ? 'Twijfel' : 'Skip';
+    var cls = advies === 'kopen' ? 'sum-kopen' : (advies === 'twijfel' || advies === 'onzeker') ? 'sum-twijfel' : 'sum-skip';
+    var icon = advies === 'kopen' ? '\u2713' : advies === 'onzeker' ? '\u26A0' : advies === 'twijfel' ? '~' : '\u2715';
+    var titelTekst = advies === 'kopen' ? 'Goede koop' : advies === 'onzeker' ? 'Onvoldoende betrouwbare prijsdata' : advies === 'twijfel' ? 'Twijfelgeval' : 'Beter overslaan';
+    var badgeTekst = advies === 'kopen' ? 'Bied' : advies === 'onzeker' ? 'Onzeker' : advies === 'twijfel' ? 'Twijfel' : 'Skip';
 
     var card = document.createElement('div'); card.className = 'summary-card ' + cls;
 
@@ -203,12 +206,20 @@
 
     var t3 = document.createElement('div'); t3.className = 'summary-tile';
     var l3 = document.createElement('div'); l3.className = 'summary-tile-label'; l3.textContent = 'Handelspotentieel';
-    var v3 = document.createElement('div'); v3.className = 'summary-tile-value'; v3.textContent = d.roi + '/100';
-    var roiKleur = d.roi >= 70 ? 'var(--green)' : d.roi >= 40 ? 'var(--orange)' : 'var(--red)';
-    var bar = document.createElement('div'); bar.className = 'summary-bar';
-    var fill = document.createElement('div'); fill.className = 'summary-bar-fill'; fill.style.width = d.roi + '%'; fill.style.background = roiKleur;
-    bar.appendChild(fill);
-    t3.appendChild(l3); t3.appendChild(v3); t3.appendChild(bar);
+    var v3 = document.createElement('div'); v3.className = 'summary-tile-value';
+    if (d.roi == null) {
+      // Onzekere prijs: geen ROI-getal tonen (dat zou net zo'n vals-precieze indruk geven
+      // als het advies zelf) — alleen de tekstuele waarschuwing.
+      v3.textContent = 'n.v.t.';
+      t3.appendChild(l3); t3.appendChild(v3);
+    } else {
+      v3.textContent = d.roi + '/100';
+      var roiKleur = d.roi >= 70 ? 'var(--green)' : d.roi >= 40 ? 'var(--orange)' : 'var(--red)';
+      var bar = document.createElement('div'); bar.className = 'summary-bar';
+      var fill = document.createElement('div'); fill.className = 'summary-bar-fill'; fill.style.width = d.roi + '%'; fill.style.background = roiKleur;
+      bar.appendChild(fill);
+      t3.appendChild(l3); t3.appendChild(v3); t3.appendChild(bar);
+    }
     grid.appendChild(t3);
 
     if (kosten) {
@@ -246,7 +257,7 @@
     var slechtste = afgeronde.slice().sort(function (a, b) { return a.kosten.marge - b.kosten.marge; })[0];
 
     var nBied = actieveKavels.filter(function (k) { return k.advies === 'kopen'; }).length;
-    var nTwij = actieveKavels.filter(function (k) { return k.advies === 'twijfel'; }).length;
+    var nTwij = actieveKavels.filter(function (k) { return k.advies === 'twijfel' || k.advies === 'onzeker'; }).length;
     var nSkip = actieveKavels.filter(function (k) { return k.advies === 'skip'; }).length;
     var nEigen = actieveKavels.filter(function (k) { return k.eigen_bod === true; }).length;
 
