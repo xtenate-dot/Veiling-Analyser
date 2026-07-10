@@ -292,6 +292,14 @@
     //     geen HTML, geen reviews/navigatie) en doet het eigenlijke prijswerk:
     //     uitschieters negeren, laag/gemiddeld/hoog bepalen, sanity-check.
     // Dit haalt de dure "hele pagina's lezen"-stap volledig uit Sonnet's context.
+    //
+    // ── Herzien op basis van debug-bevindingen ──────────────────────────────────
+    // Bleek dat Haiku's web_search vooral eBay categorie-/zoekpaginas (/shop/, /b/,
+    // /sch/) teruggaf i.p.v. individuele advertenties met een echte prijs, waardoor
+    // Haiku geen bruikbare data kon verzamelen. Nieuwe verdeling: Haiku zoekt alleen
+    // naar en selecteert kandidaat-URLs (waar hij prima in is); Sonnet leest die
+    // paginas zelf via web_fetch en bepaalt direct de prijs (waar Sonnet's sterkere
+    // redeneervermogen nodig is — met name om troep-pagina's te doorzien).
     var specRegels = [];
     if (identificatie) {
       if (identificatie.merk) specRegels.push('Merk: ' + identificatie.merk);
@@ -306,68 +314,60 @@
 
     var PRIJS_DOMEINEN = [
       'marktplaats.nl', 'ebay.nl', 'ebay.com', 'bol.com', 'coolblue.nl', 'coolblueoutlet.nl',
-      'mediamarkt.nl', 'amazon.nl', 'iused.nl', 'backmarket.nl', 'amac.nl', '2dehands.be'
+      'mediamarkt.nl', 'amazon.nl', 'iused.nl', 'backmarket.nl', 'amac.nl', '2dehands.be',
+      'tweakers.net', 'apple.com'
     ];
 
-    async function haikuPrijsOnderzoek(extraInstructie) {
-      var system = 'Je bent een prijsonderzoek-assistent. Gebruik de zoekfunctie om ECHTE, actuele prijsdata te verzamelen voor het gegeven product. ' +
-        'BEPAAL ZELF GEEN eindprijsadvies, GEEN laag/gemiddeld/hoog-bereik en GEEN marktprijsoordeel \u2014 dat doet een ander systeem op basis van de ruwe data die jij verzamelt. ' +
-        'Verzamel per gevonden prijs: de bron (bijv. Marktplaats, eBay, bol.com, een refurbished-winkel), het bedrag, een korte titel/omschrijving, en de conditie (nieuw/refurbished/tweedehands) indien te bepalen.\n' +
-        'Zoek gericht naar: (1) de HUIDIGE nieuw- of refurbished-winkelprijs (NIET de originele lanceerprijs als het product niet meer nieuw verkocht wordt), ' +
-        '(2) minstens 2-3 tweedehands advertenties (bijv. Marktplaats), (3) minstens 1-2 listings op eBay.\n' +
+    // (a) Haiku: alleen URLs vinden en selecteren — GEEN prijsextractie, GEEN prijsoordeel.
+    async function haikuVindUrls(extraInstructie) {
+      var system = 'Je bent een zoek-assistent voor prijsvergelijking. Zoek naar pagina\'s met prijsinformatie voor het gegeven product en selecteer maximaal 5 BESTE kandidaat-URLs om te laten lezen door een ander systeem.\n\n' +
+        'KIES: individuele advertenties/listings met een specifieke productpagina (bijv. een Marktplaats-advertentie, of een eBay-listing met een itemspecifieke URL), ' +
+        'officiele winkelpagina\'s van dit specifieke product (Coolblue, bol.com, Amazon), refurbished-winkels (Back Market, Apple Refurbished, Amac), en Tweakers Vraag & Aanbod.\n' +
+        'VERMIJD: categorie-, zoek- of browsepaginas die geen concrete prijs voor dit product tonen \u2014 URLs met patronen zoals "/shop/", "/b/", "/sch/", of algemene zoekresultatenpaginas. ' +
+        'Die bevatten alleen doorverwijzingen naar andere paginas, geen bruikbare prijs.\n' +
         (extraInstructie ? extraInstructie + '\n' : '') +
-        'Gebruik maximaal 2 zoekopdrachten, wees efficient. Stop na de eerste bruikbare resultaten per zoekopdracht \u2014 lees niet meerdere volledige pagina\'s per zoekopdracht na, ' +
-        'haal alleen de prijs en een korte omschrijving eruit, NIET de volledige paginatekst, navigatie of reviews.\n' +
-        'Geef ALLEEN een compact JSON object terug, GEEN markdown, GEEN uitleg. Begin direct met { en eindig met }.';
+        'Gebruik maximaal 2 zoekopdrachten.\n' +
+        'Geef ALTIJD een geldig, compact JSON object terug. GEEN markdown, GEEN uitleg, GEEN Engelstalige tekst, GEEN excuses \u2014 uitsluitend JSON. ' +
+        'Vind je onvoldoende goede kandidaten, geef dan een kortere of lege lijst terug in hetzelfde format \u2014 NOOIT vrije tekst. Begin direct met { en eindig met }.';
       var userText = 'Product: "' + product + '"\n' + specTekst +
         '\nAntwoord in dit exacte formaat:\n' +
-        '{"nieuwprijs":100,"nieuwprijs_bron":"winkel + prijs, kort","gevonden_prijzen":[{"bron":"Marktplaats","prijs":80,"titel":"korte titel","conditie":"goed"}],"aandachtspunten":["evt. bijzonderheden, kort"]}\n' +
-        'Verzamel in totaal 4-6 gevonden_prijzen (mix van nieuw/refurbished-referentie, Marktplaats en eBay). Gebruik null voor nieuwprijs als je die niet met zekerheid kunt vinden.';
-      var txt = await App.api.callHaikuMetWebSearch(system, userText, 700, 2, null, 'Prijsonderzoek', PRIJS_DOMEINEN);
-      return h.parseLooseJSON(txt);
+        '{"kandidaten":[{"url":"https://...","bron":"Marktplaats","titel":"korte titel"}]}';
+      var txt = await App.api.callHaikuMetWebSearch(system, userText, 500, 2, null, 'URL-onderzoek', PRIJS_DOMEINEN);
+      var resultaat = h.parseLooseJSON(txt);
+      var kandidaten = (resultaat && Array.isArray(resultaat.kandidaten)) ? resultaat.kandidaten.filter(function (k) { return k && k.url; }) : [];
+      console.log('[DEBUG URL-onderzoek] ' + kandidaten.length + ' kandidaat-URLs:', kandidaten);
+      return kandidaten.slice(0, 5);
     }
 
-    function formatOnderzoek(onderzoek) {
-      var regels = ['Nieuwprijs: ' + (onderzoek.nieuwprijs != null ? h.fmt(onderzoek.nieuwprijs) : 'onbekend') +
-        (onderzoek.nieuwprijs_bron ? ' (' + onderzoek.nieuwprijs_bron + ')' : '')];
-      regels.push('Gevonden prijzen:');
-      (onderzoek.gevonden_prijzen || []).forEach(function (p) {
-        regels.push('- ' + (p.bron || '?') + ': ' + h.fmt(p.prijs) + (p.titel ? ' \u2014 ' + p.titel : '') + (p.conditie ? ' [' + p.conditie + ']' : ''));
-      });
-      if (onderzoek.aandachtspunten && onderzoek.aandachtspunten.length) {
-        regels.push('Bijzonderheden uit onderzoek: ' + onderzoek.aandachtspunten.join('; '));
-      }
-      return regels.join('\n');
-    }
-
-    var prijzenSystem = 'Je bent een Nederlandse marktprijsexpert voor tweedehands/veilingproducten. Je krijgt hieronder AL OPGEZOCHTE, ruwe prijsdata (verzameld door een ander systeem) \u2014 vertrouw op deze data, doe zelf GEEN nieuwe zoekopdracht.\n\n' +
+    var prijzenSystem = 'Je bent een Nederlandse marktprijsexpert voor tweedehands/veilingproducten. Je krijgt een lijst kandidaat-URLs \u2014 gebruik web_fetch om ze te lezen en bepaal op basis daarvan de marktprijs. Doe zelf GEEN nieuwe zoekopdracht (geen web_search), alleen web_fetch op de gegeven URLs.\n\n' +
       'WERKWIJZE (verplicht):\n' +
-      '1. Beoordeel of de gegeven nieuw/refurbished-prijs plausibel is voor dit product.\n' +
-      '2. Groepeer de gevonden tweedehandsprijzen naar bron: Marktplaats-achtige bronnen apart van eBay-achtige bronnen. Bepaal per groep een laag/gemiddeld/hoog-bereik.\n' +
-      '3. Vergelijk de datapunten onderling: een prijs die sterk afwijkt van de mediaan (bijv. >50% verschil) is een uitschieter \u2014 negeer die voor je eindberekening.\n' +
-      '4. Sanity check: (a) is de tweedehandsprijs lager dan de nieuw/refurbished-prijs? (b) ligt de prijs niet >30% boven de nieuw/refurbished-prijs? (c) is de prijs niet extreem afwijkend van de gevonden datapunten? Zet "sanity_check_ok" op false als een van deze niet klopt.\n\n' +
-      'Geef ALLEEN het compacte JSON object terug \u2014 GEEN uitleg-tekst, GEEN markdown code blocks. Houd tip-velden op maximaal 8 woorden. Begin direct met { en eindig met }.';
+      '1. Fetch de gegeven kandidaat-URLs en haal er de prijs, conditie en relevante specificaties uit. Sla een URL over als de pagina geen concrete prijs voor dit product bevat.\n' +
+      '2. Bepaal de nieuw- of refurbished-prijs (niet de originele lanceerprijs bij verouderde producten).\n' +
+      '3. Groepeer de gevonden tweedehandsprijzen naar bron: Marktplaats-achtige bronnen apart van eBay-achtige bronnen. Bepaal per groep een laag/gemiddeld/hoog-bereik.\n' +
+      '4. Vergelijk de datapunten onderling: een prijs die sterk afwijkt van de mediaan (bijv. >50% verschil) is een uitschieter \u2014 negeer die voor je eindberekening.\n' +
+      '5. Sanity check: (a) is de tweedehandsprijs lager dan de nieuw/refurbished-prijs? (b) ligt de prijs niet >30% boven de nieuw/refurbished-prijs? (c) is de prijs niet extreem afwijkend van de gevonden datapunten? Zet "sanity_check_ok" op false als een van deze niet klopt.\n\n' +
+      'Als de gefetchte paginas onvoldoende bruikbare prijsinformatie bevatten: vul het JSON-format ALSNOG volledig in met je beste schatting op basis van eigen kennis, zet dan alle "vertrouwen"-velden op "laag", zet "sanity_check_ok" op false, en noem dit expliciet in aandachtspunten. Geef NOOIT vrije tekst, uitleg of een ander format terug \u2014 altijd het onderstaande compacte JSON-object, GEEN markdown code blocks. Houd tip-velden op maximaal 8 woorden. Begin direct met { en eindig met }.';
 
-    function prijsBepalingPrompt(onderzoek) {
+    function prijsBepalingPrompt(kandidaten, extraContext) {
+      var urlLijst = kandidaten.length
+        ? kandidaten.map(function (k) { return '- ' + k.url + (k.bron ? ' (' + k.bron + ')' : '') + (k.titel ? ': ' + k.titel : ''); }).join('\n')
+        : '(geen kandidaat-URLs gevonden \u2014 gebruik je eigen kennis voor een voorzichtige schatting, met lage vertrouwen-waardes)';
       return 'Product: "' + product + '"\n' + specTekst + '\n' +
-        'Opgezochte prijsdata:\n' + formatOnderzoek(onderzoek) + '\n\n' +
+        'Kandidaat-URLs om te fetchen:\n' + urlLijst + '\n\n' +
+        (extraContext ? extraContext + '\n\n' : '') +
         'Vul dit compacte JSON object in:\n' +
         '{"productnaam":"...","categorie":"categorie","nieuwprijs":100,"nieuwprijs_bron":"winkel + prijs, kort","marktplaats":{"laag":50,"gemiddeld":75,"hoog":100,"vertrouwen":"middel","tip":"max 8 woorden","verkooptijd":"1-4 weken","zoekwoorden":["woord"]},"ebay":{"laag":60,"gemiddeld":85,"hoog":110,"vertrouwen":"laag","tip":"max 8 woorden","verkooptijd":"2-6 weken","keywords":["word"]},"aandachtspunten":["max 3 korte punten"],"sanity_check_ok":true}';
     }
 
+    function bouwFetchTool(kandidaten) {
+      return kandidaten.length ? [{ type: 'web_fetch_20260209', name: 'web_fetch', max_uses: kandidaten.length, max_content_tokens: 3000 }] : null;
+    }
+
     try {
       setStap(2);
-      var onderzoek1 = await haikuPrijsOnderzoek();
-      console.log('[DEBUG Prijsonderzoek] geparste onderzoek1:', JSON.stringify(onderzoek1));
-      var heeftNieuwprijs = !!(onderzoek1 && onderzoek1.nieuwprijs);
-      var aantalGevonden = (onderzoek1 && onderzoek1.gevonden_prijzen && onderzoek1.gevonden_prijzen.length) || 0;
-      console.log('[DEBUG Prijsonderzoek] heeftNieuwprijs=' + heeftNieuwprijs + ', aantalGevondenPrijzen=' + aantalGevonden);
-      if (!onderzoek1 || (!heeftNieuwprijs && !aantalGevonden)) {
-        console.warn('[DEBUG Prijsonderzoek] AFGEKEURD \u2014 gooit "Kon geen bruikbare prijsdata vinden". onderzoek1 was:', onderzoek1);
-        throw new Error('Kon geen bruikbare prijsdata vinden via zoeken. Probeer opnieuw of vul zelf een omschrijving toe.');
-      }
+      var kandidaten1 = await haikuVindUrls();
 
-      var prijzenTxt = await App.api.callClaude(prijzenSystem, prijsBepalingPrompt(onderzoek1), 1000, null, null, null, 'Prijsbepaling');
+      var prijzenTxt = await App.api.callClaude(prijzenSystem, prijsBepalingPrompt(kandidaten1), 1400, null, bouwFetchTool(kandidaten1), null, 'Prijsbepaling');
       var prijzen = App.api.parseJSON(prijzenTxt);
       var validatie = App.api.validatePrijzenResponse(prijzen);
       if (!validatie.valid) {
@@ -375,29 +375,25 @@
       }
 
       // ── Deterministische plausibiliteitscheck (client-side, niet afhankelijk van of de AI het zelf meldt) ──
-      // Alleen bij een verdacht resultaat volgt een gerichte, extra onderzoek + herbeoordeling — dus geen
-      // structurele meerkosten voor de meerderheid van de analyses waar het resultaat al klopt. Ook deze
-      // extra ronde gebruikt GEEN web search direct vanuit Sonnet — weer Haiku zoekt, Sonnet redeneert.
+      // Alleen bij een verdacht resultaat volgt een gerichte, extra URL-zoektocht + herbeoordeling — dus
+      // geen structurele meerkosten voor de meerderheid van de analyses waar het resultaat al klopt.
       var reden = h.beoordeelPlausibiliteit(prijzen);
       if (reden) {
         App.logger.warn('Prijsresultaat lijkt onbetrouwbaar (' + reden + '), extra validatie...');
         try {
-          var onderzoek2 = await haikuPrijsOnderzoek(
+          var kandidaten2 = await haikuVindUrls(
             'Let extra goed op: een eerder onderzoek voor dit product leverde een twijfelachtig resultaat op (' + reden + '). ' +
-            'Zoek gericht naar aanvullende, betrouwbare datapunten om dit te bevestigen of corrigeren.'
+            'Zoek gericht naar aanvullende, betrouwbare kandidaat-paginas om dit te bevestigen of corrigeren.'
           );
-          if (onderzoek2 && (onderzoek2.nieuwprijs || (onderzoek2.gevonden_prijzen && onderzoek2.gevonden_prijzen.length))) {
-            var gecombineerd = {
-              nieuwprijs: onderzoek2.nieuwprijs || onderzoek1.nieuwprijs,
-              nieuwprijs_bron: onderzoek2.nieuwprijs_bron || onderzoek1.nieuwprijs_bron,
-              gevonden_prijzen: (onderzoek1.gevonden_prijzen || []).concat(onderzoek2.gevonden_prijzen || []),
-              aandachtspunten: (onderzoek1.aandachtspunten || []).concat(onderzoek2.aandachtspunten || [])
-            };
-            var verifTxt = await App.api.callClaude(prijzenSystem, prijsBepalingPrompt(gecombineerd), 1000, null, null, null, 'Validatie');
-            var verifPrijzen = App.api.parseJSON(verifTxt);
-            var verifValidatie = App.api.validatePrijzenResponse(verifPrijzen);
-            if (verifValidatie.valid) { prijzen = verifPrijzen; }
-          }
+          var kandidatenGecombineerd = kandidaten1.concat(kandidaten2).slice(0, 6);
+          var verifTxt = await App.api.callClaude(
+            prijzenSystem,
+            prijsBepalingPrompt(kandidatenGecombineerd, 'Dit is een extra controleronde omdat het eerdere resultaat verdacht leek: ' + reden + '.'),
+            1400, null, bouwFetchTool(kandidatenGecombineerd), null, 'Validatie'
+          );
+          var verifPrijzen = App.api.parseJSON(verifTxt);
+          var verifValidatie = App.api.validatePrijzenResponse(verifPrijzen);
+          if (verifValidatie.valid) { prijzen = verifPrijzen; }
         } catch (verifErr) {
           App.logger.warn('Extra validatie mislukt, gebruik eerste resultaat:', verifErr.message);
         }
