@@ -206,6 +206,15 @@
   }
 
   /**
+   * Dynamic filtering (web_search_20260209, minder input-tokens) vereist "programmatic
+   * tool calling", dat Haiku 4.5 niet ondersteunt — alleen Sonnet 4.6/Opus 4.6+. Haiku-
+   * calls met web search moeten daarom terugvallen op de klassieke tool-versie.
+   */
+  function webSearchToolVersie(model) {
+    return (model === MODEL_HAIKU) ? 'web_search_20250305' : 'web_search_20260209';
+  }
+
+  /**
    * Zelfde als callClaude, maar met de web_search tool aan — gebruikt om bijv.
    * de sluitdatum/ophaaldatum van een kavelpagina op te zoeken. Geen retry op
    * API-fouten, wél op netwerk/timeout (via callClaude). maxUses begrenst het
@@ -213,7 +222,8 @@
    * te beperken.
    */
   function callClaudeMetWebSearch(system, userText, maxTokens, maxUses, model, images, label) {
-    return callClaude(system, userText, maxTokens, images || null, [{ type: 'web_search_20260209', name: 'web_search', max_uses: maxUses || 3 }], model, label);
+    var toolVersie = webSearchToolVersie(model || MODEL);
+    return callClaude(system, userText, maxTokens, images || null, [{ type: toolVersie, name: 'web_search', max_uses: maxUses || 3 }], model, label);
   }
 
   /**
