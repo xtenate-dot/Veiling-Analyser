@@ -11,6 +11,14 @@
   var MAX_FOTO_MB = 8;
   var MAX_AFMETING = 1120; // px, lange zijde na compressie — lager = minder tokens per foto (kost telt zwaarder dan pixels)
 
+  // ── Testfase-vlag: uitgebreide bronnen-transparantie in de console ─────────
+  // Vraagt de AI om per kandidaat-URL te rapporteren of hij gebruikt is, met welke
+  // prijs, en of hij als uitschieter is weggefilterd — puur voor het handmatig
+  // controleren van de betrouwbaarheidslogica. Kost een handvol extra outputtokens
+  // per analyse (verwaarloosbaar t.o.v. het kostenbudget). Zet op false om zowel de
+  // extra prompt-instructie als de console-logging weer volledig uit te schakelen.
+  var DEBUG_BRONNEN = true;
+
   // ── Foto's: compressie + ObjectURL-previews i.p.v. volle base64 in de preview-DOM ──
   function comprimeerAfbeelding(file) {
     return new Promise(function (resolve, reject) {
@@ -423,8 +431,12 @@
       'NOOIT een individuele advertentie/listing van een verkoper (marktplaats, een specifieke eBay-listing van \u00e9\u00e9n verkoper) als nieuwprijs gebruiken, ook niet als die verkoper het zelf "nieuw" noemt \u2014 dat is een tweedehands-databron, geen officiele prijs. Is er geen bruikbare "nieuw/refurbished"-URL bij? Zet nieuwprijs op null en meld dit in aandachtspunten \u2014 gok niet.\n' +
       '3. Groepeer de gevonden tweedehandsprijzen (van de "tweedehands"-gelabelde URLs) naar bron: Marktplaats-achtig apart van eBay-achtig. Bepaal per groep een laag/gemiddeld/hoog-bereik.\n' +
       '4. Vergelijk de datapunten onderling: een prijs die sterk afwijkt van de mediaan (bijv. >50% verschil) is een uitschieter \u2014 negeer die voor je eindberekening.\n' +
-      '5. Sanity check: (a) is de tweedehandsprijs lager dan de nieuw/refurbished-prijs? (b) ligt de prijs niet >30% boven de nieuw/refurbished-prijs? (c) is de prijs niet extreem afwijkend van de gevonden datapunten? Zet "sanity_check_ok" op false als een van deze niet klopt of als er geen betrouwbare nieuwprijs gevonden is.\n\n' +
-      'Als de gefetchte paginas onvoldoende bruikbare prijsinformatie bevatten: vul het JSON-format ALSNOG volledig in met je beste schatting op basis van eigen kennis, zet dan alle "vertrouwen"-velden op "laag", zet "sanity_check_ok" op false, en noem dit expliciet in aandachtspunten. Geef NOOIT vrije tekst, uitleg of een ander format terug \u2014 altijd het onderstaande compacte JSON-object, GEEN markdown code blocks. Houd tip-velden op maximaal 8 woorden. Begin direct met { en eindig met }.';
+      '5. Sanity check: (a) is de tweedehandsprijs lager dan de nieuw/refurbished-prijs? (b) ligt de prijs niet >30% boven de nieuw/refurbished-prijs? (c) is de prijs niet extreem afwijkend van de gevonden datapunten? Zet "sanity_check_ok" op false als een van deze niet klopt of als er geen betrouwbare nieuwprijs gevonden is.\n' +
+      '6. Tel "bruikbare_bronnen": het aantal URLs waarvan je daadwerkelijk een concrete prijs voor DIT product kon overnemen (dus NIET het aantal aangeboden kandidaat-URLs \u2014 alleen die met een bruikbare prijs). Bepaal ook "product_match_zeker": false als je twijfelt of de gevonden prijzen echt over hetzelfde product/model/uitvoering gaan als hierboven omschreven (bijv. verkeerde opslag/RAM-variant, ander bouwjaar, of je weet niet zeker welk exact model dit is) \u2014 anders true.\n' +
+      (DEBUG_BRONNEN
+        ? '7. Voeg ook "ruwe_prijzen" toe: voor ELKE aangeboden kandidaat-URL \u00e9\u00e9n regel {"url":"...","prijs":getal of null}. Dit is de RUWE prijs die je op die pagina vond voor dit product, zonder verdere interpretatie \u2014 null als de pagina geen bruikbare prijs voor dit product bevatte. Geen andere velden, geen reden, geen selectie: dat verwerkt een ander systeem.\n\n'
+        : '\n') +
+      'Als de gefetchte paginas onvoldoende bruikbare prijsinformatie bevatten: vul het JSON-format ALSNOG volledig in met je beste schatting op basis van eigen kennis, zet dan alle "vertrouwen"-velden op "laag", zet "sanity_check_ok" op false, zet "bruikbare_bronnen" op het werkelijke (lage) aantal, en noem dit expliciet in aandachtspunten. Geef NOOIT vrije tekst, uitleg of een ander format terug \u2014 altijd het onderstaande compacte JSON-object, GEEN markdown code blocks. Houd tip-velden op maximaal 8 woorden. Begin direct met { en eindig met }.';
 
     function prijsBepalingPrompt(kandidaten, extraContext) {
       var urlLijst = kandidaten.length
@@ -434,7 +446,9 @@
         'Kandidaat-URLs om te fetchen:\n' + urlLijst + '\n\n' +
         (extraContext ? extraContext + '\n\n' : '') +
         'Vul dit compacte JSON object in:\n' +
-        '{"productnaam":"...","categorie":"categorie","nieuwprijs":100,"nieuwprijs_bron":"winkel + prijs, kort (of null als geen betrouwbare bron)","marktplaats":{"laag":50,"gemiddeld":75,"hoog":100,"vertrouwen":"middel","tip":"max 8 woorden","verkooptijd":"1-4 weken","zoekwoorden":["woord"]},"ebay":{"laag":60,"gemiddeld":85,"hoog":110,"vertrouwen":"laag","tip":"max 8 woorden","verkooptijd":"2-6 weken","keywords":["word"]},"aandachtspunten":["max 3 korte punten"],"sanity_check_ok":true}';
+        '{"productnaam":"...","categorie":"categorie","nieuwprijs":100,"nieuwprijs_bron":"winkel + prijs, kort (of null als geen betrouwbare bron)","marktplaats":{"laag":50,"gemiddeld":75,"hoog":100,"vertrouwen":"middel","tip":"max 8 woorden","verkooptijd":"1-4 weken","zoekwoorden":["woord"]},"ebay":{"laag":60,"gemiddeld":85,"hoog":110,"vertrouwen":"laag","tip":"max 8 woorden","verkooptijd":"2-6 weken","keywords":["word"]},"aandachtspunten":["max 3 korte punten"],"sanity_check_ok":true,"bruikbare_bronnen":0,"product_match_zeker":true' +
+        (DEBUG_BRONNEN ? ',"ruwe_prijzen":[{"url":"https://...","prijs":75}]' : '') +
+        '}';
     }
 
     function bouwFetchTool(kandidaten) {
@@ -449,6 +463,7 @@
       setStap(2);
       var zoekterm = bouwZoekterm();
       var kandidaten1 = await vindAlleKandidaten(zoekterm);
+      var finalKandidaten = kandidaten1;
 
       var prijzenTxt = await App.api.callClaude(prijzenSystem, prijsBepalingPrompt(kandidaten1), 1400, null, bouwFetchTool(kandidaten1), null, 'Prijsbepaling');
       var prijzen = App.api.parseJSON(prijzenTxt);
@@ -478,7 +493,7 @@
           );
           var verifPrijzen = App.api.parseJSON(verifTxt);
           var verifValidatie = App.api.validatePrijzenResponse(verifPrijzen);
-          if (verifValidatie.valid) { prijzen = verifPrijzen; }
+          if (verifValidatie.valid) { prijzen = verifPrijzen; finalKandidaten = kandidatenGecombineerd; }
         } catch (verifErr) {
           App.logger.warn('Extra validatie mislukt, gebruik eerste resultaat:', verifErr.message);
         }
@@ -493,25 +508,101 @@
       }
 
       // ── Betrouwbaarheidscheck vóór het advies ────────────────────────────────
-      // De AI levert al "vertrouwen" (per prijsblok) en "sanity_check_ok" op, maar die
-      // signalen werden tot nu toe nergens gebruikt: een "laag vertrouwen"-schatting kreeg
-      // gewoon een volwaardig kopen/skip-advies alsof de prijs hard was. Dat is de kern van
-      // situaties als "MacBook €1100 -> AI zegt €3000". Voortaan: bij een onzeker signaal
-      // GEEN kopen/skip-advies, wel de cijfers tonen (nuttig als indicatie) maar duidelijk
-      // gelabeld als niet-hard, zodat de gebruiker zelf moet controleren.
-      var onzekerePrijs = prijzen.sanity_check_ok === false || (mp && mp.vertrouwen === 'laag');
+      // Bepaalt of de prijsschatting hard genoeg is voor een kopen/skip-advies. LET OP:
+      // "vertrouwen: laag" op een los prijsblok is BEWUST geen zelfstandige trigger meer —
+      // dat bleek te streng (een kavel met onderling consistente MP/eBay-prijzen werd al
+      // "onzeker" bij één enkel laag-vertrouwen-veld). Vertrouwen blijft wel zichtbaar als
+      // waarschuwingsbadge op de prijskaart, maar blokkeert het advies niet meer op zichzelf.
+      // In plaats daarvan gelden vijf concrete, elk afzonderlijk voldoende criteria:
+      var MIN_BRUIKBARE_BRONNEN = 3;
+      function bepaalOnzekerheid(p) {
+        var redenen = [];
+        if (p.sanity_check_ok === false) {
+          redenen.push('AI geeft zelf aan dat de prijs niet consistent is (sanity check mislukt)');
+        }
+        var bronnen = p.bruikbare_bronnen;
+        var heeftBronnenTelling = typeof bronnen === 'number' && isFinite(bronnen);
+        if (heeftBronnenTelling && bronnen < MIN_BRUIKBARE_BRONNEN) {
+          redenen.push(
+            p.nieuwprijs == null
+              ? 'Geen betrouwbare nieuwprijs \u00e9n te weinig tweedehandsprijzen (' + bronnen + ' bruikbare bron' + (bronnen === 1 ? '' : 'nen') + ')'
+              : 'Slechts ' + bronnen + ' bruikbare prijsbron' + (bronnen === 1 ? '' : 'nen') + ' gevonden (minimaal ' + MIN_BRUIKBARE_BRONNEN + ' gewenst)'
+          );
+        }
+        var spreidingReden = h.beoordeelPlausibiliteit(p);
+        if (spreidingReden) {
+          redenen.push('Grote spreiding tussen prijsbronnen: ' + spreidingReden);
+        }
+        if (p.product_match_zeker === false) {
+          redenen.push('AI kon het product/model niet met voldoende zekerheid identificeren');
+        }
+        return redenen;
+      }
+      var redenOnzeker = bepaalOnzekerheid(prijzen);
+      var onzekerePrijs = redenOnzeker.length > 0;
+      console.log('[DEBUG Betrouwbaarheidscheck] bruikbare_bronnen=' + prijzen.bruikbare_bronnen + ', product_match_zeker=' + prijzen.product_match_zeker + ', sanity_check_ok=' + prijzen.sanity_check_ok + ' \u2192 onzeker=' + onzekerePrijs + (redenOnzeker.length ? ' (' + redenOnzeker.join(' | ') + ')' : ''));
 
-      var advies = 'twijfel', adviesReden = '', roi = 50;
+      // ── Testfase: volledige bronnen-transparantie (zie DEBUG_BRONNEN bovenin) ──
+      // AI levert alleen de ruwe prijs per URL ("ruwe_prijzen"); bron, gebruikt/afgekeurd
+      // en uitschieter-detectie zijn hier bewust pure code — geen AI-interpretatie nodig
+      // voor iets dat de applicatie zelf net zo goed (en consistenter) kan bepalen.
+      function medianVan(nums) {
+        var s = nums.slice().sort(function (a, b) { return a - b; });
+        var mid = Math.floor(s.length / 2);
+        return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+      }
+      function bouwBronnenDetail(kandidaten, ruwePrijzen) {
+        var prijsPerUrl = {};
+        (Array.isArray(ruwePrijzen) ? ruwePrijzen : []).forEach(function (r) {
+          if (r && r.url && typeof r.prijs === 'number' && isFinite(r.prijs)) prijsPerUrl[r.url] = r.prijs;
+        });
+        var rijen = kandidaten.map(function (k) {
+          var prijs = Object.prototype.hasOwnProperty.call(prijsPerUrl, k.url) ? prijsPerUrl[k.url] : null;
+          return { url: k.url, bron: k.bron || '?', categorie: k.categorie || '?', prijs: prijs, gebruikt: prijs != null, uitschieter: false, reden: prijs == null ? 'Geen bruikbare prijs op deze pagina gevonden' : null };
+        });
+        // Uitschieter-detectie per categorie (nieuw/refurbished apart van tweedehands), zelfde
+        // >50%-van-mediaan-regel die eerder aan de AI werd gevraagd — nu deterministisch in code.
+        ['nieuw/refurbished', 'tweedehands'].forEach(function (cat) {
+          var groep = rijen.filter(function (r) { return r.categorie === cat && r.gebruikt; });
+          if (groep.length < 2) return;
+          var mediaan = medianVan(groep.map(function (r) { return r.prijs; }));
+          groep.forEach(function (r) {
+            if (mediaan > 0 && Math.abs(r.prijs - mediaan) / mediaan > 0.5) {
+              r.uitschieter = true;
+              r.reden = 'Wijkt >50% af van mediaan (' + h.fmt(mediaan) + ') binnen ' + cat;
+            }
+          });
+        });
+        return rijen;
+      }
+
+      if (DEBUG_BRONNEN) {
+        var bronnenDetail = bouwBronnenDetail(finalKandidaten, prijzen.ruwe_prijzen);
+        var gebruikt = bronnenDetail.filter(function (r) { return r.gebruikt && !r.uitschieter; });
+        var afgekeurd = bronnenDetail.filter(function (r) { return !r.gebruikt; });
+        var uitschieters = bronnenDetail.filter(function (r) { return r.uitschieter; });
+        console.log('[DEBUG Bronnen] ' + gebruikt.length + ' gebruikt, ' + afgekeurd.length + ' afgekeurd, ' + uitschieters.length + ' uitschieter(s) \u2014 volledige tabel:');
+        console.table(bronnenDetail);
+        if (!Array.isArray(prijzen.ruwe_prijzen)) {
+          console.log('[DEBUG Bronnen] Let op: "ruwe_prijzen" ontbrak in de AI-respons \u2014 alle kandidaten hierboven tonen daarom prijs:null/afgekeurd. De betrouwbaarheidscheck zelf werkt gewoon door op basis van bruikbare_bronnen.');
+        }
+      }
+      console.log('[DEBUG Prijzen meegenomen] Marktplaats: ' + (mp ? h.fmt(mp.laag) + ' - ' + h.fmt(mp.gemiddeld) + ' - ' + h.fmt(mp.hoog) : '-') +
+        ' | eBay: ' + (prijzen.ebay ? h.fmt(prijzen.ebay.laag) + ' - ' + h.fmt(prijzen.ebay.gemiddeld) + ' - ' + h.fmt(prijzen.ebay.hoog) : '-') +
+        ' | Nieuwprijs: ' + (prijzen.nieuwprijs != null ? h.fmt(prijzen.nieuwprijs) + ' (' + (prijzen.nieuwprijs_bron || '?') + ')' : '-'));
+
+      var advies = 'twijfel', adviesReden = '', roi = 50, adviesRegel = '';
       if (onzekerePrijs) {
         advies = 'onzeker';
-        adviesReden = 'Onvoldoende betrouwbare prijsdata gevonden \u2014 de schatting is niet hard genoeg voor een kopen/skip-advies. Controleer de prijs handmatig voordat je biedt.';
+        adviesReden = 'Onvoldoende betrouwbare prijsdata \u2014 niet hard genoeg voor een kopen/skip-advies. Controleer de prijs handmatig voordat je biedt.';
         roi = null;
+        adviesRegel = 'onzeker: ' + redenOnzeker.join(' | ');
       } else if (kosten) {
         var m = kosten.marge;
         var pct = Math.round((m / mp.gemiddeld) * 100);
-        if (m > 0 && pct >= 20) { advies = 'kopen'; roi = Math.min(93, 55 + pct); }
-        else if (m < -50 || pct < -10) { advies = 'skip'; roi = Math.max(8, 50 + pct / 2); }
-        else { roi = Math.max(25, Math.min(68, 50 + pct / 2)); }
+        if (m > 0 && pct >= 20) { advies = 'kopen'; roi = Math.min(93, 55 + pct); adviesRegel = 'kopen: marge > 0 en pct(' + pct + '%) >= 20%'; }
+        else if (m < -50 || pct < -10) { advies = 'skip'; roi = Math.max(8, 50 + pct / 2); adviesRegel = 'skip: marge < -\u20ac50 (' + h.fmt(m) + ') of pct(' + pct + '%) < -10%'; }
+        else { roi = Math.max(25, Math.min(68, 50 + pct / 2)); adviesRegel = 'twijfel: marge/pct(' + pct + '%) tussen de kopen- en skip-drempel in'; }
         adviesReden = m > 0
           ? 'Inkoopprijs ' + h.fmt(kosten.totaal) + ' vs MP ~' + h.fmt(mp.gemiddeld) + ' marge ' + h.fmt(m) + ' (' + pct + '% van verkoopprijs).'
           : 'Inkoopprijs ' + h.fmt(kosten.totaal) + ' ligt ' + h.fmt(Math.abs(m)) + ' boven MP prijs van ' + h.fmt(mp.gemiddeld) + ' (' + pct + '%).';
@@ -519,7 +610,9 @@
         var deler = (1 + veilinghuis.opgeld / 100) * (1 + (veilinghuis.btwBasis === 'geen' ? 0 : veilinghuis.btw / 100));
         var maxBodCalc = mp ? Math.round((mp.laag * 0.8) / deler) : null;
         adviesReden = maxBodCalc ? 'Maximaal rendabel bieden: ' + h.fmt(maxBodCalc) + '.' : 'Vul het bod in voor margeberekening.';
+        adviesRegel = 'twijfel (default): geen bod ingevuld, dus geen marge te berekenen';
       }
+      console.log('[DEBUG Advies] \u2192 ' + advies.toUpperCase() + ' \u2014 regel: ' + adviesRegel);
 
       var delerMax = (1 + veilinghuis.opgeld / 100) * (1 + (veilinghuis.btwBasis === 'geen' ? 0 : veilinghuis.btw / 100));
       var maxBod = mp ? Math.round((mp.laag * 0.8) / delerMax) : null;
@@ -531,6 +624,7 @@
         kosten: kosten, mp_gemiddeld: mp.gemiddeld, mp_laag: mp.laag, mp_hoog: mp.hoog,
         ebay_gemiddeld: prijzen.ebay ? prijzen.ebay.gemiddeld : null,
         nieuwprijs: prijzen.nieuwprijs, advies: advies, adviesReden: adviesReden,
+        reden_onzeker: redenOnzeker.length ? redenOnzeker : null,
         roi: (roi == null ? null : Math.round(roi)), prijzen: prijzen, maxBod: maxBod,
         eigen_bod: App.state.bodType === 'eigen', toegevoegd: Date.now(), status: 'klaar'
       };

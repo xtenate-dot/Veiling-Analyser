@@ -174,6 +174,15 @@
       var reden = document.createElement('div'); reden.className = 'summary-reason'; reden.textContent = d.adviesReden;
       headTxt.appendChild(reden);
     }
+    if (d.reden_onzeker && d.reden_onzeker.length) {
+      var redenLijst = document.createElement('ul'); redenLijst.className = 'summary-reason';
+      redenLijst.style.cssText = 'margin:4px 0 0 18px;padding:0';
+      d.reden_onzeker.forEach(function (r) {
+        var li = document.createElement('li'); li.textContent = r;
+        redenLijst.appendChild(li);
+      });
+      headTxt.appendChild(redenLijst);
+    }
     if (d.maxBod) {
       var maxb = document.createElement('div'); maxb.className = 'summary-maxbod';
       maxb.textContent = '\uD83D\uDCA1 Maximaal rendabel bieden: ' + h.fmt(d.maxBod);
