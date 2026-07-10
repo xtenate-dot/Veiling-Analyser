@@ -138,59 +138,22 @@
     h.byId('veilinghuis-hint').textContent = 'Handmatig geselecteerd.' + (v && v.note ? ' ' + v.note : '');
   }
 
-  // ── Automatisch productnaam + sluitdag/ophaaldag opzoeken via de Claude web-search tool ──
-  var laatstOpgezochteUrl = '';
-  async function opUrlBlur() {
+  // ── Gratis, lokale preview van de productnaam zodra je de URL invult ──────
+  // Doet GEEN API-aanroep meer (dat gebeurde eerder dubbel: hier én nogmaals
+  // tijdens de analyse zelf). De echte identificatie + sluitdag/ophaaldag-lookup
+  // gebeurt nu eenmalig, goedkoop via Haiku, als onderdeel van "Analyseren".
+  function opUrlBlur() {
     var url = h.byId('kavel-url').value.trim();
-    if (!url || url === laatstOpgezochteUrl) return;
-    var datumsAlIngevuld = h.byId('kavel-sluitdag').value || h.byId('kavel-ophaaldag').value;
     var naamAlIngevuld = h.byId('extra-txt').value.trim();
-    if (datumsAlIngevuld && naamAlIngevuld) return; // niks te doen, alles staat er al
-    if (!App.api.getApiKey()) return; // stil overslaan, gebruiker ziet de apikey-balk al
-    try { new URL(url); } catch (e) { return; }
-
-    laatstOpgezochteUrl = url;
-    var statusEl = h.byId('datum-status');
-    if (statusEl) { statusEl.textContent = '\uD83D\uDD0D Productinfo en datums opzoeken...'; statusEl.style.display = 'block'; }
-
-    try {
-      var system = 'Je bent een assistent die met de zoekfunctie een online veilingkavel-pagina opzoekt en leest. ' +
-        'Gebruik maximaal 2 zoekopdrachten. ' +
-        'Geef ALLEEN een geldig JSON object terug, GEEN markdown code blocks, GEEN tekst ervoor of erna. Begin direct met { en eindig met }.';
-      var userText = 'Kavelpagina: ' + url + '\n\n' +
-        'Zoek deze pagina op (en zo nodig de bijbehorende veilingpagina) en bepaal:\n' +
-        '- productnaam: een specifieke, gedetailleerde omschrijving van het product zoals op de kavelpagina staat ' +
-        '(merk, model, type, belangrijkste specificaties zoals RAM/opslag/afmetingen indien van toepassing) \u2014 ' +
-        'NIET "onbekend" of een generieke omschrijving als de pagina specifieker is\n' +
-        '- de sluitdatum: het moment waarop het bieden op dit kavel stopt\n' +
-        '- de ophaaldatum: de (eerste) dag waarop gewonnen kavels afgehaald kunnen worden\n\n' +
-        'Antwoord in dit formaat: {"productnaam":"...","sluitdag":"JJJJ-MM-DD","ophaaldag":"JJJJ-MM-DD","gevonden":true}\n' +
-        'Gebruik null voor een veld dat je niet met zekerheid kunt vinden, en zet "gevonden" op false als je helemaal niets bruikbaars vond.';
-
-      var txt = await App.api.callClaudeMetWebSearch(system, userText, 1200, 2);
-      var resultaat = h.parseLooseJSON(txt);
-
-      if (resultaat && resultaat.gevonden) {
-        var gevuld = [];
-        if (resultaat.productnaam && !naamAlIngevuld) { h.byId('extra-txt').value = resultaat.productnaam; gevuld.push('productomschrijving'); }
-        if (resultaat.sluitdag && !h.byId('kavel-sluitdag').value) { h.byId('kavel-sluitdag').value = resultaat.sluitdag; gevuld.push('sluitdatum'); }
-        if (resultaat.ophaaldag && !h.byId('kavel-ophaaldag').value) { h.byId('kavel-ophaaldag').value = resultaat.ophaaldag; gevuld.push('ophaaldatum'); }
-        if (gevuld.length) {
-          App.ui.showSuccess('Automatisch gevonden: ' + gevuld.join(', ') + '.');
-        } else if (statusEl) {
-          statusEl.textContent = '\u2139\uFE0F Niets nieuws gevonden op de pagina \u2014 vul zo nodig zelf aan.';
-          setTimeout(function () { statusEl.style.display = 'none'; }, 4000);
-          return;
-        }
-      } else if (statusEl) {
-        statusEl.textContent = '\u2139\uFE0F Geen productinfo/datums gevonden op de pagina \u2014 vul zo nodig zelf in.';
-        setTimeout(function () { statusEl.style.display = 'none'; }, 4000);
-        return;
+    if (!url || naamAlIngevuld) return;
+    var gok = h.naamUitUrl(url);
+    if (gok) {
+      var statusEl = h.byId('datum-status');
+      if (statusEl) {
+        statusEl.textContent = '\uD83D\uDCA1 Herkend uit URL: "' + gok + '" \u2014 wordt bij Analyseren geverifieerd en aangevuld met sluit-/ophaaldatum.';
+        statusEl.style.display = 'block';
+        setTimeout(function () { statusEl.style.display = 'none'; }, 5000);
       }
-      if (statusEl) statusEl.style.display = 'none';
-    } catch (err) {
-      App.logger.warn('Automatisch opzoeken mislukt:', err.message);
-      if (statusEl) statusEl.style.display = 'none';
     }
   }
 
@@ -236,35 +199,80 @@
     var veilinghuis = App.state.veilinghuizen.find(function (v) { return v.id === veilinghuisId; }) || App.state.veilinghuizen[0];
 
     setStap(1);
+    App.logger.info('Analyse gestart voor product:', product, '(' + App.state.imgs.length + ' foto\'s)');
 
-    var prijzenPrompt = 'Zoek actief op internet naar actuele prijzen en geef realistische marktprijzen voor: "' + product + '"\n\n' +
-      'BELANGRIJK voor nieuwprijs:\n' +
-      '- Zoek de HUIDIGE winkelprijs op (bol.com, coolblue, mediamarkt, amazon.nl)\n' +
-      '- NIET de originele adviesprijs/lanceerprijs van de fabrikant uit het verleden\n' +
-      '- Als een winkel voor minder verkoopt dan de adviesprijs, gebruik die lagere prijs\n' +
-      '- Als dit product NIET meer nieuw verkocht wordt (verouderd/discontinued model, bijv. oudere laptop/telefoon-generatie): ' +
-      'gebruik dan NIET de historische lanceerprijs. Zoek in plaats daarvan de prijs van een vergelijkbaar CURRENT nieuw model, ' +
-      'of \u2014 beter \u2014 de prijs bij een grote refurbished-winkel (bijv. iUsed, Backmarket, Coolblue Outlet, Amac) voor een vergelijkbare ' +
-      'uitvoering in goede staat, en vermeld dat expliciet in nieuwprijs_bron (bijv. "refurbished vanaf X bij Y, want niet meer nieuw verkrijgbaar")\n' +
-      '- Vermeld in nieuwprijs_bron altijd welke winkel/bron en welke prijs je gebruikt hebt\n\n' +
-      'BELANGRIJK voor 2e hands:\n' +
-      '- Zoek naar echte, actuele advertenties/verkochte listings voor dit exacte model met deze specificaties (Marktplaats, eBay, refurbished-winkels)\n' +
-      '- Marktplaats prijs moet ALTIJD lager zijn dan de actuele nieuw/refurbished-prijs, nooit gebaseerd op de oude lanceerprijs\n' +
-      '- Goede staat: 65-80% van de actuele nieuw/refurbished-prijs\n' +
-      '- Redelijke staat: 45-65% van de actuele nieuw/refurbished-prijs\n\n' +
-      (App.state.imgs.length ? 'Er zijn foto\'s van het kavel bijgevoegd — gebruik die om het product, merk, model en de staat zo goed mogelijk te identificeren.\n\n' : '') +
-      'Vul dit JSON object in met echte getallen, gebaseerd op wat je daadwerkelijk vindt via zoeken:\n' +
-      '{"productnaam":"' + product + '","categorie":"categorie","nieuwprijs":100,"nieuwprijs_bron":"winkel en prijs","marktplaats":{"laag":50,"gemiddeld":75,"hoog":100,"vertrouwen":"middel","tip":"verkooptip","verkooptijd":"1-4 weken","zoekwoorden":["woord"]},"ebay":{"laag":60,"gemiddeld":85,"hoog":110,"vertrouwen":"laag","tip":"ebay tip","verkooptijd":"2-6 weken","keywords":["word"]},"aandachtspunten":["punt"]}';
+    // ── Stap 1 (Haiku, goedkoop): merk/model/type/categorie/specs/staat/OCR + datums ──
+    // Bepaalt GEEN prijs. Gebruikt web search alleen als dat echt nodig is (nog geen
+    // bruikbare productnaam, of sluit-/ophaaldatum nog onbekend), en dan zo min mogelijk.
+    var identificatie = null;
+    var heeftGoedeNaam = !!(extra || (urlNaam && urlNaam.split(' ').length >= 2));
+    var moetZoeken = !!url && (!heeftGoedeNaam || !sluitdag || !ophaaldag);
+    try {
+      var identSystem = 'Je bent een productherkenning-assistent voor veilingkavels. ' +
+        'Identificeer het product zo specifiek en accuraat mogelijk: merk, model, type, categorie, en indien van toepassing opslag/RAM. ' +
+        'Beoordeel ook de zichtbare fysieke staat (krassen, deuken, slijtage, compleetheid). Lees tekst op foto\'s (typeplaatjes, labels, schermen) als OCR. ' +
+        'BEPAAL GEEN marktprijs \u2014 dat gebeurt in een aparte stap door een ander systeem.\n' +
+        (moetZoeken ? 'Gebruik de zoekfunctie om de kavelpagina te lezen voor een preciezere productnaam en/of de sluit-/ophaaldatum van de veiling. Gebruik maximaal 2 zoekopdrachten, wees efficient.\n' : 'Gebruik GEEN zoekfunctie \u2014 de meegeleverde informatie is voldoende.\n') +
+        'Geef ALLEEN een compact, geldig JSON object terug. GEEN markdown, GEEN uitleg. Begin direct met { en eindig met }.';
+      var identUser = 'Kavel-URL: ' + (url || '(geen)') + '\n' +
+        'Beste gok productnaam (uit URL): ' + (urlNaam || '(geen)') + '\n' +
+        (extra ? 'Door gebruiker opgegeven omschrijving: ' + extra + '\n' : '') +
+        (App.state.imgs.length ? 'Er zijn ' + App.state.imgs.length + ' foto\'s van het kavel bijgevoegd \u2014 gebruik die voor identificatie, OCR en staatbeoordeling.\n' : '') +
+        '\nAntwoord in dit exacte formaat:\n' +
+        '{"productnaam":"...","merk":"...","model":"...","type":"...","categorie":"...","opslag":"...","ram":"...","conditie":"korte omschrijving zichtbare staat","ocr_tekst":"...","sluitdag":"JJJJ-MM-DD","ophaaldag":"JJJJ-MM-DD","voldoende_info":true}\n' +
+        'Gebruik null voor een veld dat niet van toepassing of niet te bepalen is.';
+
+      var identTxt = moetZoeken
+        ? await App.api.callHaikuMetWebSearch(identSystem, identUser, 600, 2, App.state.imgs)
+        : await App.api.callHaiku(identSystem, identUser, 500, App.state.imgs);
+      identificatie = h.parseLooseJSON(identTxt);
+    } catch (err) {
+      App.logger.warn('Identificatie mislukt, ga verder met beschikbare info:', err.message);
+    }
+
+    if (identificatie) {
+      if (identificatie.productnaam && !extra) product = identificatie.productnaam.replace(/["']/g, '').trim();
+      if (identificatie.sluitdag && !sluitdag) { sluitdag = identificatie.sluitdag; h.byId('kavel-sluitdag').value = sluitdag; }
+      if (identificatie.ophaaldag && !ophaaldag) { ophaaldag = identificatie.ophaaldag; h.byId('kavel-ophaaldag').value = ophaaldag; }
+    }
+
+    // ── Stap 2 (Sonnet): uitsluitend prijsonderzoek, met minimale, compacte context ──
+    var specRegels = [];
+    if (identificatie) {
+      if (identificatie.merk) specRegels.push('Merk: ' + identificatie.merk);
+      if (identificatie.model) specRegels.push('Model: ' + identificatie.model);
+      if (identificatie.type) specRegels.push('Type: ' + identificatie.type);
+      if (identificatie.opslag) specRegels.push('Opslag: ' + identificatie.opslag);
+      if (identificatie.ram) specRegels.push('RAM: ' + identificatie.ram);
+      if (identificatie.conditie) specRegels.push('Zichtbare staat: ' + identificatie.conditie);
+      if (identificatie.ocr_tekst) specRegels.push('Tekst op product/label: ' + identificatie.ocr_tekst);
+    }
+
+    var prijzenPrompt = 'Product: "' + product + '"\n' +
+      (specRegels.length ? specRegels.join('\n') + '\n' : '') +
+      '\nZoek actief op internet naar actuele prijzen voor dit exacte product.\n\n' +
+      'Nieuwprijs: zoek de HUIDIGE winkelprijs (bol.com, coolblue, mediamarkt, amazon.nl), niet de originele lanceerprijs. ' +
+      'Als het product niet meer nieuw verkocht wordt: gebruik de prijs van een vergelijkbaar current model, of \u2014 beter \u2014 een refurbished-winkel ' +
+      '(iUsed, Backmarket, Coolblue Outlet, Amac), en vermeld dat expliciet in nieuwprijs_bron.\n\n' +
+      'Tweedehandswaarde: goede staat 65-80% van de actuele nieuw/refurbished-prijs, redelijke staat 45-65%.\n\n' +
+      'Vul dit compacte JSON object in met echte getallen uit je zoekresultaten:\n' +
+      '{"productnaam":"' + product + '","categorie":"categorie","nieuwprijs":100,"nieuwprijs_bron":"winkel + prijs, kort","marktplaats":{"laag":50,"gemiddeld":75,"hoog":100,"vertrouwen":"middel","tip":"max 8 woorden","verkooptijd":"1-4 weken","zoekwoorden":["woord"]},"ebay":{"laag":60,"gemiddeld":85,"hoog":110,"vertrouwen":"laag","tip":"max 8 woorden","verkooptijd":"2-6 weken","keywords":["word"]},"aandachtspunten":["max 3 korte punten"],"sanity_check_ok":true}';
 
     setStap(2);
-    App.logger.info('Analyse gestart voor product:', product, '(' + App.state.imgs.length + ' foto\'s)');
 
     try {
       var prijzenTxt = await App.api.callClaude(
-        'Je bent een Nederlandse marktprijsexpert. Gebruik de zoekfunctie om actuele prijzen te verifi\u00ebren \u2014 vertrouw niet blind op wat je uit je geheugen weet, prijzen veranderen snel en oudere modellen worden vaak niet meer nieuw verkocht. Gebruik maximaal 4 gerichte zoekopdrachten in totaal (bijv. 1x nieuwprijs/refurbished, 1x marktplaats, 1x eBay) \u2014 wees efficient, niet uitputtend. Geef ALLEEN een geldig JSON object terug. GEEN markdown code blocks (geen ```json```), GEEN tekst ervoor of erna. Begin direct met { en eindig met }.',
+        'Je bent een Nederlandse marktprijsexpert voor tweedehands/veilingproducten. Gebruik de zoekfunctie om actuele prijzen te verifi\u00ebren \u2014 vertrouw niet blind op je geheugen, prijzen veranderen snel en oudere modellen worden vaak niet meer nieuw verkocht.\n\n' +
+        'WERKWIJZE (verplicht):\n' +
+        '1. Zoek de nieuwprijs of refurbished-prijs.\n' +
+        '2. Zoek minimaal 3 prijsbronnen voor de tweedehandswaarde indien beschikbaar (bijv. nieuwprijs-referentie, Marktplaats, eBay).\n' +
+        '3. Vergelijk de bronnen onderling: een bron die sterk afwijkt van de andere(n) (bijv. >50% verschil) is een uitschieter \u2014 negeer die voor je eindberekening.\n' +
+        '4. Sanity check voordat je antwoordt: (a) is de tweedehandsprijs lager dan de nieuw/refurbished-prijs? (b) ligt de prijs niet >30% boven de actuele nieuw/refurbished-prijs? (c) is de prijs niet extreem afwijkend van de gevonden bronnen? Als een check faalt: doe eerst nog een gerichte verificatie-zoekopdracht voordat je het eindresultaat geeft. Zet "sanity_check_ok" op false als je ondanks verificatie nog steeds twijfelt.\n\n' +
+        'Gebruik maximaal 4 zoekopdrachten in totaal (ruimte voor 1 extra verificatie). Wees gericht, niet uitputtend.\n\n' +
+        'Geef ALLEEN het compacte JSON object terug \u2014 GEEN uitleg-tekst, GEEN markdown code blocks. Houd tip-velden op maximaal 8 woorden. Begin direct met { en eindig met }.',
         prijzenPrompt,
-        3000,
-        App.state.imgs,
+        1400,
+        null,
         [{ type: 'web_search_20250305', name: 'web_search', max_uses: 4 }]
       );
       var prijzen = App.api.parseJSON(prijzenTxt);

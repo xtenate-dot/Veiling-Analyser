@@ -18,6 +18,7 @@
 
   var ENDPOINT = 'https://api.anthropic.com/v1/messages';
   var MODEL = 'claude-sonnet-4-6';
+  var MODEL_HAIKU = 'claude-haiku-4-5-20251001'; // goedkoper model ($1/$5 per MTok vs $3/$15) voor simpele, niet-prijskritische taken
   var TIMEOUT_MS = 45000;
   var MAX_RETRIES = 2; // alleen bij netwerkfouten, niet bij API/HTTP-fouten
 
@@ -32,7 +33,7 @@
    * Gooit een Error met duidelijke .code ('timeout' | 'network' | 'api') zodat
    * de aanroeper weet of een retry zinvol is.
    */
-  async function eenPoging(system, userText, maxTokens, images, tools) {
+  async function eenPoging(system, userText, maxTokens, images, tools, model) {
     var key = getApiKey();
     if (!key) { var e = new Error('Voer eerst een API key in.'); e.code = 'no-key'; throw e; }
 
@@ -48,7 +49,7 @@
     content.push({ type: 'text', text: userText });
 
     var body = {
-      model: MODEL,
+      model: model || MODEL,
       max_tokens: maxTokens || 600,
       system: system,
       messages: [{ role: 'user', content: content }]
@@ -108,11 +109,11 @@
    * API-fouten (bijv. ongeldige key, rate limit) worden NIET herhaald — die lossen
    * zichzelf niet op door het nog een keer te proberen.
    */
-  async function callClaude(system, userText, maxTokens, images, tools) {
+  async function callClaude(system, userText, maxTokens, images, tools, model) {
     var laatsteFout = null;
     for (var poging = 0; poging <= MAX_RETRIES; poging++) {
       try {
-        return await eenPoging(system, userText, maxTokens, images, tools);
+        return await eenPoging(system, userText, maxTokens, images, tools, model);
       } catch (err) {
         laatsteFout = err;
         var magOpnieuw = (err.code === 'network' || err.code === 'timeout') && poging < MAX_RETRIES;
@@ -131,8 +132,23 @@
    * aantal zoekopdrachten per aanroep, om de kosten (tokens + $0,01/zoekopdracht)
    * te beperken.
    */
-  function callClaudeMetWebSearch(system, userText, maxTokens, maxUses) {
-    return callClaude(system, userText, maxTokens, null, [{ type: 'web_search_20250305', name: 'web_search', max_uses: maxUses || 3 }]);
+  function callClaudeMetWebSearch(system, userText, maxTokens, maxUses, model, images) {
+    return callClaude(system, userText, maxTokens, images || null, [{ type: 'web_search_20250305', name: 'web_search', max_uses: maxUses || 3 }], model);
+  }
+
+  /**
+   * Goedkope variant voor niet-prijskritische taken (identificatie: merk/model/
+   * type/categorie/specs/staat/OCR, en datum-lookup): gebruikt Haiku ($1/$5 per
+   * MTok) i.p.v. Sonnet ($3/$15 per MTok). NIET gebruiken voor de marktprijs-
+   * analyse zelf — daar telt kwaliteit zwaarder dan de besparing.
+   */
+  function callHaikuMetWebSearch(system, userText, maxTokens, maxUses, images) {
+    return callClaudeMetWebSearch(system, userText, maxTokens, maxUses, MODEL_HAIKU, images);
+  }
+
+  /** Haiku-aanroep zonder zoekfunctie (voor als er al genoeg info is, geen search nodig) */
+  function callHaiku(system, userText, maxTokens, images) {
+    return callClaude(system, userText, maxTokens, images || null, null, MODEL_HAIKU);
   }
 
   /**
@@ -168,6 +184,9 @@
   App.api = {
     callClaude: callClaude,
     callClaudeMetWebSearch: callClaudeMetWebSearch,
+    callHaikuMetWebSearch: callHaikuMetWebSearch,
+    callHaiku: callHaiku,
+    MODEL_HAIKU: MODEL_HAIKU,
     getApiKey: getApiKey,
     setApiKey: setApiKey,
     clearApiKey: clearApiKey,
