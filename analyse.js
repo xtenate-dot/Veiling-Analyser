@@ -245,19 +245,40 @@
         var zoekTxt = await App.api.callHaikuMetWebFetch(zoekSystem, zoekUser, 400, 3000, 'Datum/naam-lookup');
         zoekInfo = h.parseLooseJSON(zoekTxt);
 
-        var niksBruikbaars = !zoekInfo || (!zoekInfo.productnaam && !zoekInfo.sluitdag && !zoekInfo.ophaaldag && !zoekInfo.merk && !zoekInfo.model);
-        if (niksBruikbaars) {
+        // Check specifiek de velden die we nog misten (niet "iets, wat dan ook"): als we alleen
+        // de datums nodig hadden en die zijn nog steeds leeg, is web_fetch feitelijk mislukt voor
+        // het doel waarvoor we hem aanriepen, ook al kwam er wel een naam/merk/model uit terug
+        // (die kunnen ook uit de URL-slug zelf komen, dus dat bewijst niet dat de fetch werkte).
+        var nogSteedsGeenNaam = !heeftGoedeNaam && !(zoekInfo && zoekInfo.productnaam);
+        var nogSteedsGeenDatums = (!sluitdag && !(zoekInfo && zoekInfo.sluitdag)) || (!ophaaldag && !(zoekInfo && zoekInfo.ophaaldag));
+        var mistNogSteedsIets = !zoekInfo || nogSteedsGeenNaam || nogSteedsGeenDatums;
+        console.log('[DEBUG Datum/naam-lookup] na web_fetch: nogSteedsGeenNaam=' + nogSteedsGeenNaam + ', nogSteedsGeenDatums=' + nogSteedsGeenDatums);
+        if (mistNogSteedsIets) {
           // Fallback: sommige kavelpagina's zijn client-side gerenderd (React/Next.js) waardoor
-          // een directe fetch een lege of onvolledige pagina teruggeeft. web_search vindt de
-          // content dan vaak alsnog via een geindexeerde/gecachte versie. Duurder, maar alleen
-          // als vangnet — de meerderheid van de kavels zou dit punt niet moeten bereiken.
-          App.logger.warn('web_fetch leverde niets bruikbaars op, terugvallen op web_search...');
+          // een directe fetch een lege of onvolledige pagina teruggeeft (precies wat hier gebeurde
+          // bij Troostwijk — de datums staan er pas na JavaScript, niet in de ruwe HTML). web_search
+          // vindt de content dan vaak alsnog via een geindexeerde/gecachte versie. Duurder, maar
+          // alleen als vangnet — de meerderheid van de kavels zou dit punt niet moeten bereiken.
+          App.logger.warn('web_fetch leverde niet alles op wat nodig was, terugvallen op web_search...');
           var fallbackSystem = 'Je bent een assistent die met de zoekfunctie een online veilingkavel-pagina leest. Bepaal een preciezere productnaam ' +
             '(merk, model, type, specificaties) en/of de sluitdatum en ophaaldatum van de veiling. Haal alleen deze specifieke gegevens eruit, niet de volledige paginatekst. ' +
             'BEPAAL GEEN marktprijs. Gebruik maximaal 2 zoekopdrachten, wees efficient. ' +
             'Geef ALLEEN een compact JSON object terug, GEEN markdown, GEEN uitleg. Begin direct met { en eindig met }.';
           var fallbackTxt = await App.api.callHaikuMetWebSearch(fallbackSystem, zoekUser, 400, 2, null, 'Datum/naam-lookup (fallback)');
-          zoekInfo = h.parseLooseJSON(fallbackTxt);
+          var fallbackInfo = h.parseLooseJSON(fallbackTxt);
+          // Combineer i.p.v. overschrijven: wat web_fetch al wél goed vond (bijv. merk/model) blijft
+          // staan als de fallback dat veld zelf niet vond.
+          if (fallbackInfo) {
+            zoekInfo = {
+              productnaam: fallbackInfo.productnaam || (zoekInfo && zoekInfo.productnaam) || null,
+              merk: fallbackInfo.merk || (zoekInfo && zoekInfo.merk) || null,
+              model: fallbackInfo.model || (zoekInfo && zoekInfo.model) || null,
+              opslag: fallbackInfo.opslag || (zoekInfo && zoekInfo.opslag) || null,
+              ram: fallbackInfo.ram || (zoekInfo && zoekInfo.ram) || null,
+              sluitdag: fallbackInfo.sluitdag || (zoekInfo && zoekInfo.sluitdag) || null,
+              ophaaldag: fallbackInfo.ophaaldag || (zoekInfo && zoekInfo.ophaaldag) || null
+            };
+          }
         }
       } catch (err) {
         App.logger.warn('Datum/naam-lookup mislukt:', err.message);
@@ -321,10 +342,17 @@
     // Patronen van categorie-/zoek-/browsepaginas die nooit een concrete productprijs tonen.
     // Dit is een keiharde code-filter — geen "AI graag vermijden"-verzoek, die bleek niet
     // waterdicht (vandaar de eBay /shop/ /b/ paginas die de vorige versie doorliet).
-    var JUNK_URL_PATRONEN = [/\/shop\//i, /\/b\//i, /\/sch\//i, /\/str\//i, /\/search\?/i, /\/c\/[a-z0-9-]+$/i];
+    // LET OP: /shop/, /b/, /sch/, /str/ zijn eBay-specifieke categorie-/winkel-conventies —
+    // diezelfde substrings komen ook voor in legitieme URLs van andere sites (bijv. Apple's
+    // "/shop/product/..." voor een ECHTE refurbished-productpagina), dus alleen toepassen op eBay.
+    var EBAY_JUNK_PATRONEN = [/\/shop\//i, /\/b\//i, /\/sch\//i, /\/str\//i];
+    var ALGEMENE_JUNK_PATRONEN = [/\/search\?/i, /\/c\/[a-z0-9-]+$/i];
     function isBruikbareUrl(url) {
       if (!url) return false;
-      return !JUNK_URL_PATRONEN.some(function (re) { return re.test(url); });
+      var isEbay = /(^|\.)ebay\.[a-z.]+\//i.test(url);
+      if (isEbay && EBAY_JUNK_PATRONEN.some(function (re) { return re.test(url); })) return false;
+      if (ALGEMENE_JUNK_PATRONEN.some(function (re) { return re.test(url); })) return false;
+      return true;
     }
 
     // Zoekterm wordt met gewone code opgebouwd uit de al bekende specs — geen AI nodig om te
@@ -386,7 +414,11 @@
     }
 
     function bouwFetchTool(kandidaten) {
-      return kandidaten.length ? [{ type: 'web_fetch_20260209', name: 'web_fetch', max_uses: kandidaten.length, max_content_tokens: 3000 }] : null;
+      // web_fetch_20250910 (i.p.v. de "dynamic filtering"-versie 20260209): die laatste start
+      // onder water een code_execution-sandbox op, en dat liep bij eBay-pagina's vast in een
+      // lus van mislukte Python-pogingen — 35k+ tokens en 44s voor uiteindelijk niks. De
+      // simpele fetch-versie is trager om te "filteren" maar werkt voorspelbaar en snel.
+      return kandidaten.length ? [{ type: 'web_fetch_20250910', name: 'web_fetch', max_uses: kandidaten.length, max_content_tokens: 3000 }] : null;
     }
 
     try {
