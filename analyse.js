@@ -315,7 +315,7 @@
     var PRIJS_DOMEINEN = [
       'marktplaats.nl', 'ebay.nl', 'ebay.com', 'bol.com', 'coolblue.nl', 'coolblueoutlet.nl',
       'mediamarkt.nl', 'amazon.nl', 'iused.nl', 'backmarket.nl', 'amac.nl', '2dehands.be',
-      'tweakers.net', 'apple.com'
+      'apple.com'
     ];
 
     // Patronen van categorie-/zoek-/browsepaginas die nooit een concrete productprijs tonen.
