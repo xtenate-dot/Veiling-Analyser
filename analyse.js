@@ -358,7 +358,12 @@
     try {
       setStap(2);
       var onderzoek1 = await haikuPrijsOnderzoek();
-      if (!onderzoek1 || (!onderzoek1.nieuwprijs && (!onderzoek1.gevonden_prijzen || !onderzoek1.gevonden_prijzen.length))) {
+      console.log('[DEBUG Prijsonderzoek] geparste onderzoek1:', JSON.stringify(onderzoek1));
+      var heeftNieuwprijs = !!(onderzoek1 && onderzoek1.nieuwprijs);
+      var aantalGevonden = (onderzoek1 && onderzoek1.gevonden_prijzen && onderzoek1.gevonden_prijzen.length) || 0;
+      console.log('[DEBUG Prijsonderzoek] heeftNieuwprijs=' + heeftNieuwprijs + ', aantalGevondenPrijzen=' + aantalGevonden);
+      if (!onderzoek1 || (!heeftNieuwprijs && !aantalGevonden)) {
+        console.warn('[DEBUG Prijsonderzoek] AFGEKEURD \u2014 gooit "Kon geen bruikbare prijsdata vinden". onderzoek1 was:', onderzoek1);
         throw new Error('Kon geen bruikbare prijsdata vinden via zoeken. Probeer opnieuw of vul zelf een omschrijving toe.');
       }
 

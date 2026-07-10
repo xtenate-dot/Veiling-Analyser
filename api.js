@@ -123,6 +123,47 @@
       throw ce;
     }
 
+    // ═══ TIJDELIJKE DEBUG-LOGGING — verwijderen zodra duidelijk is waarom prijsonderzoek ═══
+    // ═══ leeg terugkomt. Logt per call met tools: hoeveel zoek/fetch-resultaten er terug-  ═══
+    // ═══ kwamen, eventuele tool-fouten (bijv. 0 resultaten door allowed_domains), en de     ═══
+    // ═══ uiteindelijke tekst die Claude teruggaf (om te zien of het JSON parse-probleem is).═══
+    if (tools && tools.length) {
+      try {
+        var dbg = '[DEBUG ' + (label || '?') + ']';
+        console.log(dbg, 'content blocks:', data.content.map(function (b) { return b.type; }));
+        data.content.forEach(function (b, i) {
+          if (b.type === 'server_tool_use') {
+            console.log(dbg, 'server_tool_use #' + i, '\u2014 tool:', b.name, '\u2014 input:', JSON.stringify(b.input));
+          } else if (b.type === 'web_search_tool_result') {
+            if (b.content && b.content.type === 'web_search_tool_result_error') {
+              console.warn(dbg, 'web_search_tool_result FOUT:', b.content.error_code);
+            } else if (Array.isArray(b.content)) {
+              console.log(dbg, 'web_search_tool_result:', b.content.length, 'resultaten geaccepteerd door de API');
+              b.content.forEach(function (r, ri) {
+                console.log(dbg, '  resultaat', ri, '\u2014', r.url, '\u2014', (r.title || '(geen titel)').slice(0, 90));
+              });
+              if (b.content.length === 0) console.warn(dbg, '  \u26a0 GEEN zoekresultaten voor deze zoekopdracht (mogelijk door allowed_domains-restrictie)');
+            } else {
+              console.log(dbg, 'web_search_tool_result: onverwachte vorm ->', JSON.stringify(b.content).slice(0, 300));
+            }
+          } else if (b.type === 'web_fetch_tool_result') {
+            if (b.content && b.content.type === 'web_fetch_tool_result_error') {
+              console.warn(dbg, 'web_fetch_tool_result FOUT:', b.content.error_code);
+            } else {
+              console.log(dbg, 'web_fetch_tool_result OK \u2014 url:', b.content && b.content.url);
+            }
+          } else if (b.type === 'text') {
+            console.log(dbg, 'tekstblok (eind-output van Claude):', b.text);
+          }
+        });
+        var eindTekst = data.content.map(function (b) { return b.text || ''; }).join('');
+        console.log(dbg, 'samengevoegde eindtekst v\u00f3\u00f3r JSON-parse:', eindTekst || '(LEEG)');
+      } catch (dbgErr) {
+        console.warn('[DEBUG] fout tijdens debug-logging zelf:', dbgErr.message);
+      }
+    }
+    // ═══ EINDE TIJDELIJKE DEBUG-LOGGING ═══════════════════════════════════════════════════
+
     // ── Kostenlog (voor het "AI-kosten"-tabblad) ──────────────────────────
     try {
       var usage = data.usage || {};
