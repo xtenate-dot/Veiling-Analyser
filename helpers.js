@@ -70,8 +70,11 @@
     if (!prijzen || !prijzen.marktplaats) return null;
     var mp = prijzen.marktplaats.gemiddeld;
     var nieuw = prijzen.nieuwprijs;
-    if (prijzen.sanity_check_ok === false) return 'de AI gaf zelf aan te twijfelen aan dit resultaat';
     if (typeof mp !== 'number' || !isFinite(mp)) return null;
+    // LET OP: "sanity_check_ok:false" wordt NIET meer blind vertrouwd als trigger. Bij een
+    // ouder/uitverkocht product is nieuwprijs:null vaak een eerlijke, correcte conclusie
+    // (Apple/de winkel verkoopt het simpelweg niet meer) — geen plausibiliteitsprobleem.
+    // Alleen concrete numerieke tegenstrijdigheden triggeren een (dure) herverificatie.
     if (typeof nieuw === 'number' && isFinite(nieuw) && nieuw > 0) {
       if (mp > nieuw) return 'de tweedehandsprijs (' + mp + ') is hoger dan de nieuw/refurbished-prijs (' + nieuw + ')';
       if (mp > nieuw * 1.3) return 'de tweedehandsprijs (' + mp + ') ligt meer dan 30% boven de nieuw/refurbished-prijs (' + nieuw + ')';

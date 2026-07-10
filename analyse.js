@@ -254,30 +254,39 @@
         var mistNogSteedsIets = !zoekInfo || nogSteedsGeenNaam || nogSteedsGeenDatums;
         console.log('[DEBUG Datum/naam-lookup] na web_fetch: nogSteedsGeenNaam=' + nogSteedsGeenNaam + ', nogSteedsGeenDatums=' + nogSteedsGeenDatums);
         if (mistNogSteedsIets) {
-          // Fallback: sommige kavelpagina's zijn client-side gerenderd (React/Next.js) waardoor
-          // een directe fetch een lege of onvolledige pagina teruggeeft (precies wat hier gebeurde
-          // bij Troostwijk — de datums staan er pas na JavaScript, niet in de ruwe HTML). web_search
-          // vindt de content dan vaak alsnog via een geindexeerde/gecachte versie. Duurder, maar
-          // alleen als vangnet — de meerderheid van de kavels zou dit punt niet moeten bereiken.
-          App.logger.warn('web_fetch leverde niet alles op wat nodig was, terugvallen op web_search...');
-          var fallbackSystem = 'Je bent een assistent die met de zoekfunctie een online veilingkavel-pagina leest. Bepaal een preciezere productnaam ' +
-            '(merk, model, type, specificaties) en/of de sluitdatum en ophaaldatum van de veiling. Haal alleen deze specifieke gegevens eruit, niet de volledige paginatekst. ' +
-            'BEPAAL GEEN marktprijs. Gebruik maximaal 2 zoekopdrachten, wees efficient. ' +
-            'Geef ALLEEN een compact JSON object terug, GEEN markdown, GEEN uitleg. Begin direct met { en eindig met }.';
-          var fallbackTxt = await App.api.callHaikuMetWebSearch(fallbackSystem, zoekUser, 400, 2, null, 'Datum/naam-lookup (fallback)');
-          var fallbackInfo = h.parseLooseJSON(fallbackTxt);
-          // Combineer i.p.v. overschrijven: wat web_fetch al wél goed vond (bijv. merk/model) blijft
-          // staan als de fallback dat veld zelf niet vond.
-          if (fallbackInfo) {
-            zoekInfo = {
-              productnaam: fallbackInfo.productnaam || (zoekInfo && zoekInfo.productnaam) || null,
-              merk: fallbackInfo.merk || (zoekInfo && zoekInfo.merk) || null,
-              model: fallbackInfo.model || (zoekInfo && zoekInfo.model) || null,
-              opslag: fallbackInfo.opslag || (zoekInfo && zoekInfo.opslag) || null,
-              ram: fallbackInfo.ram || (zoekInfo && zoekInfo.ram) || null,
-              sluitdag: fallbackInfo.sluitdag || (zoekInfo && zoekInfo.sluitdag) || null,
-              ophaaldag: fallbackInfo.ophaaldag || (zoekInfo && zoekInfo.ophaaldag) || null
-            };
+          var isTroostwijk = /troostwijkauctions\.com/i.test(url);
+          var alleenDatumsMissen = !nogSteedsGeenNaam && nogSteedsGeenDatums;
+          if (isTroostwijk && alleenDatumsMissen) {
+            // Troostwijk-kavelpaginas bleken herhaaldelijk niet vindbaar via web_search (2x
+            // geprobeerd in eerdere tests, 2x niks gevonden \u2014 waarschijnlijk client-side
+            // gerenderd en slecht geindexeerd). Sluit/ophaaldatum zijn niet prijskritisch, dus
+            // hier NIET nog een dure zoekronde starten \u2014 vul de datums zo nodig zelf in.
+            console.log('[DEBUG Datum/naam-lookup] Troostwijk-pagina, alleen datums missen \u2014 fallback overgeslagen (bleek in de praktijk zelden iets op te leveren; niet prijskritisch). Vul zo nodig zelf in.');
+          } else {
+            // Fallback: sommige kavelpagina's zijn client-side gerenderd (React/Next.js) waardoor
+            // een directe fetch een lege of onvolledige pagina teruggeeft. web_search vindt de
+            // content dan vaak alsnog via een geindexeerde/gecachte versie. Duurder, maar alleen
+            // als vangnet — de meerderheid van de kavels zou dit punt niet moeten bereiken.
+            App.logger.warn('web_fetch leverde niet alles op wat nodig was, terugvallen op web_search...');
+            var fallbackSystem = 'Je bent een assistent die met de zoekfunctie een online veilingkavel-pagina leest. Bepaal een preciezere productnaam ' +
+              '(merk, model, type, specificaties) en/of de sluitdatum en ophaaldatum van de veiling. Haal alleen deze specifieke gegevens eruit, niet de volledige paginatekst. ' +
+              'BEPAAL GEEN marktprijs. Gebruik \u00e9\u00e9n gerichte zoekopdracht. ' +
+              'Geef ALLEEN een compact JSON object terug, GEEN markdown, GEEN uitleg. Begin direct met { en eindig met }.';
+            var fallbackTxt = await App.api.callHaikuMetWebSearch(fallbackSystem, zoekUser, 400, 1, null, 'Datum/naam-lookup (fallback)');
+            var fallbackInfo = h.parseLooseJSON(fallbackTxt);
+            // Combineer i.p.v. overschrijven: wat web_fetch al wél goed vond (bijv. merk/model) blijft
+            // staan als de fallback dat veld zelf niet vond.
+            if (fallbackInfo) {
+              zoekInfo = {
+                productnaam: fallbackInfo.productnaam || (zoekInfo && zoekInfo.productnaam) || null,
+                merk: fallbackInfo.merk || (zoekInfo && zoekInfo.merk) || null,
+                model: fallbackInfo.model || (zoekInfo && zoekInfo.model) || null,
+                opslag: fallbackInfo.opslag || (zoekInfo && zoekInfo.opslag) || null,
+                ram: fallbackInfo.ram || (zoekInfo && zoekInfo.ram) || null,
+                sluitdag: fallbackInfo.sluitdag || (zoekInfo && zoekInfo.sluitdag) || null,
+                ophaaldag: fallbackInfo.ophaaldag || (zoekInfo && zoekInfo.ophaaldag) || null
+              };
+            }
           }
         }
       } catch (err) {
@@ -378,7 +387,7 @@
     // gebruikte (bijv. een eBay-listing van een refurbisher/goede-doel-verkoper).
     async function haikuVindUrls(zoekterm, domeinen, categorie, extraInstructie) {
       var system = 'Voer met de zoekfunctie EXACT de gegeven zoekopdracht uit \u2014 verzin zelf geen andere of aanvullende zoektermen. ' +
-        'Geef ALLE gevonden resultaten terug (url, bron, titel), zonder zelf te selecteren of te filteren \u2014 dat gebeurt door een ander systeem.\n' +
+        'Geef ALLE gevonden resultaten terug (url, bron, titel), zonder zelf te selecteren of te filteren \u2014 dat gebeurt door een ander systeem. Houd elke titel op maximaal 8 woorden, anders past de lijst niet in de antwoordruimte.\n' +
         (extraInstructie ? extraInstructie + '\n' : '') +
         'Gebruik de zoekopdracht \u00e9\u00e9nmaal; alleen als dat letterlijk nul resultaten oplevert mag je het \u00e9\u00e9n keer opnieuw proberen.\n' +
         'Geef ALTIJD een geldig, compact JSON object terug. GEEN markdown, GEEN uitleg, GEEN Engelstalige tekst, GEEN excuses \u2014 uitsluitend JSON. ' +
@@ -386,7 +395,7 @@
       var userText = 'Zoekopdracht: "' + zoekterm + '"\n\n' +
         'Antwoord in dit exacte formaat:\n' +
         '{"kandidaten":[{"url":"https://...","bron":"Marktplaats","titel":"korte titel"}]}';
-      var txt = await App.api.callHaikuMetWebSearch(system, userText, 500, 2, null, 'URL-onderzoek (' + categorie + ')', domeinen);
+      var txt = await App.api.callHaikuMetWebSearch(system, userText, 900, 2, null, 'URL-onderzoek (' + categorie + ')', domeinen);
       var resultaat = h.parseLooseJSON(txt);
       var ruweKandidaten = (resultaat && Array.isArray(resultaat.kandidaten)) ? resultaat.kandidaten.filter(function (k) { return k && k.url; }) : [];
       var kandidaten = ruweKandidaten.filter(function (k) { return isBruikbareUrl(k.url); }).map(function (k) { k.categorie = categorie; return k; });
@@ -398,9 +407,13 @@
     }
 
     async function vindAlleKandidaten(zoekterm, extraInstructie) {
-      var nieuw = await haikuVindUrls(zoekterm + ' prijs', NIEUW_DOMEINEN, 'nieuw/refurbished', extraInstructie);
-      var tweedehands = await haikuVindUrls(zoekterm, TWEEDEHANDS_DOMEINEN, 'tweedehands', extraInstructie);
-      return nieuw.concat(tweedehands);
+      // Parallel i.p.v. na elkaar: zelfde tokens/kosten, maar ongeveer 2x sneller — deze twee
+      // zoekopdrachten zijn onafhankelijk van elkaar, dus hoeven niet te wachten.
+      var resultaten = await Promise.all([
+        haikuVindUrls(zoekterm + ' prijs', NIEUW_DOMEINEN, 'nieuw/refurbished', extraInstructie),
+        haikuVindUrls(zoekterm, TWEEDEHANDS_DOMEINEN, 'tweedehands', extraInstructie)
+      ]);
+      return resultaten[0].concat(resultaten[1]);
     }
 
     var prijzenSystem = 'Je bent een Nederlandse marktprijsexpert voor tweedehands/veilingproducten. Je krijgt een lijst kandidaat-URLs, elk gelabeld met een categorie ("nieuw/refurbished" of "tweedehands") \u2014 gebruik web_fetch om ze te lezen en bepaal op basis daarvan de marktprijs. Doe zelf GEEN nieuwe zoekopdracht (geen web_search), alleen web_fetch op de gegeven URLs.\n\n' +
