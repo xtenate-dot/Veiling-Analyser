@@ -34,7 +34,7 @@
     lijst = lijst || laad();
     var t = {
       aantal: lijst.length, kosten: 0, kostenEUR: 0, inputTokens: 0, outputTokens: 0,
-      cacheReadTokens: 0, cacheWriteTokens: 0, websearchAantal: 0, duurMs: 0
+      cacheReadTokens: 0, cacheWriteTokens: 0, websearchAantal: 0, webfetchAantal: 0, duurMs: 0
     };
     lijst.forEach(function (e) {
       t.kosten += e.kosten || 0;
@@ -44,6 +44,7 @@
       t.cacheReadTokens += e.cacheReadTokens || 0;
       t.cacheWriteTokens += e.cacheWriteTokens || 0;
       t.websearchAantal += e.websearchAantal || 0;
+      t.webfetchAantal += e.webfetchAantal || 0;
       t.duurMs += e.duurMs || 0;
     });
     return t;
@@ -69,6 +70,7 @@
       var delen = ['Call ' + (i + 1), 'Functie: ' + (e.label || '-'), 'Model: ' + (isHaiku ? 'Haiku' : 'Sonnet'), 'API: ' + (e.api || 'Messages')];
       if (e.aantalAfbeeldingen) delen.push('Afbeeldingen: ' + e.aantalAfbeeldingen);
       delen.push('Websearch: ' + (e.websearchAantal ? 'Ja (' + e.websearchAantal + 'x)' : 'Nee'));
+      if (e.webfetchAantal) delen.push('Webfetch: Ja (' + e.webfetchAantal + 'x)');
       delen.push('Prompt: ' + (e.promptTekens || 0) + ' tekens (~' + (e.promptTokensGeschat || 0) + ' tokens)');
       delen.push('Input tokens: ' + (e.inputTokens || 0));
       delen.push('Output tokens: ' + (e.outputTokens || 0));

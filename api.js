@@ -73,17 +73,20 @@
       messages: [{ role: 'user', content: content }]
     };
     if (tools && tools.length) body.tools = tools;
+    var gebruiktWebFetch = tools && tools.some(function (t) { return t.type && t.type.indexOf('web_fetch') === 0; });
 
     var resp;
     try {
+      var headers = {
+        'Content-Type': 'application/json',
+        'x-api-key': key,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      };
+      if (gebruiktWebFetch) headers['anthropic-beta'] = 'web-fetch-2025-09-10'; // web_fetch is nog beta, web_search inmiddels niet meer
       resp = await fetch(ENDPOINT, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': key,
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true'
-        },
+        headers: headers,
         body: JSON.stringify(body),
         signal: controller.signal
       });
@@ -128,11 +131,12 @@
       var cacheReadTokens = usage.cache_read_input_tokens || 0;
       var cacheWriteTokens = usage.cache_creation_input_tokens || 0;
       var websearchAantal = (usage.server_tool_use && usage.server_tool_use.web_search_requests) || 0;
+      var webfetchAantal = (usage.server_tool_use && usage.server_tool_use.web_fetch_requests) || 0;
       var tarief = PRIJZEN_PER_MODEL[werkelijkModel] || PRIJZEN_PER_MODEL[MODEL];
       var kostenUSD = (inputTokens / 1e6) * tarief.input + (outputTokens / 1e6) * tarief.output +
         (cacheReadTokens / 1e6) * tarief.input * 0.1 + // cache-hit: ~10% van het normale input-tarief
         (cacheWriteTokens / 1e6) * tarief.input * 1.25 + // cache-write: ~1,25x het normale input-tarief (5 min TTL)
-        websearchAantal * WEBSEARCH_KOSTEN_PER_ZOEKOPDRACHT;
+        websearchAantal * WEBSEARCH_KOSTEN_PER_ZOEKOPDRACHT; // web_fetch heeft GEEN vergelijkbare toeslag, alleen normale tokenkosten
 
       // Geschatte opsplitsing: de API geeft alleen één totaal input_tokens terug, geen
       // officiele uitsplitsing per onderdeel. We benaderen daarom zelf: systeem- en
@@ -158,12 +162,13 @@
           analyseId: huidigeAnalyseId,
           label: label || '(onbekend)',
           model: werkelijkModel,
-          api: (tools && tools.length) ? 'Web Search' : 'Messages',
+          api: gebruiktWebFetch ? 'Web Fetch' : ((tools && tools.length) ? 'Web Search' : 'Messages'),
           inputTokens: inputTokens,
           outputTokens: outputTokens,
           cacheReadTokens: cacheReadTokens,
           cacheWriteTokens: cacheWriteTokens,
           websearchAantal: websearchAantal,
+          webfetchAantal: webfetchAantal,
           aantalAfbeeldingen: aantalAfbeeldingen,
           promptTekens: promptTekens,
           promptTokensGeschat: Math.round(promptTekens / 4),
@@ -221,9 +226,11 @@
    * aantal zoekopdrachten per aanroep, om de kosten (tokens + $0,01/zoekopdracht)
    * te beperken.
    */
-  function callClaudeMetWebSearch(system, userText, maxTokens, maxUses, model, images, label) {
+  function callClaudeMetWebSearch(system, userText, maxTokens, maxUses, model, images, label, allowedDomains) {
     var toolVersie = webSearchToolVersie(model || MODEL);
-    return callClaude(system, userText, maxTokens, images || null, [{ type: toolVersie, name: 'web_search', max_uses: maxUses || 3 }], model, label);
+    var tool = { type: toolVersie, name: 'web_search', max_uses: maxUses || 3 };
+    if (allowedDomains && allowedDomains.length) tool.allowed_domains = allowedDomains;
+    return callClaude(system, userText, maxTokens, images || null, [tool], model, label);
   }
 
   /**
@@ -232,13 +239,26 @@
    * MTok) i.p.v. Sonnet ($3/$15 per MTok). NIET gebruiken voor de marktprijs-
    * analyse zelf — daar telt kwaliteit zwaarder dan de besparing.
    */
-  function callHaikuMetWebSearch(system, userText, maxTokens, maxUses, images, label) {
-    return callClaudeMetWebSearch(system, userText, maxTokens, maxUses, MODEL_HAIKU, images, label);
+  function callHaikuMetWebSearch(system, userText, maxTokens, maxUses, images, label, allowedDomains) {
+    return callClaudeMetWebSearch(system, userText, maxTokens, maxUses, MODEL_HAIKU, images, label, allowedDomains);
   }
 
   /** Haiku-aanroep zonder zoekfunctie (voor als er al genoeg info is, geen search nodig) */
   function callHaiku(system, userText, maxTokens, images, label) {
     return callClaude(system, userText, maxTokens, images || null, null, MODEL_HAIKU, label);
+  }
+
+  /**
+   * Haiku-aanroep met de web_fetch tool: haalt EEN AL BEKENDE URL rechtstreeks op,
+   * i.p.v. ernaar te zoeken. Geen $0,01/gebruik-toeslag (in tegenstelling tot web_search),
+   * en maxContentTokens begrenst hard hoeveel van de pagina in de context terechtkomt —
+   * de belangrijkste hefboom om onvoorspelbaar grote paginas te voorkomen.
+   * Vereist dat de URL letterlijk in userText staat (Claude mag geen URLs verzinnen).
+   */
+  function callHaikuMetWebFetch(system, userText, maxTokens, maxContentTokens, label) {
+    return callClaude(system, userText, maxTokens, null,
+      [{ type: 'web_fetch_20250910', name: 'web_fetch', max_uses: 1, max_content_tokens: maxContentTokens || 4000 }],
+      MODEL_HAIKU, label);
   }
 
   /**
@@ -276,6 +296,7 @@
     callClaudeMetWebSearch: callClaudeMetWebSearch,
     callHaikuMetWebSearch: callHaikuMetWebSearch,
     callHaiku: callHaiku,
+    callHaikuMetWebFetch: callHaikuMetWebFetch,
     setAnalyseId: setAnalyseId,
     MODEL_HAIKU: MODEL_HAIKU,
     getApiKey: getApiKey,

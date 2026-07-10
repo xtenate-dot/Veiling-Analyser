@@ -228,20 +228,37 @@
     }
 
     var heeftGoedeNaam = !!(extra || (visueleInfo && visueleInfo.productnaam) || (urlNaam && urlNaam.split(' ').length >= 2));
-    var moetZoeken = !!url && (!heeftGoedeNaam || !sluitdag || !ophaaldag);
-    if (moetZoeken) {
+    var moetPaginaLezen = !!url && (!heeftGoedeNaam || !sluitdag || !ophaaldag);
+    if (moetPaginaLezen) {
       try {
-        var zoekSystem = 'Je bent een assistent die met de zoekfunctie een online veilingkavel-pagina leest. Bepaal een preciezere productnaam ' +
-          '(merk, model, type, specificaties) en/of de sluitdatum en ophaaldatum van de veiling. Haal alleen deze specifieke gegevens eruit, niet de volledige paginatekst. ' +
-          'BEPAAL GEEN marktprijs. Gebruik maximaal 2 zoekopdrachten, wees efficient. ' +
-          'Geef ALLEEN een compact JSON object terug, GEEN markdown, GEEN uitleg. Begin direct met { en eindig met }.';
-        var zoekUser = 'Kavel-URL: ' + url + '\n' +
+        // web_fetch i.p.v. web_search: we kennen de URL al exact, dus "zoeken" ernaar is
+        // pure verspilling. web_fetch haalt precies díe ene pagina op, met een harde
+        // max_content_tokens-limiet, en zonder de $0,01/zoekopdracht-toeslag van web_search.
+        var zoekSystem = 'Je bent een assistent die een specifieke veilingkavel-pagina leest (via web_fetch). Bepaal een preciezere productnaam ' +
+          '(merk, model, type, specificaties) en/of de sluitdatum en ophaaldatum van de veiling. Haal ALLEEN deze specifieke gegevens uit de pagina, negeer navigatie, reviews en overige inhoud. ' +
+          'BEPAAL GEEN marktprijs. Geef ALLEEN een compact JSON object terug, GEEN markdown, GEEN uitleg. Begin direct met { en eindig met }.';
+        var zoekUser = 'Haal deze pagina op en lees hem: ' + url + '\n' +
           'Vermoedelijk product (nog te bevestigen/verbeteren): ' + product + '\n' +
           '\nAntwoord in dit exacte formaat:\n' +
           '{"productnaam":"...","merk":"...","model":"...","opslag":"...","ram":"...","sluitdag":"JJJJ-MM-DD","ophaaldag":"JJJJ-MM-DD"}\n' +
-          'Gebruik null voor een veld dat je niet met zekerheid kunt vinden.';
-        var zoekTxt = await App.api.callHaikuMetWebSearch(zoekSystem, zoekUser, 400, 2, null, 'Datum/naam-lookup');
+          'Gebruik null voor een veld dat je niet met zekerheid op de pagina kunt vinden.';
+        var zoekTxt = await App.api.callHaikuMetWebFetch(zoekSystem, zoekUser, 400, 3000, 'Datum/naam-lookup');
         zoekInfo = h.parseLooseJSON(zoekTxt);
+
+        var niksBruikbaars = !zoekInfo || (!zoekInfo.productnaam && !zoekInfo.sluitdag && !zoekInfo.ophaaldag && !zoekInfo.merk && !zoekInfo.model);
+        if (niksBruikbaars) {
+          // Fallback: sommige kavelpagina's zijn client-side gerenderd (React/Next.js) waardoor
+          // een directe fetch een lege of onvolledige pagina teruggeeft. web_search vindt de
+          // content dan vaak alsnog via een geindexeerde/gecachte versie. Duurder, maar alleen
+          // als vangnet — de meerderheid van de kavels zou dit punt niet moeten bereiken.
+          App.logger.warn('web_fetch leverde niets bruikbaars op, terugvallen op web_search...');
+          var fallbackSystem = 'Je bent een assistent die met de zoekfunctie een online veilingkavel-pagina leest. Bepaal een preciezere productnaam ' +
+            '(merk, model, type, specificaties) en/of de sluitdatum en ophaaldatum van de veiling. Haal alleen deze specifieke gegevens eruit, niet de volledige paginatekst. ' +
+            'BEPAAL GEEN marktprijs. Gebruik maximaal 2 zoekopdrachten, wees efficient. ' +
+            'Geef ALLEEN een compact JSON object terug, GEEN markdown, GEEN uitleg. Begin direct met { en eindig met }.';
+          var fallbackTxt = await App.api.callHaikuMetWebSearch(fallbackSystem, zoekUser, 400, 2, null, 'Datum/naam-lookup (fallback)');
+          zoekInfo = h.parseLooseJSON(fallbackTxt);
+        }
       } catch (err) {
         App.logger.warn('Datum/naam-lookup mislukt:', err.message);
       }
@@ -287,6 +304,11 @@
     }
     var specTekst = specRegels.length ? specRegels.join('\n') + '\n' : '';
 
+    var PRIJS_DOMEINEN = [
+      'marktplaats.nl', 'ebay.nl', 'ebay.com', 'bol.com', 'coolblue.nl', 'coolblueoutlet.nl',
+      'mediamarkt.nl', 'amazon.nl', 'iused.nl', 'backmarket.nl', 'amac.nl', '2dehands.be'
+    ];
+
     async function haikuPrijsOnderzoek(extraInstructie) {
       var system = 'Je bent een prijsonderzoek-assistent. Gebruik de zoekfunctie om ECHTE, actuele prijsdata te verzamelen voor het gegeven product. ' +
         'BEPAAL ZELF GEEN eindprijsadvies, GEEN laag/gemiddeld/hoog-bereik en GEEN marktprijsoordeel \u2014 dat doet een ander systeem op basis van de ruwe data die jij verzamelt. ' +
@@ -294,13 +316,14 @@
         'Zoek gericht naar: (1) de HUIDIGE nieuw- of refurbished-winkelprijs (NIET de originele lanceerprijs als het product niet meer nieuw verkocht wordt), ' +
         '(2) minstens 2-3 tweedehands advertenties (bijv. Marktplaats), (3) minstens 1-2 listings op eBay.\n' +
         (extraInstructie ? extraInstructie + '\n' : '') +
-        'Gebruik maximaal 3 zoekopdrachten, wees efficient \u2014 haal alleen de prijs en een korte omschrijving uit een pagina, NIET de volledige paginatekst, navigatie of reviews.\n' +
+        'Gebruik maximaal 2 zoekopdrachten, wees efficient. Stop na de eerste bruikbare resultaten per zoekopdracht \u2014 lees niet meerdere volledige pagina\'s per zoekopdracht na, ' +
+        'haal alleen de prijs en een korte omschrijving eruit, NIET de volledige paginatekst, navigatie of reviews.\n' +
         'Geef ALLEEN een compact JSON object terug, GEEN markdown, GEEN uitleg. Begin direct met { en eindig met }.';
       var userText = 'Product: "' + product + '"\n' + specTekst +
         '\nAntwoord in dit exacte formaat:\n' +
         '{"nieuwprijs":100,"nieuwprijs_bron":"winkel + prijs, kort","gevonden_prijzen":[{"bron":"Marktplaats","prijs":80,"titel":"korte titel","conditie":"goed"}],"aandachtspunten":["evt. bijzonderheden, kort"]}\n' +
         'Verzamel in totaal 4-6 gevonden_prijzen (mix van nieuw/refurbished-referentie, Marktplaats en eBay). Gebruik null voor nieuwprijs als je die niet met zekerheid kunt vinden.';
-      var txt = await App.api.callHaikuMetWebSearch(system, userText, 700, 3, null, 'Prijsonderzoek');
+      var txt = await App.api.callHaikuMetWebSearch(system, userText, 700, 2, null, 'Prijsonderzoek', PRIJS_DOMEINEN);
       return h.parseLooseJSON(txt);
     }
 
