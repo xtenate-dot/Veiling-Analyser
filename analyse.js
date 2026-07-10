@@ -155,6 +155,7 @@
 
     try {
       var system = 'Je bent een assistent die met de zoekfunctie een online veilingkavel-pagina opzoekt en leest. ' +
+        'Gebruik maximaal 2 zoekopdrachten. ' +
         'Geef ALLEEN een geldig JSON object terug, GEEN markdown code blocks, GEEN tekst ervoor of erna. Begin direct met { en eindig met }.';
       var userText = 'Kavelpagina: ' + url + '\n\n' +
         'Zoek deze pagina op (en zo nodig de bijbehorende veilingpagina) en bepaal:\n' +
@@ -166,7 +167,7 @@
         'Antwoord in dit formaat: {"productnaam":"...","sluitdag":"JJJJ-MM-DD","ophaaldag":"JJJJ-MM-DD","gevonden":true}\n' +
         'Gebruik null voor een veld dat je niet met zekerheid kunt vinden, en zet "gevonden" op false als je helemaal niets bruikbaars vond.';
 
-      var txt = await App.api.callClaudeMetWebSearch(system, userText, 1500);
+      var txt = await App.api.callClaudeMetWebSearch(system, userText, 1200, 2);
       var resultaat = h.parseLooseJSON(txt);
 
       if (resultaat && resultaat.gevonden) {
@@ -260,11 +261,11 @@
 
     try {
       var prijzenTxt = await App.api.callClaude(
-        'Je bent een Nederlandse marktprijsexpert. Gebruik de zoekfunctie om actuele prijzen te verifi\u00ebren \u2014 vertrouw niet blind op wat je uit je geheugen weet, prijzen veranderen snel en oudere modellen worden vaak niet meer nieuw verkocht. Geef ALLEEN een geldig JSON object terug. GEEN markdown code blocks (geen ```json```), GEEN tekst ervoor of erna. Begin direct met { en eindig met }.',
+        'Je bent een Nederlandse marktprijsexpert. Gebruik de zoekfunctie om actuele prijzen te verifi\u00ebren \u2014 vertrouw niet blind op wat je uit je geheugen weet, prijzen veranderen snel en oudere modellen worden vaak niet meer nieuw verkocht. Gebruik maximaal 4 gerichte zoekopdrachten in totaal (bijv. 1x nieuwprijs/refurbished, 1x marktplaats, 1x eBay) \u2014 wees efficient, niet uitputtend. Geef ALLEEN een geldig JSON object terug. GEEN markdown code blocks (geen ```json```), GEEN tekst ervoor of erna. Begin direct met { en eindig met }.',
         prijzenPrompt,
         3000,
         App.state.imgs,
-        [{ type: 'web_search_20250305', name: 'web_search' }]
+        [{ type: 'web_search_20250305', name: 'web_search', max_uses: 4 }]
       );
       var prijzen = App.api.parseJSON(prijzenTxt);
       var validatie = App.api.validatePrijzenResponse(prijzen);

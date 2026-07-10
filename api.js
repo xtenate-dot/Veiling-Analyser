@@ -127,10 +127,12 @@
   /**
    * Zelfde als callClaude, maar met de web_search tool aan — gebruikt om bijv.
    * de sluitdatum/ophaaldatum van een kavelpagina op te zoeken. Geen retry op
-   * API-fouten, wél op netwerk/timeout (via callClaude).
+   * API-fouten, wél op netwerk/timeout (via callClaude). maxUses begrenst het
+   * aantal zoekopdrachten per aanroep, om de kosten (tokens + $0,01/zoekopdracht)
+   * te beperken.
    */
-  function callClaudeMetWebSearch(system, userText, maxTokens) {
-    return callClaude(system, userText, maxTokens, null, [{ type: 'web_search_20250305', name: 'web_search' }]);
+  function callClaudeMetWebSearch(system, userText, maxTokens, maxUses) {
+    return callClaude(system, userText, maxTokens, null, [{ type: 'web_search_20250305', name: 'web_search', max_uses: maxUses || 3 }]);
   }
 
   /**
