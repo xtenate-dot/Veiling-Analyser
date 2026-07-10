@@ -77,6 +77,18 @@
       delen.push('Kosten: ' + fmt(e.kostenEUR));
       delen.push('Tijd: ' + (e.duurMs != null ? (e.duurMs / 1000).toFixed(1) + 's' : '-'));
       out.push('Call ' + (i + 1) + '  ' + delen.slice(1).join('  |  '));
+
+      // Token-opsplitsing — alleen tonen als input_tokens beduidend groter is dan de
+      // prompt die wij zelf stuurden (typisch bij web search: het gros komt dan van
+      // zoekresultaten / tool-context, niet van onze eigen system+userText).
+      if (e.inputTokens > 500) {
+        var subdelen = [];
+        subdelen.push('systeemprompt \u2248' + (e.systeemTokensGeschat || 0));
+        subdelen.push('gebruikersprompt \u2248' + (e.gebruikerTokensGeschat || 0));
+        if (e.afbeeldingTokensGeschat) subdelen.push('afbeeldingen \u2248' + e.afbeeldingTokensGeschat);
+        if (e.overigeTokensGeschat) subdelen.push((e.websearchAantal ? 'websearch-resultaten/tool-context' : 'overig') + ' \u2248' + e.overigeTokensGeschat);
+        out.push('        \u21B3 opsplitsing input: ' + subdelen.join(', ') + ' (tokens, geschat waar niet direct bekend)');
+      }
     });
 
     out.push(lijn + ' TOTAAL');

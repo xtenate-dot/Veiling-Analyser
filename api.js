@@ -133,6 +133,25 @@
         (cacheReadTokens / 1e6) * tarief.input * 0.1 + // cache-hit: ~10% van het normale input-tarief
         (cacheWriteTokens / 1e6) * tarief.input * 1.25 + // cache-write: ~1,25x het normale input-tarief (5 min TTL)
         websearchAantal * WEBSEARCH_KOSTEN_PER_ZOEKOPDRACHT;
+
+      // Geschatte opsplitsing: de API geeft alleen één totaal input_tokens terug, geen
+      // officiele uitsplitsing per onderdeel. We benaderen daarom zelf: systeem- en
+      // gebruikersprompt zijn exact bekend (wij stuurden ze), afbeeldingen worden geschat
+      // via de standaard Claude-formule (breedte x hoogte / 750), en de rest (vaak verreweg
+      // het grootste deel bij een call met web search) is zoekresultaten + eventuele
+      // herhaalde tool-context uit eerdere stappen binnen dezelfde aanroep.
+      var systeemTokensGeschat = Math.round((system ? system.length : 0) / 4);
+      var gebruikerTokensGeschat = Math.round((userText ? userText.length : 0) / 4);
+      var afbeeldingTokensGeschat = 0;
+      if (images && images.length) {
+        images.forEach(function (img) {
+          // ruwe schatting; werkelijke pixelafmetingen zijn hier niet bekend, dus een vast
+          // gemiddelde per foto (gebaseerd op MAX_AFMETING=1120px in analyse.js)
+          afbeeldingTokensGeschat += 900;
+        });
+      }
+      var overigeTokensGeschat = Math.max(0, inputTokens - systeemTokensGeschat - gebruikerTokensGeschat - afbeeldingTokensGeschat);
+
       if (App.aicalls) {
         App.aicalls.log({
           tijd: Date.now(),
@@ -148,6 +167,10 @@
           aantalAfbeeldingen: aantalAfbeeldingen,
           promptTekens: promptTekens,
           promptTokensGeschat: Math.round(promptTekens / 4),
+          systeemTokensGeschat: systeemTokensGeschat,
+          gebruikerTokensGeschat: gebruikerTokensGeschat,
+          afbeeldingTokensGeschat: afbeeldingTokensGeschat,
+          overigeTokensGeschat: overigeTokensGeschat,
           kosten: kostenUSD,
           kostenEUR: kostenUSD * EUR_PER_USD,
           duurMs: Date.now() - start,
@@ -190,7 +213,7 @@
    * te beperken.
    */
   function callClaudeMetWebSearch(system, userText, maxTokens, maxUses, model, images, label) {
-    return callClaude(system, userText, maxTokens, images || null, [{ type: 'web_search_20250305', name: 'web_search', max_uses: maxUses || 3 }], model, label);
+    return callClaude(system, userText, maxTokens, images || null, [{ type: 'web_search_20260209', name: 'web_search', max_uses: maxUses || 3 }], model, label);
   }
 
   /**

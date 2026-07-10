@@ -232,7 +232,8 @@
     if (moetZoeken) {
       try {
         var zoekSystem = 'Je bent een assistent die met de zoekfunctie een online veilingkavel-pagina leest. Bepaal een preciezere productnaam ' +
-          '(merk, model, type, specificaties) en/of de sluitdatum en ophaaldatum van de veiling. BEPAAL GEEN marktprijs. Gebruik maximaal 2 zoekopdrachten, wees efficient. ' +
+          '(merk, model, type, specificaties) en/of de sluitdatum en ophaaldatum van de veiling. Haal alleen deze specifieke gegevens eruit, niet de volledige paginatekst. ' +
+          'BEPAAL GEEN marktprijs. Gebruik maximaal 2 zoekopdrachten, wees efficient. ' +
           'Geef ALLEEN een compact JSON object terug, GEEN markdown, GEEN uitleg. Begin direct met { en eindig met }.';
         var zoekUser = 'Kavel-URL: ' + url + '\n' +
           'Vermoedelijk product (nog te bevestigen/verbeteren): ' + product + '\n' +
@@ -285,8 +286,9 @@
       'Als het product niet meer nieuw verkocht wordt: gebruik de prijs van een vergelijkbaar current model, of \u2014 beter \u2014 een refurbished-winkel ' +
       '(iUsed, Backmarket, Coolblue Outlet, Amac), en vermeld dat expliciet in nieuwprijs_bron.\n\n' +
       'Tweedehandswaarde: goede staat 65-80% van de actuele nieuw/refurbished-prijs, redelijke staat 45-65%.\n\n' +
+      'Haal alleen de prijs en de kernspecificaties uit een pagina \u2014 niet de volledige paginatekst nodig, focus je zoekresultaten op wat je echt nodig hebt.\n\n' +
       'Vul dit compacte JSON object in met echte getallen uit je zoekresultaten:\n' +
-      '{"productnaam":"' + product + '","categorie":"categorie","nieuwprijs":100,"nieuwprijs_bron":"winkel + prijs, kort","marktplaats":{"laag":50,"gemiddeld":75,"hoog":100,"vertrouwen":"middel","tip":"max 8 woorden","verkooptijd":"1-4 weken","zoekwoorden":["woord"]},"ebay":{"laag":60,"gemiddeld":85,"hoog":110,"vertrouwen":"laag","tip":"max 8 woorden","verkooptijd":"2-6 weken","keywords":["word"]},"aandachtspunten":["max 3 korte punten"],"sanity_check_ok":true}';
+      '{"productnaam":"...","categorie":"categorie","nieuwprijs":100,"nieuwprijs_bron":"winkel + prijs, kort","marktplaats":{"laag":50,"gemiddeld":75,"hoog":100,"vertrouwen":"middel","tip":"max 8 woorden","verkooptijd":"1-4 weken","zoekwoorden":["woord"]},"ebay":{"laag":60,"gemiddeld":85,"hoog":110,"vertrouwen":"laag","tip":"max 8 woorden","verkooptijd":"2-6 weken","keywords":["word"]},"aandachtspunten":["max 3 korte punten"],"sanity_check_ok":true}';
 
     setStap(2);
 
@@ -296,13 +298,13 @@
       '2. Zoek minimaal 3 prijsbronnen voor de tweedehandswaarde indien beschikbaar (bijv. nieuwprijs-referentie, Marktplaats, eBay).\n' +
       '3. Vergelijk de bronnen onderling: een bron die sterk afwijkt van de andere(n) (bijv. >50% verschil) is een uitschieter \u2014 negeer die voor je eindberekening.\n' +
       '4. Sanity check voordat je antwoordt: (a) is de tweedehandsprijs lager dan de nieuw/refurbished-prijs? (b) ligt de prijs niet >30% boven de actuele nieuw/refurbished-prijs? (c) is de prijs niet extreem afwijkend van de gevonden bronnen? Zet "sanity_check_ok" op false als een van deze niet klopt.\n\n' +
-      'Gebruik maximaal 3 gerichte zoekopdrachten. Wees gericht, niet uitputtend.\n\n' +
+      'Gebruik maximaal 3 gerichte zoekopdrachten. Wees gericht, niet uitputtend \u2014 haal per bron alleen de prijs en relevante specificaties eruit, niet de volledige pagina.\n\n' +
       'Geef ALLEEN het compacte JSON object terug \u2014 GEEN uitleg-tekst, GEEN markdown code blocks. Houd tip-velden op maximaal 8 woorden. Begin direct met { en eindig met }.';
 
     try {
       var prijzenTxt = await App.api.callClaude(
         prijzenSystem, prijzenPrompt, 1400, null,
-        [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }],
+        [{ type: 'web_search_20260209', name: 'web_search', max_uses: 3 }],
         null, 'Prijsanalyse'
       );
       var prijzen = App.api.parseJSON(prijzenTxt);
@@ -327,7 +329,7 @@
             'Geef ALLEEN dat JSON object terug, niets anders.';
           var verifTxt = await App.api.callClaude(
             prijzenSystem, verifPrompt, 1400, null,
-            [{ type: 'web_search_20250305', name: 'web_search', max_uses: 2 }],
+            [{ type: 'web_search_20260209', name: 'web_search', max_uses: 2 }],
             null, 'Validatie'
           );
           var verifPrijzen = App.api.parseJSON(verifTxt);
