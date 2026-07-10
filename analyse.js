@@ -318,24 +318,50 @@
       'tweakers.net', 'apple.com'
     ];
 
-    // (a) Haiku: alleen URLs vinden en selecteren — GEEN prijsextractie, GEEN prijsoordeel.
-    async function haikuVindUrls(extraInstructie) {
-      var system = 'Je bent een zoek-assistent voor prijsvergelijking. Zoek naar pagina\'s met prijsinformatie voor het gegeven product en selecteer maximaal 5 BESTE kandidaat-URLs om te laten lezen door een ander systeem.\n\n' +
-        'KIES: individuele advertenties/listings met een specifieke productpagina (bijv. een Marktplaats-advertentie, of een eBay-listing met een itemspecifieke URL), ' +
-        'officiele winkelpagina\'s van dit specifieke product (Coolblue, bol.com, Amazon), refurbished-winkels (Back Market, Apple Refurbished, Amac), en Tweakers Vraag & Aanbod.\n' +
-        'VERMIJD: categorie-, zoek- of browsepaginas die geen concrete prijs voor dit product tonen \u2014 URLs met patronen zoals "/shop/", "/b/", "/sch/", of algemene zoekresultatenpaginas. ' +
-        'Die bevatten alleen doorverwijzingen naar andere paginas, geen bruikbare prijs.\n' +
+    // Patronen van categorie-/zoek-/browsepaginas die nooit een concrete productprijs tonen.
+    // Dit is een keiharde code-filter — geen "AI graag vermijden"-verzoek, die bleek niet
+    // waterdicht (vandaar de eBay /shop/ /b/ paginas die de vorige versie doorliet).
+    var JUNK_URL_PATRONEN = [/\/shop\//i, /\/b\//i, /\/sch\//i, /\/str\//i, /\/search\?/i, /\/c\/[a-z0-9-]+$/i];
+    function isBruikbareUrl(url) {
+      if (!url) return false;
+      return !JUNK_URL_PATRONEN.some(function (re) { return re.test(url); });
+    }
+
+    // Zoekterm wordt met gewone code opgebouwd uit de al bekende specs — geen AI nodig om te
+    // "bedenken" waarnaar gezocht moet worden, dat is puur stringmanipulatie.
+    function bouwZoekterm() {
+      var delen = [];
+      if (identificatie) {
+        if (identificatie.merk) delen.push(identificatie.merk);
+        if (identificatie.model) delen.push(identificatie.model);
+        if (identificatie.opslag) delen.push(identificatie.opslag);
+        if (identificatie.ram) delen.push(identificatie.ram);
+      }
+      return delen.length >= 2 ? delen.join(' ') : product;
+    }
+
+    // (a) Haiku: voert de exacte, kant-en-klare zoekopdracht uit en geeft de RUWE resultaten
+    // terug — geen eigen zoektermen bedenken, geen eigen selectie/filtering. Dat scheelt
+    // "denk"-tokens en maakt het gedrag voorspelbaar. Het filteren (junk-URLs eruit, max 5)
+    // gebeurt hierna in gewone JS, niet door de AI.
+    async function haikuVindUrls(zoekterm, extraInstructie) {
+      var system = 'Voer met de zoekfunctie EXACT de gegeven zoekopdracht uit \u2014 verzin zelf geen andere of aanvullende zoektermen. ' +
+        'Geef ALLE gevonden resultaten terug (url, bron, titel), zonder zelf te selecteren of te filteren \u2014 dat gebeurt door een ander systeem.\n' +
         (extraInstructie ? extraInstructie + '\n' : '') +
-        'Gebruik maximaal 2 zoekopdrachten.\n' +
+        'Gebruik de zoekopdracht \u00e9\u00e9nmaal; alleen als dat letterlijk nul resultaten oplevert mag je het \u00e9\u00e9n keer opnieuw proberen.\n' +
         'Geef ALTIJD een geldig, compact JSON object terug. GEEN markdown, GEEN uitleg, GEEN Engelstalige tekst, GEEN excuses \u2014 uitsluitend JSON. ' +
-        'Vind je onvoldoende goede kandidaten, geef dan een kortere of lege lijst terug in hetzelfde format \u2014 NOOIT vrije tekst. Begin direct met { en eindig met }.';
-      var userText = 'Product: "' + product + '"\n' + specTekst +
-        '\nAntwoord in dit exacte formaat:\n' +
+        'Geen resultaten? Geef een lege lijst terug in hetzelfde format \u2014 NOOIT vrije tekst. Begin direct met { en eindig met }.';
+      var userText = 'Zoekopdracht: "' + zoekterm + '"\n\n' +
+        'Antwoord in dit exacte formaat:\n' +
         '{"kandidaten":[{"url":"https://...","bron":"Marktplaats","titel":"korte titel"}]}';
       var txt = await App.api.callHaikuMetWebSearch(system, userText, 500, 2, null, 'URL-onderzoek', PRIJS_DOMEINEN);
       var resultaat = h.parseLooseJSON(txt);
-      var kandidaten = (resultaat && Array.isArray(resultaat.kandidaten)) ? resultaat.kandidaten.filter(function (k) { return k && k.url; }) : [];
-      console.log('[DEBUG URL-onderzoek] ' + kandidaten.length + ' kandidaat-URLs:', kandidaten);
+      var ruweKandidaten = (resultaat && Array.isArray(resultaat.kandidaten)) ? resultaat.kandidaten.filter(function (k) { return k && k.url; }) : [];
+      var kandidaten = ruweKandidaten.filter(function (k) { return isBruikbareUrl(k.url); });
+      console.log('[DEBUG URL-onderzoek] zoekterm: "' + zoekterm + '" \u2014 ' + ruweKandidaten.length + ' ruwe resultaten, ' + kandidaten.length + ' na junk-URL-filter:', kandidaten);
+      if (ruweKandidaten.length !== kandidaten.length) {
+        console.log('[DEBUG URL-onderzoek] afgekeurd door junk-URL-filter:', ruweKandidaten.filter(function (k) { return !isBruikbareUrl(k.url); }).map(function (k) { return k.url; }));
+      }
       return kandidaten.slice(0, 5);
     }
 
@@ -365,7 +391,8 @@
 
     try {
       setStap(2);
-      var kandidaten1 = await haikuVindUrls();
+      var zoekterm = bouwZoekterm();
+      var kandidaten1 = await haikuVindUrls(zoekterm);
 
       var prijzenTxt = await App.api.callClaude(prijzenSystem, prijsBepalingPrompt(kandidaten1), 1400, null, bouwFetchTool(kandidaten1), null, 'Prijsbepaling');
       var prijzen = App.api.parseJSON(prijzenTxt);
@@ -381,10 +408,12 @@
       if (reden) {
         App.logger.warn('Prijsresultaat lijkt onbetrouwbaar (' + reden + '), extra validatie...');
         try {
-          var kandidaten2 = await haikuVindUrls(
-            'Let extra goed op: een eerder onderzoek voor dit product leverde een twijfelachtig resultaat op (' + reden + '). ' +
-            'Zoek gericht naar aanvullende, betrouwbare kandidaat-paginas om dit te bevestigen of corrigeren.'
-          );
+          // Tweede zoekterm iets breder (zonder RAM/opslag-precisie) als vangnet — nog steeds
+          // met code opgebouwd, geen AI die zelf een nieuwe zoekterm bedenkt.
+          var zoekterm2 = (identificatie && identificatie.merk && identificatie.model)
+            ? identificatie.merk + ' ' + identificatie.model
+            : zoekterm;
+          var kandidaten2 = await haikuVindUrls(zoekterm2, 'Dit is een controlezoekopdracht \u2014 een eerder resultaat voor dit product leek twijfelachtig (' + reden + ').');
           var kandidatenGecombineerd = kandidaten1.concat(kandidaten2).slice(0, 6);
           var verifTxt = await App.api.callClaude(
             prijzenSystem,
