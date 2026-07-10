@@ -53,6 +53,7 @@
   <div class="tab">&#128269; Kavel analyseren</div>
   <div class="tab">&#127942; Gewonnen <span class="tab-badge" id="badge-gewonnen">0</span></div>
   <div class="tab">&#128214; Handleiding</div>
+  <div class="tab">&#128202; AI-kosten</div>
 </div>
 
 <div class="main">
@@ -201,6 +202,28 @@
   </div>
 </div>
 
+<div id="tab-aikosten" class="panel">
+  <div class="card" id="aikosten-rapport-card" style="display:none">
+    <div class="card-title" style="display:flex;align-items:center;justify-content:space-between">
+      <span>&#128203; Rapport laatste analyse</span>
+      <button class="hbtn hbtn-ghost" id="aikosten-kopieer-btn" style="height:30px;font-size:12px">&#128203; Kopieer</button>
+    </div>
+    <div class="small-note">Calls gesorteerd van duurste naar goedkoopste, zodat direct zichtbaar is welke stap de kosten domineert.</div>
+    <pre id="aikosten-rapport-tekst" style="margin-top:10px;padding:14px;background:var(--surface-sunken);border:1px solid var(--border);border-radius:var(--radius-control);font-size:12px;line-height:1.6;white-space:pre-wrap;word-break:break-word;overflow-x:auto;font-family:ui-monospace,SFMono-Regular,Menlo,monospace"></pre>
+  </div>
+  <div class="card">
+    <div class="card-title" style="display:flex;align-items:center;justify-content:space-between">
+      <span>AI-kosten per aanroep</span>
+      <button class="hbtn hbtn-ghost" id="aikosten-wis-btn" style="height:30px;font-size:12px">&#128465; Wis geschiedenis</button>
+    </div>
+    <div class="small-note">Elke aanroep naar de AI wordt hier gelogd: welk model, hoeveel tokens, of er is gezocht op internet, hoe lang het duurde en wat het kostte. Bewaard in je browser, blijft dus staan na een refresh.</div>
+    <div class="stats-row" id="aikosten-stats-row" style="margin-top:16px"></div>
+  </div>
+  <div class="card" id="aikosten-lijst-card">
+    <div id="aikosten-lijst"></div>
+  </div>
+</div>
+
 </div>
 
 <!-- Veilinghuizen beheer modal -->
@@ -254,6 +277,7 @@
 <script src="logger.js"></script>
 <script src="storage.js"></script>
 <script src="state.js"></script>
+<script src="aicalls.js"></script>
 <script src="veilinghuizen.js"></script>
 <script src="api.js"></script>
 <script src="sheets.js"></script>

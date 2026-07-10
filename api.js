@@ -21,6 +21,20 @@
   var MODEL_HAIKU = 'claude-haiku-4-5-20251001'; // goedkoper model ($1/$5 per MTok vs $3/$15) voor simpele, niet-prijskritische taken
   var TIMEOUT_MS = 45000;
   var MAX_RETRIES = 2; // alleen bij netwerkfouten, niet bij API/HTTP-fouten
+  var WEBSEARCH_KOSTEN_PER_ZOEKOPDRACHT = 0.01; // $, vast Anthropic-tarief
+  var EUR_PER_USD = 0.92; // vaste, geschatte koers — geen live wisselkoers-API om afhankelijkheden te vermijden
+
+  // $ per miljoen tokens, officiele Anthropic-tarieven. Onbekend model -> valt terug op Sonnet-tarief.
+  var PRIJZEN_PER_MODEL = {
+    'claude-sonnet-4-6': { input: 3, output: 15 },
+    'claude-haiku-4-5-20251001': { input: 1, output: 5 }
+  };
+
+  // Groepeert alle AI-calls die bij dezelfde "Analyseren"-actie horen, voor het rapport achteraf.
+  // Simpele module-variabele i.p.v. een extra parameter overal doorheen, want de app doet nooit
+  // twee analyses tegelijk (alles wordt sequentieel await'd).
+  var huidigeAnalyseId = null;
+  function setAnalyseId(id) { huidigeAnalyseId = id; }
 
   function getApiKey() { return App.storage.getRaw(App.storage.KEYS.apiKey, ''); }
   function setApiKey(key) { return App.storage.setRaw(App.storage.KEYS.apiKey, key); }
@@ -33,12 +47,13 @@
    * Gooit een Error met duidelijke .code ('timeout' | 'network' | 'api') zodat
    * de aanroeper weet of een retry zinvol is.
    */
-  async function eenPoging(system, userText, maxTokens, images, tools, model) {
+  async function eenPoging(system, userText, maxTokens, images, tools, model, label) {
     var key = getApiKey();
     if (!key) { var e = new Error('Voer eerst een API key in.'); e.code = 'no-key'; throw e; }
 
     var controller = new AbortController();
     var timer = setTimeout(function () { controller.abort(); }, TIMEOUT_MS);
+    var start = Date.now();
 
     var content = [];
     if (images && images.length) {
@@ -48,8 +63,11 @@
     }
     content.push({ type: 'text', text: userText });
 
+    var werkelijkModel = model || MODEL;
+    var promptTekens = (system ? system.length : 0) + (userText ? userText.length : 0);
+    var aantalAfbeeldingen = (images && images.length) || 0;
     var body = {
-      model: model || MODEL,
+      model: werkelijkModel,
       max_tokens: maxTokens || 600,
       system: system,
       messages: [{ role: 'user', content: content }]
@@ -101,6 +119,45 @@
       ce.code = 'api';
       throw ce;
     }
+
+    // ── Kostenlog (voor het "AI-kosten"-tabblad) ──────────────────────────
+    try {
+      var usage = data.usage || {};
+      var inputTokens = usage.input_tokens || 0;
+      var outputTokens = usage.output_tokens || 0;
+      var cacheReadTokens = usage.cache_read_input_tokens || 0;
+      var cacheWriteTokens = usage.cache_creation_input_tokens || 0;
+      var websearchAantal = (usage.server_tool_use && usage.server_tool_use.web_search_requests) || 0;
+      var tarief = PRIJZEN_PER_MODEL[werkelijkModel] || PRIJZEN_PER_MODEL[MODEL];
+      var kostenUSD = (inputTokens / 1e6) * tarief.input + (outputTokens / 1e6) * tarief.output +
+        (cacheReadTokens / 1e6) * tarief.input * 0.1 + // cache-hit: ~10% van het normale input-tarief
+        (cacheWriteTokens / 1e6) * tarief.input * 1.25 + // cache-write: ~1,25x het normale input-tarief (5 min TTL)
+        websearchAantal * WEBSEARCH_KOSTEN_PER_ZOEKOPDRACHT;
+      if (App.aicalls) {
+        App.aicalls.log({
+          tijd: Date.now(),
+          analyseId: huidigeAnalyseId,
+          label: label || '(onbekend)',
+          model: werkelijkModel,
+          api: (tools && tools.length) ? 'Web Search' : 'Messages',
+          inputTokens: inputTokens,
+          outputTokens: outputTokens,
+          cacheReadTokens: cacheReadTokens,
+          cacheWriteTokens: cacheWriteTokens,
+          websearchAantal: websearchAantal,
+          aantalAfbeeldingen: aantalAfbeeldingen,
+          promptTekens: promptTekens,
+          promptTokensGeschat: Math.round(promptTekens / 4),
+          kosten: kostenUSD,
+          kostenEUR: kostenUSD * EUR_PER_USD,
+          duurMs: Date.now() - start,
+          ok: true
+        });
+      }
+    } catch (logErr) {
+      App.logger && App.logger.warn('Kon AI-call niet loggen:', logErr.message);
+    }
+
     return data.content.map(function (b) { return b.text || ''; }).join('');
   }
 
@@ -109,11 +166,11 @@
    * API-fouten (bijv. ongeldige key, rate limit) worden NIET herhaald — die lossen
    * zichzelf niet op door het nog een keer te proberen.
    */
-  async function callClaude(system, userText, maxTokens, images, tools, model) {
+  async function callClaude(system, userText, maxTokens, images, tools, model, label) {
     var laatsteFout = null;
     for (var poging = 0; poging <= MAX_RETRIES; poging++) {
       try {
-        return await eenPoging(system, userText, maxTokens, images, tools, model);
+        return await eenPoging(system, userText, maxTokens, images, tools, model, label);
       } catch (err) {
         laatsteFout = err;
         var magOpnieuw = (err.code === 'network' || err.code === 'timeout') && poging < MAX_RETRIES;
@@ -132,8 +189,8 @@
    * aantal zoekopdrachten per aanroep, om de kosten (tokens + $0,01/zoekopdracht)
    * te beperken.
    */
-  function callClaudeMetWebSearch(system, userText, maxTokens, maxUses, model, images) {
-    return callClaude(system, userText, maxTokens, images || null, [{ type: 'web_search_20250305', name: 'web_search', max_uses: maxUses || 3 }], model);
+  function callClaudeMetWebSearch(system, userText, maxTokens, maxUses, model, images, label) {
+    return callClaude(system, userText, maxTokens, images || null, [{ type: 'web_search_20250305', name: 'web_search', max_uses: maxUses || 3 }], model, label);
   }
 
   /**
@@ -142,13 +199,13 @@
    * MTok) i.p.v. Sonnet ($3/$15 per MTok). NIET gebruiken voor de marktprijs-
    * analyse zelf — daar telt kwaliteit zwaarder dan de besparing.
    */
-  function callHaikuMetWebSearch(system, userText, maxTokens, maxUses, images) {
-    return callClaudeMetWebSearch(system, userText, maxTokens, maxUses, MODEL_HAIKU, images);
+  function callHaikuMetWebSearch(system, userText, maxTokens, maxUses, images, label) {
+    return callClaudeMetWebSearch(system, userText, maxTokens, maxUses, MODEL_HAIKU, images, label);
   }
 
   /** Haiku-aanroep zonder zoekfunctie (voor als er al genoeg info is, geen search nodig) */
-  function callHaiku(system, userText, maxTokens, images) {
-    return callClaude(system, userText, maxTokens, images || null, null, MODEL_HAIKU);
+  function callHaiku(system, userText, maxTokens, images, label) {
+    return callClaude(system, userText, maxTokens, images || null, null, MODEL_HAIKU, label);
   }
 
   /**
@@ -186,6 +243,7 @@
     callClaudeMetWebSearch: callClaudeMetWebSearch,
     callHaikuMetWebSearch: callHaikuMetWebSearch,
     callHaiku: callHaiku,
+    setAnalyseId: setAnalyseId,
     MODEL_HAIKU: MODEL_HAIKU,
     getApiKey: getApiKey,
     setApiKey: setApiKey,

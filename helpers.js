@@ -17,6 +17,20 @@
     return n.toFixed(decimals || 0) + '%';
   }
 
+  /** Formatteert een dollarbedrag met genoeg precisie voor kleine AI-call-kosten, bijv. 0.0123 -> "$0,0123" */
+  function formatKosten(n) {
+    if (n == null || !isFinite(n)) return '-';
+    var decimals = n < 0.01 ? 4 : 3;
+    return '$' + n.toFixed(decimals).replace('.', ',');
+  }
+
+  /** Formatteert een (geschat) eurobedrag voor AI-kosten, bijv. 0.0113 -> "€0,0113" */
+  function formatKostenEUR(n) {
+    if (n == null || !isFinite(n)) return '-';
+    var decimals = n < 0.01 ? 4 : 3;
+    return '\u20ac' + n.toFixed(decimals).replace('.', ',');
+  }
+
   /** Formatteert een timestamp (ms) als Nederlandse datum */
   function formatDate(ts) {
     if (!ts) return '';
@@ -45,6 +59,28 @@
     var vandaag = new Date();
     vandaag.setHours(0, 0, 0, 0);
     return Math.round((doel - vandaag) / 86400000);
+  }
+
+  /**
+   * Deterministische plausibiliteitscheck op een prijzenresultaat, ONAFHANKELIJK
+   * van of de AI zelf "sanity_check_ok" goed invult. Geeft null terug als alles
+   * er plausibel uitziet, anders een korte Nederlandse reden (voor de verificatieprompt).
+   */
+  function beoordeelPlausibiliteit(prijzen) {
+    if (!prijzen || !prijzen.marktplaats) return null;
+    var mp = prijzen.marktplaats.gemiddeld;
+    var nieuw = prijzen.nieuwprijs;
+    if (prijzen.sanity_check_ok === false) return 'de AI gaf zelf aan te twijfelen aan dit resultaat';
+    if (typeof mp !== 'number' || !isFinite(mp)) return null;
+    if (typeof nieuw === 'number' && isFinite(nieuw) && nieuw > 0) {
+      if (mp > nieuw) return 'de tweedehandsprijs (' + mp + ') is hoger dan de nieuw/refurbished-prijs (' + nieuw + ')';
+      if (mp > nieuw * 1.3) return 'de tweedehandsprijs (' + mp + ') ligt meer dan 30% boven de nieuw/refurbished-prijs (' + nieuw + ')';
+    }
+    if (prijzen.ebay && typeof prijzen.ebay.gemiddeld === 'number' && isFinite(prijzen.ebay.gemiddeld) && mp > 0) {
+      var verschil = Math.abs(prijzen.ebay.gemiddeld - mp) / mp;
+      if (verschil > 0.6) return 'Marktplaats (' + mp + ') en eBay (' + prijzen.ebay.gemiddeld + ') wijken meer dan 60% van elkaar af';
+    }
+    return null;
   }
 
   /** Leidt een leesbare productnaam af uit een kavel-URL (best-effort, mag falen).
@@ -122,10 +158,13 @@
   App.helpers = {
     fmt: fmt,
     formatPercentage: formatPercentage,
+    formatKosten: formatKosten,
+    formatKostenEUR: formatKostenEUR,
     formatDate: formatDate,
     formatDateTime: formatDateTime,
     formatInvoerDatum: formatInvoerDatum,
     dagenTot: dagenTot,
+    beoordeelPlausibiliteit: beoordeelPlausibiliteit,
     naamUitUrl: naamUitUrl,
     uid: uid,
     clamp: clamp,

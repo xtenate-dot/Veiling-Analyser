@@ -68,9 +68,14 @@
     h.byId('sel-annuleer-btn').addEventListener('click', App.ui.toggleSelectie);
 
     h.qsa('.tab').forEach(function (tab, i) {
-      var namen = ['overzicht', 'analyse', 'gewonnen', 'handleiding'];
+      var namen = ['overzicht', 'analyse', 'gewonnen', 'handleiding', 'aikosten'];
       tab.addEventListener('click', function () { App.ui.switchTab(namen[i]); });
     });
+
+    var aikostenWisBtn = h.byId('aikosten-wis-btn');
+    if (aikostenWisBtn) aikostenWisBtn.addEventListener('click', App.ui.wisAiKosten);
+    var aikostenKopieerBtn = h.byId('aikosten-kopieer-btn');
+    if (aikostenKopieerBtn) aikostenKopieerBtn.addEventListener('click', App.ui.kopieerAiRapport);
 
     h.qsa('.filter-btn').forEach(function (btn) {
       btn.addEventListener('click', function () { App.ui.setFilter(btn.dataset.filter, btn); });

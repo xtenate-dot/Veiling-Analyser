@@ -13,7 +13,8 @@
     kavels: PREFIX + 'kavels',
     veilinghuizen: PREFIX + 'veilinghuizen',
     sheetsUrl: PREFIX + 'sheets_url',
-    lastSync: PREFIX + 'last_sync'
+    lastSync: PREFIX + 'last_sync',
+    aiCallLog: PREFIX + 'ai_call_log'
   };
 
   function get(key, fallback) {

@@ -223,12 +223,13 @@
 
   // ── Tabs ───────────────────────────────────────────────────────────────────
   function switchTab(name) {
-    var namen = ['overzicht', 'analyse', 'gewonnen', 'handleiding'];
+    var namen = ['overzicht', 'analyse', 'gewonnen', 'handleiding', 'aikosten'];
     h.qsa('.tab').forEach(function (t, i) { t.classList.toggle('active', namen[i] === name); });
     h.qsa('.panel').forEach(function (p) { p.classList.remove('active'); });
     h.byId('tab-' + name).classList.add('active');
     if (name === 'overzicht') renderOverzicht();
     if (name === 'gewonnen') renderGewonnen();
+    if (name === 'aikosten') renderAiKosten();
   }
 
   // ── Dashboard statistieken ──────────────────────────────────────────────────
@@ -602,12 +603,133 @@
     renderVeilinghuizenLijst();
   }
 
+  // ── AI-kosten tabblad ────────────────────────────────────────────────────
+  function renderAiKosten() {
+    var lijst = App.aicalls.laad().slice().reverse(); // nieuwste eerst
+    var tot = App.aicalls.totalen(lijst);
+
+    // Laatste analyse-rapport (indien er deze sessie een analyse is gedraaid)
+    var rapportCard = h.byId('aikosten-rapport-card');
+    var rapport = App.aicalls.getLaatsteRapport();
+    if (rapport) {
+      rapportCard.style.display = 'block';
+      h.byId('aikosten-rapport-tekst').textContent = rapport;
+    } else {
+      rapportCard.style.display = 'none';
+    }
+
+    var rij = h.byId('aikosten-stats-row');
+    rij.innerHTML = '';
+    function stat(num, label, kleur) {
+      var box = document.createElement('div'); box.className = 'stat';
+      var n = document.createElement('div'); n.className = 'stat-num'; if (kleur) n.style.color = kleur; n.textContent = num;
+      var l = document.createElement('div'); l.className = 'stat-lbl'; l.textContent = label;
+      box.appendChild(n); box.appendChild(l);
+      return box;
+    }
+    rij.appendChild(stat(tot.aantal, 'Aanroepen'));
+    rij.appendChild(stat(h.formatKostenEUR(tot.kostenEUR), 'Totale kosten', 'var(--gold-ink)'));
+    rij.appendChild(stat(tot.aantal ? h.formatKostenEUR(tot.kostenEUR / tot.aantal) : '-', 'Gem. per aanroep'));
+    rij.appendChild(stat((tot.inputTokens + tot.outputTokens).toLocaleString('nl-NL'), 'Totaal tokens'));
+    if (tot.cacheReadTokens || tot.cacheWriteTokens) {
+      rij.appendChild(stat((tot.cacheReadTokens + tot.cacheWriteTokens).toLocaleString('nl-NL'), 'Cache tokens'));
+    }
+    rij.appendChild(stat(tot.websearchAantal, 'Zoekopdrachten'));
+
+    var container = h.byId('aikosten-lijst');
+    container.innerHTML = '';
+
+    if (!lijst.length) {
+      var leeg = document.createElement('div'); leeg.className = 'empty';
+      var icon = document.createElement('div'); icon.className = 'empty-icon'; icon.textContent = '\uD83D\uDCCA';
+      var titel = document.createElement('h3'); titel.textContent = 'Nog geen AI-aanroepen gelogd';
+      var tekst = document.createElement('p'); tekst.textContent = 'Zodra je een kavel analyseert, verschijnen hier de details per AI-aanroep: model, tokens, web search, duur en kosten.';
+      leeg.appendChild(icon); leeg.appendChild(titel); leeg.appendChild(tekst);
+      container.appendChild(leeg);
+      return;
+    }
+
+    var tabelWrap = document.createElement('div'); tabelWrap.style.overflowX = 'auto';
+    var tabel = document.createElement('table'); tabel.style.width = '100%'; tabel.style.fontSize = '13px'; tabel.style.borderCollapse = 'collapse';
+
+    var thead = document.createElement('thead');
+    var headRij = document.createElement('tr');
+    ['Tijd', 'Functie', 'Model', 'API', 'Foto\'s', 'Prompt', 'Input', 'Output', 'Cache', 'Web search', 'Duur', 'Kosten'].forEach(function (kop) {
+      var th = document.createElement('th');
+      th.textContent = kop;
+      th.style.cssText = 'text-align:left;padding:8px 10px;border-bottom:1px solid var(--border);color:var(--text-secondary);font-weight:600;white-space:nowrap';
+      headRij.appendChild(th);
+    });
+    thead.appendChild(headRij);
+    tabel.appendChild(thead);
+
+    var tbody = document.createElement('tbody');
+    lijst.forEach(function (e) {
+      var tr = document.createElement('tr');
+      tr.style.borderBottom = '1px solid var(--border)';
+
+      function td(inhoud, kleur) {
+        var cel = document.createElement('td');
+        cel.style.cssText = 'padding:8px 10px;white-space:nowrap' + (kleur ? ';color:' + kleur : '');
+        cel.textContent = inhoud;
+        return cel;
+      }
+
+      var isHaiku = e.model && e.model.indexOf('haiku') !== -1;
+      var modelLabel = isHaiku ? 'Haiku' : 'Sonnet';
+
+      tr.appendChild(td(h.formatDateTime(e.tijd)));
+      tr.appendChild(td(e.label || '-'));
+
+      var modelCel = document.createElement('td'); modelCel.style.cssText = 'padding:8px 10px;white-space:nowrap';
+      var modelBadge = document.createElement('span');
+      modelBadge.textContent = modelLabel;
+      modelBadge.style.cssText = 'font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;' +
+        (isHaiku
+          ? 'background:var(--green-soft);color:var(--green);border:1px solid var(--green-border)'
+          : 'background:var(--gold-soft);color:var(--gold-ink);border:1px solid var(--gold-border)');
+      modelCel.appendChild(modelBadge);
+      tr.appendChild(modelCel);
+
+      tr.appendChild(td(e.api || 'Messages'));
+      tr.appendChild(td(e.aantalAfbeeldingen ? String(e.aantalAfbeeldingen) : '\u2014'));
+      tr.appendChild(td((e.promptTekens || 0).toLocaleString('nl-NL') + ' tekens'));
+      tr.appendChild(td((e.inputTokens || 0).toLocaleString('nl-NL')));
+      tr.appendChild(td((e.outputTokens || 0).toLocaleString('nl-NL')));
+      var cacheTotaal = (e.cacheReadTokens || 0) + (e.cacheWriteTokens || 0);
+      tr.appendChild(td(cacheTotaal ? cacheTotaal.toLocaleString('nl-NL') : '\u2014'));
+      tr.appendChild(td(e.websearchAantal ? ('\u2713 ' + e.websearchAantal + 'x') : '\u2014', e.websearchAantal ? null : 'var(--text-tertiary)'));
+      tr.appendChild(td(e.duurMs != null ? (e.duurMs / 1000).toFixed(1) + 's' : '-'));
+      tr.appendChild(td(h.formatKostenEUR(e.kostenEUR), 'var(--gold-ink)'));
+
+      tbody.appendChild(tr);
+    });
+    tabel.appendChild(tbody);
+    tabelWrap.appendChild(tabel);
+    container.appendChild(tabelWrap);
+  }
+
+  function wisAiKosten() {
+    if (!confirm('Weet je zeker dat je de volledige AI-kostengeschiedenis wilt wissen?')) return;
+    App.aicalls.wis();
+    renderAiKosten();
+  }
+
+  function kopieerAiRapport() {
+    var rapport = App.aicalls.getLaatsteRapport();
+    if (!rapport) return;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(rapport).then(function () { App.ui.showSuccess('Rapport gekopieerd.'); });
+    }
+  }
+
   App.ui = {
     toast: toast, showError: showError, showSuccess: showSuccess, showLoading: showLoading,
     maakButton: maakButton, maakBadge: maakBadge, maakPill: maakPill, maakStatusPill: maakStatusPill,
     maakPrijskaart: maakPrijskaart, maakKostenBox: maakKostenBox, maakROI: maakROI, maakVerdict: maakVerdict,
     maakSamenvatting: maakSamenvatting,
     switchTab: switchTab, renderOverzicht: renderOverzicht, renderGewonnen: renderGewonnen, renderStats: renderStats,
+    renderAiKosten: renderAiKosten, wisAiKosten: wisAiKosten, kopieerAiRapport: kopieerAiRapport,
     setFilter: setFilter, setZoekterm: setZoekterm, setSortering: setSortering,
     toggleSelectie: toggleSelectie, selecteerRij: selecteerRij, allesAanvinken: allesAanvinken,
     allesUitvinken: allesUitvinken, verwijderSelectie: verwijderSelectie,

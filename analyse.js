@@ -9,7 +9,7 @@
   var h = App.helpers;
   var MAX_FOTOS = 5;
   var MAX_FOTO_MB = 8;
-  var MAX_AFMETING = 1600; // px, lange zijde na compressie
+  var MAX_AFMETING = 1120; // px, lange zijde na compressie — lager = minder tokens per foto (kost telt zwaarder dan pixels)
 
   // ── Foto's: compressie + ObjectURL-previews i.p.v. volle base64 in de preview-DOM ──
   function comprimeerAfbeelding(file) {
@@ -199,41 +199,71 @@
     var veilinghuis = App.state.veilinghuizen.find(function (v) { return v.id === veilinghuisId; }) || App.state.veilinghuizen[0];
 
     setStap(1);
+    var analyseId = 'a' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+    App.api.setAnalyseId(analyseId);
     App.logger.info('Analyse gestart voor product:', product, '(' + App.state.imgs.length + ' foto\'s)');
 
     // ── Stap 1 (Haiku, goedkoop): merk/model/type/categorie/specs/staat/OCR + datums ──
-    // Bepaalt GEEN prijs. Gebruikt web search alleen als dat echt nodig is (nog geen
-    // bruikbare productnaam, of sluit-/ophaaldatum nog onbekend), en dan zo min mogelijk.
-    var identificatie = null;
-    var heeftGoedeNaam = !!(extra || (urlNaam && urlNaam.split(' ').length >= 2));
-    var moetZoeken = !!url && (!heeftGoedeNaam || !sluitdag || !ophaaldag);
-    try {
-      var identSystem = 'Je bent een productherkenning-assistent voor veilingkavels. ' +
-        'Identificeer het product zo specifiek en accuraat mogelijk: merk, model, type, categorie, en indien van toepassing opslag/RAM. ' +
-        'Beoordeel ook de zichtbare fysieke staat (krassen, deuken, slijtage, compleetheid). Lees tekst op foto\'s (typeplaatjes, labels, schermen) als OCR. ' +
-        'BEPAAL GEEN marktprijs \u2014 dat gebeurt in een aparte stap door een ander systeem.\n' +
-        (moetZoeken ? 'Gebruik de zoekfunctie om de kavelpagina te lezen voor een preciezere productnaam en/of de sluit-/ophaaldatum van de veiling. Gebruik maximaal 2 zoekopdrachten, wees efficient.\n' : 'Gebruik GEEN zoekfunctie \u2014 de meegeleverde informatie is voldoende.\n') +
-        'Geef ALLEEN een compact, geldig JSON object terug. GEEN markdown, GEEN uitleg. Begin direct met { en eindig met }.';
-      var identUser = 'Kavel-URL: ' + (url || '(geen)') + '\n' +
-        'Beste gok productnaam (uit URL): ' + (urlNaam || '(geen)') + '\n' +
-        (extra ? 'Door gebruiker opgegeven omschrijving: ' + extra + '\n' : '') +
-        (App.state.imgs.length ? 'Er zijn ' + App.state.imgs.length + ' foto\'s van het kavel bijgevoegd \u2014 gebruik die voor identificatie, OCR en staatbeoordeling.\n' : '') +
-        '\nAntwoord in dit exacte formaat:\n' +
-        '{"productnaam":"...","merk":"...","model":"...","type":"...","categorie":"...","opslag":"...","ram":"...","conditie":"korte omschrijving zichtbare staat","ocr_tekst":"...","sluitdag":"JJJJ-MM-DD","ophaaldag":"JJJJ-MM-DD","voldoende_info":true}\n' +
-        'Gebruik null voor een veld dat niet van toepassing of niet te bepalen is.';
+    // Bepaalt GEEN prijs. Twee volledig gescheiden sub-aanroepen, ELK alleen als nodig:
+    //  (a) foto's -> beeldherkenning, ZONDER zoekfunctie (voorkomt dat foto-tokens
+    //      vermenigvuldigd worden over meerdere zoekstappen binnen 1 aanroep)
+    //  (b) URL-pagina lezen voor een preciezere naam en/of sluit-/ophaaldatum,
+    //      ZONDER foto's (alleen tekst) — dus ook hier geen vermenigvuldiging.
+    var visueleInfo = null, zoekInfo = null;
 
-      var identTxt = moetZoeken
-        ? await App.api.callHaikuMetWebSearch(identSystem, identUser, 600, 2, App.state.imgs)
-        : await App.api.callHaiku(identSystem, identUser, 500, App.state.imgs);
-      identificatie = h.parseLooseJSON(identTxt);
-    } catch (err) {
-      App.logger.warn('Identificatie mislukt, ga verder met beschikbare info:', err.message);
+    if (App.state.imgs.length) {
+      try {
+        var visSystem = 'Je bent een productherkenning-assistent voor veilingkavels. Analyseer de foto\'s en identificeer: merk, model, type, categorie, ' +
+          'en indien zichtbaar opslag/RAM. Beoordeel de zichtbare fysieke staat (krassen, deuken, slijtage, compleetheid). Lees relevante tekst op ' +
+          'typeplaatjes/labels/schermen (OCR). BEPAAL GEEN marktprijs. Geef ALLEEN een compact JSON object terug, GEEN markdown, GEEN uitleg. Begin direct met { en eindig met }.';
+        var visUser = (product && product !== 'onbekend product' ? 'Vermoedelijk product (uit URL/omschrijving): ' + product + '\n' : '') +
+          'Antwoord in dit exacte formaat:\n' +
+          '{"productnaam":"...","merk":"...","model":"...","type":"...","categorie":"...","opslag":"...","ram":"...","conditie":"korte omschrijving zichtbare staat","ocr_tekst":"..."}\n' +
+          'Gebruik null voor een veld dat niet van toepassing of niet te bepalen is.';
+        var visTxt = await App.api.callHaiku(visSystem, visUser, 400, App.state.imgs, 'Productherkenning');
+        visueleInfo = h.parseLooseJSON(visTxt);
+      } catch (err) {
+        App.logger.warn('Foto-identificatie mislukt:', err.message);
+      }
     }
+
+    var heeftGoedeNaam = !!(extra || (visueleInfo && visueleInfo.productnaam) || (urlNaam && urlNaam.split(' ').length >= 2));
+    var moetZoeken = !!url && (!heeftGoedeNaam || !sluitdag || !ophaaldag);
+    if (moetZoeken) {
+      try {
+        var zoekSystem = 'Je bent een assistent die met de zoekfunctie een online veilingkavel-pagina leest. Bepaal een preciezere productnaam ' +
+          '(merk, model, type, specificaties) en/of de sluitdatum en ophaaldatum van de veiling. BEPAAL GEEN marktprijs. Gebruik maximaal 2 zoekopdrachten, wees efficient. ' +
+          'Geef ALLEEN een compact JSON object terug, GEEN markdown, GEEN uitleg. Begin direct met { en eindig met }.';
+        var zoekUser = 'Kavel-URL: ' + url + '\n' +
+          'Vermoedelijk product (nog te bevestigen/verbeteren): ' + product + '\n' +
+          '\nAntwoord in dit exacte formaat:\n' +
+          '{"productnaam":"...","merk":"...","model":"...","opslag":"...","ram":"...","sluitdag":"JJJJ-MM-DD","ophaaldag":"JJJJ-MM-DD"}\n' +
+          'Gebruik null voor een veld dat je niet met zekerheid kunt vinden.';
+        var zoekTxt = await App.api.callHaikuMetWebSearch(zoekSystem, zoekUser, 400, 2, null, 'Datum/naam-lookup');
+        zoekInfo = h.parseLooseJSON(zoekTxt);
+      } catch (err) {
+        App.logger.warn('Datum/naam-lookup mislukt:', err.message);
+      }
+    }
+
+    var identificatie = (visueleInfo || zoekInfo) ? {
+      productnaam: (zoekInfo && zoekInfo.productnaam) || (visueleInfo && visueleInfo.productnaam) || null,
+      merk: (zoekInfo && zoekInfo.merk) || (visueleInfo && visueleInfo.merk) || null,
+      model: (zoekInfo && zoekInfo.model) || (visueleInfo && visueleInfo.model) || null,
+      type: visueleInfo && visueleInfo.type || null,
+      categorie: visueleInfo && visueleInfo.categorie || null,
+      opslag: (zoekInfo && zoekInfo.opslag) || (visueleInfo && visueleInfo.opslag) || null,
+      ram: (zoekInfo && zoekInfo.ram) || (visueleInfo && visueleInfo.ram) || null,
+      conditie: visueleInfo && visueleInfo.conditie || null,
+      ocr_tekst: visueleInfo && visueleInfo.ocr_tekst || null
+    } : null;
 
     if (identificatie) {
       if (identificatie.productnaam && !extra) product = identificatie.productnaam.replace(/["']/g, '').trim();
-      if (identificatie.sluitdag && !sluitdag) { sluitdag = identificatie.sluitdag; h.byId('kavel-sluitdag').value = sluitdag; }
-      if (identificatie.ophaaldag && !ophaaldag) { ophaaldag = identificatie.ophaaldag; h.byId('kavel-ophaaldag').value = ophaaldag; }
+    }
+    if (zoekInfo) {
+      if (zoekInfo.sluitdag && !sluitdag) { sluitdag = zoekInfo.sluitdag; h.byId('kavel-sluitdag').value = sluitdag; }
+      if (zoekInfo.ophaaldag && !ophaaldag) { ophaaldag = zoekInfo.ophaaldag; h.byId('kavel-ophaaldag').value = ophaaldag; }
     }
 
     // ── Stap 2 (Sonnet): uitsluitend prijsonderzoek, met minimale, compacte context ──
@@ -260,25 +290,52 @@
 
     setStap(2);
 
+    var prijzenSystem = 'Je bent een Nederlandse marktprijsexpert voor tweedehands/veilingproducten. Gebruik de zoekfunctie om actuele prijzen te verifi\u00ebren \u2014 vertrouw niet blind op je geheugen, prijzen veranderen snel en oudere modellen worden vaak niet meer nieuw verkocht.\n\n' +
+      'WERKWIJZE (verplicht):\n' +
+      '1. Zoek de nieuwprijs of refurbished-prijs.\n' +
+      '2. Zoek minimaal 3 prijsbronnen voor de tweedehandswaarde indien beschikbaar (bijv. nieuwprijs-referentie, Marktplaats, eBay).\n' +
+      '3. Vergelijk de bronnen onderling: een bron die sterk afwijkt van de andere(n) (bijv. >50% verschil) is een uitschieter \u2014 negeer die voor je eindberekening.\n' +
+      '4. Sanity check voordat je antwoordt: (a) is de tweedehandsprijs lager dan de nieuw/refurbished-prijs? (b) ligt de prijs niet >30% boven de actuele nieuw/refurbished-prijs? (c) is de prijs niet extreem afwijkend van de gevonden bronnen? Zet "sanity_check_ok" op false als een van deze niet klopt.\n\n' +
+      'Gebruik maximaal 3 gerichte zoekopdrachten. Wees gericht, niet uitputtend.\n\n' +
+      'Geef ALLEEN het compacte JSON object terug \u2014 GEEN uitleg-tekst, GEEN markdown code blocks. Houd tip-velden op maximaal 8 woorden. Begin direct met { en eindig met }.';
+
     try {
       var prijzenTxt = await App.api.callClaude(
-        'Je bent een Nederlandse marktprijsexpert voor tweedehands/veilingproducten. Gebruik de zoekfunctie om actuele prijzen te verifi\u00ebren \u2014 vertrouw niet blind op je geheugen, prijzen veranderen snel en oudere modellen worden vaak niet meer nieuw verkocht.\n\n' +
-        'WERKWIJZE (verplicht):\n' +
-        '1. Zoek de nieuwprijs of refurbished-prijs.\n' +
-        '2. Zoek minimaal 3 prijsbronnen voor de tweedehandswaarde indien beschikbaar (bijv. nieuwprijs-referentie, Marktplaats, eBay).\n' +
-        '3. Vergelijk de bronnen onderling: een bron die sterk afwijkt van de andere(n) (bijv. >50% verschil) is een uitschieter \u2014 negeer die voor je eindberekening.\n' +
-        '4. Sanity check voordat je antwoordt: (a) is de tweedehandsprijs lager dan de nieuw/refurbished-prijs? (b) ligt de prijs niet >30% boven de actuele nieuw/refurbished-prijs? (c) is de prijs niet extreem afwijkend van de gevonden bronnen? Als een check faalt: doe eerst nog een gerichte verificatie-zoekopdracht voordat je het eindresultaat geeft. Zet "sanity_check_ok" op false als je ondanks verificatie nog steeds twijfelt.\n\n' +
-        'Gebruik maximaal 4 zoekopdrachten in totaal (ruimte voor 1 extra verificatie). Wees gericht, niet uitputtend.\n\n' +
-        'Geef ALLEEN het compacte JSON object terug \u2014 GEEN uitleg-tekst, GEEN markdown code blocks. Houd tip-velden op maximaal 8 woorden. Begin direct met { en eindig met }.',
-        prijzenPrompt,
-        1400,
-        null,
-        [{ type: 'web_search_20250305', name: 'web_search', max_uses: 4 }]
+        prijzenSystem, prijzenPrompt, 1400, null,
+        [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }],
+        null, 'Prijsanalyse'
       );
       var prijzen = App.api.parseJSON(prijzenTxt);
       var validatie = App.api.validatePrijzenResponse(prijzen);
       if (!validatie.valid) {
         throw new Error('Kon geen bruikbare marktprijzen ophalen (' + validatie.errors.join(' ') + '). Probeer opnieuw.');
+      }
+
+      // ── Deterministische plausibiliteitscheck (client-side, niet afhankelijk van of de AI het zelf meldt) ──
+      // Alleen bij een verdacht resultaat volgt een gerichte, extra verificatie-aanroep — dus geen
+      // structurele meerkosten voor de meerderheid van de analyses waar het resultaat al klopt.
+      var reden = h.beoordeelPlausibiliteit(prijzen);
+      if (reden) {
+        App.logger.warn('Prijsresultaat lijkt onbetrouwbaar (' + reden + '), extra verificatie...');
+        try {
+          var verifPrompt = 'Je vorige analyse voor "' + product + '" gaf: nieuwprijs ' + h.fmt(prijzen.nieuwprijs) +
+            ', marktplaats gemiddeld ' + h.fmt(prijzen.marktplaats.gemiddeld) +
+            (prijzen.ebay && prijzen.ebay.gemiddeld ? ', eBay gemiddeld ' + h.fmt(prijzen.ebay.gemiddeld) : '') + '.\n' +
+            'Dit is verdacht omdat: ' + reden + '.\n' +
+            'Doe een gerichte extra zoekopdracht om dit te controleren, en geef een gecorrigeerd compact JSON object terug in exact hetzelfde formaat als eerder ' +
+            '(productnaam, categorie, nieuwprijs, nieuwprijs_bron, marktplaats{laag,gemiddeld,hoog,vertrouwen,tip,verkooptijd,zoekwoorden}, ebay{...}, aandachtspunten, sanity_check_ok). ' +
+            'Geef ALLEEN dat JSON object terug, niets anders.';
+          var verifTxt = await App.api.callClaude(
+            prijzenSystem, verifPrompt, 1400, null,
+            [{ type: 'web_search_20250305', name: 'web_search', max_uses: 2 }],
+            null, 'Validatie'
+          );
+          var verifPrijzen = App.api.parseJSON(verifTxt);
+          var verifValidatie = App.api.validatePrijzenResponse(verifPrijzen);
+          if (verifValidatie.valid) { prijzen = verifPrijzen; }
+        } catch (verifErr) {
+          App.logger.warn('Extra verificatie mislukt, gebruik eerste resultaat:', verifErr.message);
+        }
       }
 
       setStap(3);
@@ -326,12 +383,20 @@
       verbergStappen();
       toonAnalyseResultaat(kavelData);
       App.ui.showSuccess('Analyse voltooid.');
+
+      // ── AI-kostenrapport voor deze analyse: console + bewaard voor het AI-kosten tabblad ──
+      var rapport = App.aicalls.formatRapport(analyseId);
+      if (rapport) {
+        console.log(rapport);
+        App.aicalls.setLaatsteRapport(rapport);
+      }
     } catch (err) {
       App.logger.error('Analyse fout:', err.message);
       verbergStappen();
       toonMsg('analyse-err', err.message || 'Er ging iets mis. Probeer opnieuw.');
     } finally {
       setBtn('analyse-btn', 'analyse-btn-txt', false, '\uD83D\uDD0D Analyseer kavel');
+      App.api.setAnalyseId(null);
     }
   }
 
