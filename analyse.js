@@ -19,6 +19,21 @@
   // extra prompt-instructie als de console-logging weer volledig uit te schakelen.
   var DEBUG_BRONNEN = true;
 
+  // ── Betrouwbaarheidsscore: configureerbare gewichten ────────────────────────
+  // Eén plek om de gevoeligheid van de betrouwbaarheidsindicator bij te stellen,
+  // zonder de rekenlogica in berekenBetrouwbaarheid() te hoeven aanpassen.
+  var BETROUWBAARHEID_CONFIG = {
+    startscore: 100,
+    aftrekSanityCheckFout: 35,
+    aftrekPerOntbrekendeBron: 15,   // per bron onder minBruikbareBronnen
+    minBruikbareBronnen: 3,
+    aftrekSpreiding: 20,
+    aftrekProductMatchOnzeker: 30,
+    aftrekNieuwprijsOnbekend: 10,
+    drempelHoog: 70,       // score >= drempelHoog        -> label "Hoog"
+    drempelGemiddeld: 40   // score >= drempelGemiddeld   -> label "Gemiddeld", anders "Laag"
+  };
+
   // ── Foto's: compressie + ObjectURL-previews i.p.v. volle base64 in de preview-DOM ──
   function comprimeerAfbeelding(file) {
     return new Promise(function (resolve, reject) {
@@ -507,40 +522,103 @@
         kosten.marge = mp.gemiddeld - kosten.totaal;
       }
 
-      // ── Betrouwbaarheidscheck vóór het advies ────────────────────────────────
-      // Bepaalt of de prijsschatting hard genoeg is voor een kopen/skip-advies. LET OP:
-      // "vertrouwen: laag" op een los prijsblok is BEWUST geen zelfstandige trigger meer —
-      // dat bleek te streng (een kavel met onderling consistente MP/eBay-prijzen werd al
-      // "onzeker" bij één enkel laag-vertrouwen-veld). Vertrouwen blijft wel zichtbaar als
-      // waarschuwingsbadge op de prijskaart, maar blokkeert het advies niet meer op zichzelf.
-      // In plaats daarvan gelden vijf concrete, elk afzonderlijk voldoende criteria:
-      var MIN_BRUIKBARE_BRONNEN = 3;
-      function bepaalOnzekerheid(p) {
-        var redenen = [];
-        if (p.sanity_check_ok === false) {
-          redenen.push('AI geeft zelf aan dat de prijs niet consistent is (sanity check mislukt)');
-        }
+      // ── Betrouwbaarheidsindicator (puur informatief) ─────────────────────────
+      // LET OP: dit bepaalt NIET meer het advies. Eerdere versie zette het advies bij
+      // te weinig data om naar een aparte status "Onzeker" — dat voelde voor de gebruiker
+      // als een fout/storing in plaats van een advies. Nu: het koopadvies komt uitsluitend
+      // uit de bied-/margelogica hieronder; de betrouwbaarheid is een score+label+redenen
+      // ernaast, zodat de gebruiker zelf kan wegen hoeveel vertrouwen hij in het advies heeft.
+      //
+      // Modulair opgezet in twee stappen:
+      // 1) bouwBetrouwbaarheidsfactoren(prijzen) vertaalt de ruwe AI-/prijsvelden naar één
+      //    genormaliseerd "factoren"-object (geen scorelogica, puur mapping).
+      // 2) berekenBetrouwbaarheid(factoren) is een pure functie die ALLEEN dat factoren-object
+      //    kent — geen AI-veldnamen, geen "prijzen"-object. Herbruikbaar/los testbaar, en de
+      //    scoreregels staan bij elkaar in plaats van verspreid door de code.
+      var MIN_BRUIKBARE_BRONNEN = BETROUWBAARHEID_CONFIG.minBruikbareBronnen;
+
+      function bouwBetrouwbaarheidsfactoren(p) {
         var bronnen = p.bruikbare_bronnen;
-        var heeftBronnenTelling = typeof bronnen === 'number' && isFinite(bronnen);
-        if (heeftBronnenTelling && bronnen < MIN_BRUIKBARE_BRONNEN) {
-          redenen.push(
-            p.nieuwprijs == null
-              ? 'Geen betrouwbare nieuwprijs \u00e9n te weinig tweedehandsprijzen (' + bronnen + ' bruikbare bron' + (bronnen === 1 ? '' : 'nen') + ')'
-              : 'Slechts ' + bronnen + ' bruikbare prijsbron' + (bronnen === 1 ? '' : 'nen') + ' gevonden (minimaal ' + MIN_BRUIKBARE_BRONNEN + ' gewenst)'
-          );
-        }
-        var spreidingReden = h.beoordeelPlausibiliteit(p);
-        if (spreidingReden) {
-          redenen.push('Grote spreiding tussen prijsbronnen: ' + spreidingReden);
-        }
-        if (p.product_match_zeker === false) {
-          redenen.push('AI kon het product/model niet met voldoende zekerheid identificeren');
-        }
-        return redenen;
+        return {
+          sanityCheck: p.sanity_check_ok === false ? false : (p.sanity_check_ok === true ? true : null),
+          bruikbareBronnen: (typeof bronnen === 'number' && isFinite(bronnen)) ? bronnen : null,
+          productMatch: p.product_match_zeker === false ? false : (p.product_match_zeker === true ? true : null),
+          spreiding: !!h.beoordeelPlausibiliteit(p),
+          nieuwprijsBekend: p.nieuwprijs != null
+        };
       }
-      var redenOnzeker = bepaalOnzekerheid(prijzen);
-      var onzekerePrijs = redenOnzeker.length > 0;
-      console.log('[DEBUG Betrouwbaarheidscheck] bruikbare_bronnen=' + prijzen.bruikbare_bronnen + ', product_match_zeker=' + prijzen.product_match_zeker + ', sanity_check_ok=' + prijzen.sanity_check_ok + ' \u2192 onzeker=' + onzekerePrijs + (redenOnzeker.length ? ' (' + redenOnzeker.join(' | ') + ')' : ''));
+
+      function berekenBetrouwbaarheid(factoren) {
+        var cfg = BETROUWBAARHEID_CONFIG;
+        var score = cfg.startscore;
+        var warnings = [], positives = [];
+        var stappen = []; // voor debug: elke score-mutatie als losse, leesbare regel
+
+        function trek_af(bedrag, tekst) {
+          score -= bedrag;
+          stappen.push({ aftrek: -bedrag, tekst: tekst });
+          warnings.push({ tekst: tekst, type: 'warning' });
+        }
+        function positief(tekst) {
+          positives.push({ tekst: tekst, type: 'positief' });
+        }
+
+        if (factoren.sanityCheck === false) {
+          trek_af(cfg.aftrekSanityCheckFout, 'Sanity check mislukt');
+        } else if (factoren.sanityCheck === true) {
+          positief('Prijzen doorstaan de consistentie-check');
+        }
+
+        if (typeof factoren.bruikbareBronnen === 'number') {
+          if (factoren.bruikbareBronnen < MIN_BRUIKBARE_BRONNEN) {
+            var tekort = MIN_BRUIKBARE_BRONNEN - factoren.bruikbareBronnen;
+            trek_af(cfg.aftrekPerOntbrekendeBron * tekort, 'Slechts ' + factoren.bruikbareBronnen + ' prijsbron' + (factoren.bruikbareBronnen === 1 ? '' : 'nen'));
+          } else {
+            positief(factoren.bruikbareBronnen + ' bruikbare prijsbronnen gevonden');
+          }
+        }
+
+        if (factoren.spreiding === true) {
+          trek_af(cfg.aftrekSpreiding, 'Grote spreiding tussen prijsbronnen');
+        }
+
+        if (factoren.productMatch === false) {
+          trek_af(cfg.aftrekProductMatchOnzeker, 'Product/model kon niet zeker worden ge\u00efdentificeerd');
+        } else if (factoren.productMatch === true) {
+          positief('Product goed ge\u00efdentificeerd');
+        }
+
+        if (factoren.nieuwprijsBekend === false) {
+          trek_af(cfg.aftrekNieuwprijsOnbekend, 'Nieuwprijs kon niet worden bevestigd');
+        } else if (factoren.nieuwprijsBekend === true) {
+          positief('Nieuwprijs bevestigd via offici\u00eble bron');
+        }
+
+        var eindscore = Math.max(0, Math.min(100, score));
+        var label = eindscore >= cfg.drempelHoog ? 'Hoog' : eindscore >= cfg.drempelGemiddeld ? 'Gemiddeld' : 'Laag';
+        // Bij lage/gemiddelde betrouwbaarheid tellen de waarschuwingen het zwaarst; is alles
+        // positief, toon dan de sterkste punten. Max 3, zoals gevraagd.
+        var redenen = warnings.concat(positives).slice(0, 3);
+        return { score: eindscore, label: label, redenen: redenen, _debug: { startscore: cfg.startscore, stappen: stappen } };
+      }
+      var betrouwbaarheidsfactoren = bouwBetrouwbaarheidsfactoren(prijzen);
+      var betrouwbaarheid = berekenBetrouwbaarheid(betrouwbaarheidsfactoren);
+
+      // ── Volledige berekening loggen (niet alleen de eindscore) ────────────────
+      (function logBetrouwbaarheidBerekening() {
+        var d = betrouwbaarheid._debug;
+        console.group('[DEBUG Betrouwbaarheid] ' + betrouwbaarheid.score + '% \u2014 ' + betrouwbaarheid.label);
+        console.log('Startscore: ' + d.startscore);
+        if (d.stappen.length) {
+          d.stappen.forEach(function (s) { console.log(s.aftrek + ' ' + s.tekst); });
+        } else {
+          console.log('(geen aftrekpunten)');
+        }
+        console.log('Eindscore: ' + betrouwbaarheid.score);
+        console.log('Label: ' + betrouwbaarheid.label);
+        console.log('Factoren:', betrouwbaarheidsfactoren);
+        console.groupEnd();
+      })();
 
       // ── Testfase: volledige bronnen-transparantie (zie DEBUG_BRONNEN bovenin) ──
       // AI levert alleen de ruwe prijs per URL ("ruwe_prijzen"); bron, gebruikt/afgekeurd
@@ -584,20 +662,17 @@
         console.log('[DEBUG Bronnen] ' + gebruikt.length + ' gebruikt, ' + afgekeurd.length + ' afgekeurd, ' + uitschieters.length + ' uitschieter(s) \u2014 volledige tabel:');
         console.table(bronnenDetail);
         if (!Array.isArray(prijzen.ruwe_prijzen)) {
-          console.log('[DEBUG Bronnen] Let op: "ruwe_prijzen" ontbrak in de AI-respons \u2014 alle kandidaten hierboven tonen daarom prijs:null/afgekeurd. De betrouwbaarheidscheck zelf werkt gewoon door op basis van bruikbare_bronnen.');
+          console.log('[DEBUG Bronnen] Let op: "ruwe_prijzen" ontbrak in de AI-respons \u2014 alle kandidaten hierboven tonen daarom prijs:null/afgekeurd. De betrouwbaarheidsscore zelf werkt gewoon door op basis van bruikbare_bronnen.');
         }
       }
       console.log('[DEBUG Prijzen meegenomen] Marktplaats: ' + (mp ? h.fmt(mp.laag) + ' - ' + h.fmt(mp.gemiddeld) + ' - ' + h.fmt(mp.hoog) : '-') +
         ' | eBay: ' + (prijzen.ebay ? h.fmt(prijzen.ebay.laag) + ' - ' + h.fmt(prijzen.ebay.gemiddeld) + ' - ' + h.fmt(prijzen.ebay.hoog) : '-') +
         ' | Nieuwprijs: ' + (prijzen.nieuwprijs != null ? h.fmt(prijzen.nieuwprijs) + ' (' + (prijzen.nieuwprijs_bron || '?') + ')' : '-'));
 
+      // ── Koopadvies: uitsluitend bied-/margelogica, ONGEWIJZIGD t.o.v. de oorspronkelijke
+      // versie. De betrouwbaarheidsscore hierboven verandert dit advies bewust niet.
       var advies = 'twijfel', adviesReden = '', roi = 50, adviesRegel = '';
-      if (onzekerePrijs) {
-        advies = 'onzeker';
-        adviesReden = 'Onvoldoende betrouwbare prijsdata \u2014 niet hard genoeg voor een kopen/skip-advies. Controleer de prijs handmatig voordat je biedt.';
-        roi = null;
-        adviesRegel = 'onzeker: ' + redenOnzeker.join(' | ');
-      } else if (kosten) {
+      if (kosten) {
         var m = kosten.marge;
         var pct = Math.round((m / mp.gemiddeld) * 100);
         if (m > 0 && pct >= 20) { advies = 'kopen'; roi = Math.min(93, 55 + pct); adviesRegel = 'kopen: marge > 0 en pct(' + pct + '%) >= 20%'; }
@@ -624,8 +699,8 @@
         kosten: kosten, mp_gemiddeld: mp.gemiddeld, mp_laag: mp.laag, mp_hoog: mp.hoog,
         ebay_gemiddeld: prijzen.ebay ? prijzen.ebay.gemiddeld : null,
         nieuwprijs: prijzen.nieuwprijs, advies: advies, adviesReden: adviesReden,
-        reden_onzeker: redenOnzeker.length ? redenOnzeker : null,
-        roi: (roi == null ? null : Math.round(roi)), prijzen: prijzen, maxBod: maxBod,
+        betrouwbaarheid: { score: betrouwbaarheid.score, label: betrouwbaarheid.label, redenen: betrouwbaarheid.redenen },
+        roi: Math.round(roi), prijzen: prijzen, maxBod: maxBod,
         eigen_bod: App.state.bodType === 'eigen', toegevoegd: Date.now(), status: 'klaar'
       };
 

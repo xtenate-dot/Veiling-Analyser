@@ -146,6 +146,13 @@ label:first-child{margin-top:0}
 .summary-title{font-size:16px;font-weight:700;color:var(--text);margin-bottom:3px;letter-spacing:-.01em}
 .summary-reason{font-size:13px;color:var(--text-secondary);line-height:1.55}
 .summary-maxbod{font-size:13px;color:var(--gold-ink);font-weight:600;margin-top:8px}
+.summary-betrouwbaarheid{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-control);padding:12px 14px;margin-bottom:16px}
+.summary-betrouwbaarheid-titel{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--text-tertiary)}
+.summary-betrouwbaarheid-score{font-size:12px;font-weight:700;text-transform:none;letter-spacing:0}
+.summary-betrouwbaarheid-redenen{list-style:none;margin:6px 0 0;padding:0;font-size:13px;color:var(--text-secondary);line-height:1.6}
+.summary-betrouwbaarheid-redenen li{display:flex;gap:6px}
+.bw-warning{color:var(--orange)}
+.bw-positief{color:var(--text-secondary)}
 .summary-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--border);border:1px solid var(--border);border-radius:var(--radius-control);overflow:hidden}
 .summary-tile{background:var(--surface);padding:14px 16px}
 .summary-tile-label{font-size:11px;font-weight:600;color:var(--text-secondary);margin-bottom:6px}
