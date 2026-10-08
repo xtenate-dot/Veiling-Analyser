@@ -1,0 +1,15 @@
+{
+  "name": "HNVI Veiling Analyser",
+  "short_name": "HNVI",
+  "description": "Analyseer HNVI kavels, bereken kosten en verkoopprijzen",
+  "start_url": "/HNVI-app/app.html",
+  "display": "standalone",
+  "background_color": "#f5f7f4",
+  "theme_color": "#1a472a",
+  "orientation": "portrait-primary",
+  "icons": [
+    { "src": "icons/icon48.png", "sizes": "48x48", "type": "image/png" },
+    { "src": "icons/icon128.png", "sizes": "128x128", "type": "image/png" },
+    { "src": "icons/icon512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
