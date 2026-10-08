@@ -445,6 +445,21 @@ details.faq .fb ul{padding-left:20px}
 .ver{font-size:11.5px;color:var(--ink-3);padding:6px 10px 0}
 .ver-main{text-align:center;margin-top:32px}
 @media (min-width:900px){.ver-main{display:none}}
+
+.vk-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+.money.pct .input{padding-left:12px;padding-right:30px}
+.money.pct > span{left:auto;right:13px}
+.bh-row{border:1px solid var(--line);border-radius:var(--r-sm);padding:12px;margin-bottom:12px;background:var(--surface-2)}
+.bh-top{display:flex;gap:8px;align-items:center;margin-bottom:10px}
+.bh-top .input{font-weight:600}
+.bh-row > .input{margin-bottom:0}
+.bh-reset{margin-top:10px}
+.bh-list{margin:8px 0 12px;padding-left:20px}
+.bh-list li{margin-bottom:4px}
+.modal{max-height:calc(100vh - 32px);max-height:calc(100dvh - 32px);display:flex;flex-direction:column}
+.modal .mb{overflow-y:auto;flex:1 1 auto;min-height:0;-webkit-overflow-scrolling:touch}
+.modal h3,.modal-actions{flex:0 0 auto}
+.modal-actions{padding-top:4px}
 </style>
 </head>
 <body>
@@ -462,16 +477,18 @@ details.faq .fb ul{padding-left:20px}
       <button class="nav-item" data-tab="handleiding" onclick="switchTab('handleiding')"><i class="ico" data-i="book"></i><span>Handleiding</span></button>
     </nav>
     <div class="side-foot">
+      <button class="foot-item" onclick="beheerVeilingen()"><i class="ico" data-i="percent"></i><span class="lbl">Veilinghuizen<span class="sub">Percentages beheren</span></span></button>
       <button class="foot-item" onclick="setSheetsUrl()"><i class="ico" data-i="cloud"></i><span class="lbl">Synchronisatie<span class="sub js-sync-sub">Niet gekoppeld</span></span></button>
       <button class="foot-item" onclick="resetApiKey()"><i class="ico" data-i="key"></i><span class="lbl">API-sleutel<span class="sub js-key-sub">Ontbreekt</span></span></button>
       <button class="foot-item" onclick="toggleTheme()"><i class="ico" data-i="moon"></i><span class="lbl js-theme-lbl">Donkere weergave</span></button>
-      <div class="ver">Versie 8 okt 2026 &middot; korte zoekterm</div>
+      <div class="ver">Versie 8 okt 2026 &middot; veilinghuizen</div>
     </div>
   </aside>
 
   <div class="content">
     <header class="topbar">
       <div class="brand"><span class="brand-mark"><i class="ico" data-i="brand"></i></span><span class="brand-name">Veiling Analyser</span></div>
+      <button class="btn btn-ghost btn-icon" onclick="beheerVeilingen()" aria-label="Veilinghuizen en percentages"><i class="ico" data-i="percent"></i></button>
       <button class="btn btn-ghost btn-icon" onclick="setSheetsUrl()" aria-label="Synchronisatie"><i class="ico" data-i="cloud"></i></button>
       <button class="btn btn-ghost btn-icon" onclick="resetApiKey()" aria-label="API-sleutel"><i class="ico" data-i="key"></i></button>
       <button class="btn btn-ghost btn-icon" onclick="toggleTheme()" aria-label="Weergave wisselen"><i class="ico" data-i="moon"></i></button>
@@ -560,9 +577,19 @@ details.faq .fb ul{padding-left:20px}
         <div class="card" id="analyse-form">
           <div class="field">
             <label for="kavel-url">Veiling-URL</label>
-            <input class="input" type="text" id="kavel-url" inputmode="url" autocomplete="off" placeholder="https://…" oninput="updateVeilingHint()" />
-            <div class="help">Plak hier de link naar het veilingkavel. Veilingkosten en btw worden berekend op basis van de herkende veiling.</div>
+            <input class="input" type="text" id="kavel-url" inputmode="url" autocomplete="off" placeholder="https://…" oninput="syncVeilingVelden()" />
+            <div class="help">Plak hier de link naar het veilingkavel.</div>
+          </div>
+
+          <div class="field">
+            <label for="veiling-kies">Veilinghuis en kosten</label>
+            <select class="input select" id="veiling-kies" onchange="kiesVeiling()"></select>
+            <div class="vk-grid">
+              <div><label class="ctl-l" for="vk-opgeld">Veilingkosten</label><div class="money pct"><input class="input" type="text" id="vk-opgeld" inputmode="decimal" oninput="vkHandmatig()" aria-label="Veilingkosten in procenten" /><span>%</span></div></div>
+              <div><label class="ctl-l" for="vk-btw">Btw</label><div class="money pct"><input class="input" type="text" id="vk-btw" inputmode="decimal" oninput="vkHandmatig()" aria-label="Btw in procenten" /><span>%</span></div></div>
+            </div>
             <div class="veiling-hint" id="veiling-hint"></div>
+            <button type="button" class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="beheerVeilingen()"><i class="ico" data-i="percent"></i>Veilinghuizen en percentages beheren</button>
           </div>
 
           <div class="field">
@@ -643,7 +670,7 @@ details.faq .fb ul{padding-left:20px}
         <div class="card">
           <div class="card-h"><h2>Hoe werkt Veiling Analyser?</h2></div>
           <ol class="howto">
-            <li><span class="hn">1</span><div><b>Voeg een kavel toe</b><span>Plak de link van het kavel. De app herkent HNVI, Troostwijk, BVA, Vavato en DTZ en gebruikt hun veilingkosten.</span></div></li>
+            <li><span class="hn">1</span><div><b>Voeg een kavel toe</b><span>Plak de link van het kavel. De app herkent HNVI, Troostwijk, BVA, Vavato en DTZ en gebruikt hun veilingkosten. Je kunt het veilinghuis en de percentages zelf kiezen of aanpassen.</span></div></li>
             <li><span class="hn">2</span><div><b>Vul je bod in</b><span>Kies &ldquo;Huidig bod&rdquo; voor het hoogste bod nu, of &ldquo;Mijn bod&rdquo; voor het bedrag dat jij wilt bieden of hebt geboden.</span></div></li>
             <li><span class="hn">3</span><div><b>Laat de analyse uitvoeren</b><span>De app bepaalt het product, schat de marktprijzen en rekent de kosten door.</span></div></li>
             <li><span class="hn">4</span><div><b>Bekijk marktwaarde en totale kosten</b><span>Zie in &eacute;&eacute;n blik wat je kwijt bent en wat je er naar verwachting voor terugkrijgt.</span></div></li>
@@ -665,11 +692,11 @@ details.faq .fb ul{padding-left:20px}
             <p>Veilingkosten gaan over het bod. De btw gaat over het bod plus de veilingkosten.</p>
             <div class="calc">
               Bod: <strong>&euro;1.000</strong><br>
-              &times; 0,17 (veilingkosten, voorbeeld HNVI; verschilt per veiling) = <strong>&euro;170</strong> (totaal: &euro;1.170)<br>
-              &times; 0,21 (btw over het totaal) = <strong>&euro;245,70</strong> (totaal: &euro;1.415,70)<br>
-              Totale kosten: <strong>&euro;1.415,70</strong>
+              &times; 0,19 (veilingkosten, voorbeeld HNVI; verschilt per veiling) = <strong>&euro;190</strong> (totaal: &euro;1.190)<br>
+              &times; 0,21 (btw over het totaal) = <strong>&euro;249,90</strong> (totaal: &euro;1.439,90)<br>
+              Totale kosten: <strong>&euro;1.439,90</strong>
             </div>
-            <p>Alleen het percentage van HNVI (17% + 21% btw) is bevestigd. De percentages voor andere veilingen zijn aannames; controleer ze bij de veiling zelf.</p>
+            <p>Alleen het percentage van HNVI (19% + 21% btw) is bevestigd. De percentages voor andere veilingen zijn aannames; controleer ze bij de veiling zelf. Je kunt alle percentages aanpassen, nieuwe veilinghuizen toevoegen of per kavel afwijken via <strong>Veilinghuizen</strong> in het menu.</p>
           </div>
         </details>
         <details class="faq">
@@ -715,7 +742,7 @@ details.faq .fb ul{padding-left:20px}
         </details>
       </section>
 
-      <p class="ver ver-main">Versie 8 okt 2026 &middot; korte zoekterm</p>
+      <p class="ver ver-main">Versie 8 okt 2026 &middot; veilinghuizen</p>
     </main>
   </div>
 
@@ -759,6 +786,7 @@ var faseNu = 'invoer';
 
 // ── 2. UI-helpers ───────────────────────────────────────────────────────────
 var ICONS = {
+  percent: '<path d="M19 5L5 19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/>',
   brand: '<path d="M4 17l5-5 4 3 7-8"/><path d="M15 7h5v5"/>',
   grid: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
@@ -922,22 +950,10 @@ function resetFormulier() {
   document.getElementById('analyse-err').style.display = 'none';
   imgs = []; huidigeThumb = null;
   setBodType('ander', document.getElementById('bod-ander'));
-  updateVeilingHint();
+  vulVeilingKeuze(); document.getElementById('veiling-kies').value = 'auto'; vkHandmatigFlag = false;
+  syncVeilingVelden();
 }
 
-function updateVeilingHint() {
-  var url = document.getElementById('kavel-url').value.trim();
-  var box = document.getElementById('veiling-hint');
-  if (!url) { box.className = 'veiling-hint'; box.innerHTML = ''; return; }
-  var v = detecteerVeiling(url);
-  if (v.naam === 'Onbekend') {
-    box.className = 'veiling-hint on unknown';
-    box.innerHTML = ic('alert') + '<span>Veiling niet herkend. We rekenen met <strong>17% veilingkosten</strong> en <strong>21% btw</strong>. Controleer dit zelf.</span>';
-  } else {
-    box.className = 'veiling-hint on';
-    box.innerHTML = ic('check') + '<span>Herkend: <strong>' + esc(v.naam) + '</strong> &middot; ' + Math.round(v.opgeld * 100) + '% veilingkosten + ' + Math.round(v.btw * 100) + '% btw</span>';
-  }
-}
 
 // Foto's
 function maakThumb(dataUrl, cb) {
@@ -1176,28 +1192,369 @@ function callClaude(system, userText, maxTokens) {
     throw err;
   });
 }
-function detecteerVeiling(url) {
-  if (!url) return { naam: 'Onbekend', opgeld: 0.17, btw: 0.21 };
-  var u = url.toLowerCase();
 
-  if (u.indexOf('hnvi.nl') !== -1) {
-    return { naam: 'HNVI', opgeld: 0.17, btw: 0.21 };
-  }
-  if (u.indexOf('troostwijk') !== -1) {
-    return { naam: 'Troostwijk', opgeld: 0.18, btw: 0.21 };
-  }
-  if (u.indexOf('bva-auctions') !== -1 || u.indexOf('bva.nl') !== -1) {
-    return { naam: 'BVA Auctions', opgeld: 0.17, btw: 0.21 };
-  }
-  if (u.indexOf('vavato') !== -1) {
-    return { naam: 'Vavato', opgeld: 0.18, btw: 0.21 };
-  }
-  if (u.indexOf('dtz') !== -1) {
-    return { naam: 'DTZ', opgeld: 0.15, btw: 0.21 };
-  }
-  // Onbekende site - standaard 17% veilingkosten + 21% BTW (controleer zelf!)
-  return { naam: 'Onbekend', opgeld: 0.17, btw: 0.21 };
+// ── Veilinghuizen en percentages ──────────────────────────────
+var VEILING_STD = [
+  { naam: 'HNVI', match: 'hnvi.nl', opgeld: 0.19, btw: 0.21 },
+  { naam: 'Troostwijk', match: 'troostwijk', opgeld: 0.18, btw: 0.21 },
+  { naam: 'BVA Auctions', match: 'bva-auctions, bva.nl', opgeld: 0.17, btw: 0.21 },
+  { naam: 'Vavato', match: 'vavato', opgeld: 0.18, btw: 0.21 },
+  { naam: 'DTZ', match: 'dtz', opgeld: 0.15, btw: 0.21 }
+];
+var VEILING_ONBEKEND_STD = { opgeld: 0.17, btw: 0.21 };
+var veilingCfg = null;
+var vkHandmatigFlag = false;
+
+function pctTxt(x) { return String(Math.round(x * 10) / 10).replace('.', ','); }
+function leesPct(txt) {
+  var s = String(txt == null ? '' : txt).replace(/[%\s]/g, '');
+  if (!s) return null;
+  if (!/^\d{1,3}([.,]\d{1,2})?$/.test(s)) return NaN;
+  return parseFloat(s.replace(',', '.'));
 }
+function geldigTarief(o, b) { return typeof o === 'number' && typeof b === 'number' && isFinite(o) && isFinite(b) && o >= 0 && o <= 0.5 && b >= 0 && b <= 0.3; }
+
+function getVeilingCfg() {
+  if (veilingCfg) return veilingCfg;
+  var cfg = { huizen: kopie(VEILING_STD), standaard: kopie(VEILING_ONBEKEND_STD) };
+  try {
+    var raw = JSON.parse(localStorage.getItem('va_veilingen') || 'null');
+    if (raw && Array.isArray(raw.huizen)) {
+      var lijst = [];
+      raw.huizen.forEach(function(h) {
+        if (h && typeof h.naam === 'string' && h.naam.trim() && geldigTarief(h.opgeld, h.btw)) {
+          lijst.push({ naam: h.naam.trim(), match: typeof h.match === 'string' ? h.match : h.naam.toLowerCase(), opgeld: h.opgeld, btw: h.btw });
+        }
+      });
+      cfg.huizen = lijst;
+      if (raw.standaard && geldigTarief(raw.standaard.opgeld, raw.standaard.btw)) cfg.standaard = { opgeld: raw.standaard.opgeld, btw: raw.standaard.btw };
+    }
+  } catch (e) {}
+  veilingCfg = cfg;
+  return cfg;
+}
+function bewaarVeilingCfg(cfg) {
+  try { localStorage.setItem('va_veilingen', JSON.stringify(cfg)); } catch (e) { return false; }
+  veilingCfg = cfg;
+  return true;
+}
+function huisOpNaam(naam) {
+  var l = getVeilingCfg().huizen;
+  for (var i = 0; i < l.length; i++) { if (l[i].naam === naam) return l[i]; }
+  return null;
+}
+function detecteerVeiling(url) {
+  var cfg = getVeilingCfg();
+  var u = String(url || '').toLowerCase();
+  if (u) {
+    for (var i = 0; i < cfg.huizen.length; i++) {
+      var keys = String(cfg.huizen[i].match || '').toLowerCase().split(',');
+      for (var j = 0; j < keys.length; j++) {
+        var key = keys[j].trim();
+        if (key && u.indexOf(key) !== -1) return { naam: cfg.huizen[i].naam, opgeld: cfg.huizen[i].opgeld, btw: cfg.huizen[i].btw };
+      }
+    }
+  }
+  return { naam: 'Onbekend', opgeld: cfg.standaard.opgeld, btw: cfg.standaard.btw };
+}
+function bronLabel(h) {
+  for (var i = 0; i < VEILING_STD.length; i++) {
+    var s = VEILING_STD[i];
+    if (s.naam === h.naam) {
+      if (Math.abs(s.opgeld - h.opgeld) < 1e-9 && Math.abs(s.btw - h.btw) < 1e-9) return s.naam === 'HNVI' ? 'bevestigd' : 'niet geverifieerd';
+      return 'door jou ingesteld';
+    }
+  }
+  return 'door jou ingesteld';
+}
+
+// Tarief van een opgeslagen kavel: eigen tarief, anders het tarief waarmee het is doorgerekend, anders de huidige instelling
+function tariefVan(k) {
+  if (k.veiling_tarief && geldigTarief(k.veiling_tarief.opgeld, k.veiling_tarief.btw)) return { opgeld: k.veiling_tarief.opgeld, btw: k.veiling_tarief.btw };
+  if (k.kosten && k.kosten.opgeld_pct != null && isFinite(k.kosten.opgeld_pct)) {
+    var btw = 0.21;
+    if (k.kosten.bod != null && (k.kosten.bod + k.kosten.vk) > 0) {
+      var b = k.kosten.btw / (k.kosten.bod + k.kosten.vk);
+      if (isFinite(b) && b >= 0 && b <= 0.3) btw = Math.round(b * 1000) / 1000;
+    }
+    return { opgeld: k.kosten.opgeld_pct / 100, btw: btw };
+  }
+  var d = detecteerVeiling(k.url);
+  if (d.naam === 'Onbekend' && k.veiling && huisOpNaam(k.veiling)) d = huisOpNaam(k.veiling);
+  return { opgeld: d.opgeld, btw: d.btw };
+}
+
+// Rekent kosten, maximaal bod en advies opnieuw door met het tarief van dit kavel
+function herberekenKosten(k) {
+  var t = tariefVan(k);
+  var mp = k.prijzen && k.prijzen.marktplaats ? k.prijzen.marktplaats : null;
+  var c = k.controle;
+  var gem = c ? c.mp_gem : (mp ? mp.gemiddeld : k.mp_gemiddeld);
+  var basis = c ? (c.mp_laag != null ? c.mp_laag : c.mp_gem) : (mp && mp.laag != null ? mp.laag : k.mp_laag);
+  var delers = (1 + t.opgeld) * (1 + t.btw);
+  if (basis != null && isFinite(basis)) k.maxBod = Math.round(basis * 0.8 / delers);
+  if (k.kosten && k.kosten.bod && gem > 0) {
+    var kk = k.kosten;
+    kk.vk = kk.bod * t.opgeld;
+    kk.totaal = kk.bod * delers;
+    kk.btw = kk.totaal - kk.bod - kk.vk;
+    kk.marge = gem - kk.totaal;
+    kk.opgeld_pct = Math.round(t.opgeld * 1000) / 10;
+    var m = kk.marge, pct = Math.round((m / gem) * 100), advies = 'twijfel', roi = 50;
+    if (m > 0 && pct >= 20) { advies = 'kopen'; roi = Math.min(93, 55 + pct); }
+    else if (m < -50 || pct < -10) { advies = 'skip'; roi = Math.max(8, 50 + pct / 2); }
+    else { roi = Math.max(25, Math.min(68, 50 + pct / 2)); }
+    k.advies = advies; k.roi = Math.round(roi);
+    k.adviesReden = m > 0
+      ? 'Inkoopprijs ' + fmt(kk.totaal) + ' vs MP ~' + fmt(gem) + ' marge ' + fmt(m) + ' (' + pct + '% van verkoopprijs).'
+      : 'Inkoopprijs ' + fmt(kk.totaal) + ' ligt ' + fmt(Math.abs(m)) + ' boven MP prijs van ' + fmt(gem) + ' (' + pct + '%).';
+  } else if (!k.kosten && k.maxBod && String(k.adviesReden || '').indexOf('Maximaal rendabel bieden') === 0) {
+    k.adviesReden = 'Maximaal rendabel bieden: ' + fmt(k.maxBod) + '.';
+  }
+}
+
+// ── Formulier: keuze veilinghuis ──
+function vulVeilingKeuze() {
+  var sel = document.getElementById('veiling-kies');
+  var cur = sel.value || 'auto';
+  var h = '<option value="auto">Automatisch herkennen (uit de link)</option>';
+  getVeilingCfg().huizen.forEach(function(v) {
+    h += '<option value="' + esc(v.naam) + '">' + esc(v.naam) + ' (' + pctTxt(v.opgeld * 100) + '%)</option>';
+  });
+  h += '<option value="anders">Anders / onbekend</option>';
+  sel.innerHTML = h;
+  var ok = cur === 'auto' || cur === 'anders' || !!huisOpNaam(cur);
+  sel.value = ok ? cur : 'auto';
+}
+function basisVeiling(url) {
+  var keuze = document.getElementById('veiling-kies').value;
+  if (keuze === 'auto') return detecteerVeiling(url);
+  if (keuze === 'anders') { var s = getVeilingCfg().standaard; return { naam: 'Onbekend', opgeld: s.opgeld, btw: s.btw }; }
+  var h = huisOpNaam(keuze);
+  return h ? { naam: h.naam, opgeld: h.opgeld, btw: h.btw } : detecteerVeiling(url);
+}
+function kiesVeiling() { vkHandmatigFlag = false; syncVeilingVelden(); }
+function vkHandmatig() { vkHandmatigFlag = true; updateVeilingHint(); }
+function syncVeilingVelden() {
+  var v = basisVeiling(document.getElementById('kavel-url').value.trim());
+  if (!vkHandmatigFlag) {
+    document.getElementById('vk-opgeld').value = pctTxt(v.opgeld * 100);
+    document.getElementById('vk-btw').value = pctTxt(v.btw * 100);
+  }
+  updateVeilingHint();
+  return v;
+}
+function formTarief(url) {
+  var o = leesPct(document.getElementById('vk-opgeld').value);
+  var b = leesPct(document.getElementById('vk-btw').value);
+  var base = basisVeiling(url);
+  if (o === null || !isFinite(o) || o > 50) return { fout: 'Vul bij veilingkosten een percentage tussen 0 en 50 in, bijvoorbeeld 19.' };
+  if (b === null || !isFinite(b) || b > 30) return { fout: 'Vul bij btw een percentage tussen 0 en 30 in, bijvoorbeeld 21.' };
+  return { naam: base.naam, opgeld: o / 100, btw: b / 100, handmatig: vkHandmatigFlag };
+}
+function updateVeilingHint() {
+  var url = document.getElementById('kavel-url').value.trim();
+  var keuze = document.getElementById('veiling-kies').value;
+  var box = document.getElementById('veiling-hint');
+  var v = basisVeiling(url);
+  var o = leesPct(document.getElementById('vk-opgeld').value);
+  var b = leesPct(document.getElementById('vk-btw').value);
+  if (keuze === 'auto' && !url) { box.className = 'veiling-hint'; box.innerHTML = ''; return; }
+  var tekst, waarschuw = false;
+  var huis = huisOpNaam(v.naam);
+  if (keuze === 'auto' && v.naam === 'Onbekend') {
+    tekst = 'Veiling niet herkend. Kies hierboven het veilinghuis of pas het percentage aan.'; waarschuw = true;
+  } else {
+    tekst = (keuze === 'auto' ? 'Herkend: ' : 'Gekozen: ') + '<strong>' + esc(v.naam) + '</strong>';
+    if (o != null && b != null && isFinite(o) && isFinite(b)) tekst += ' &middot; ' + pctTxt(o) + '% veilingkosten + ' + pctTxt(b) + '% btw';
+    if (vkHandmatigFlag) tekst += ' (aangepast voor dit kavel)';
+    else if (huis && bronLabel(huis) === 'niet geverifieerd') { tekst += ' &middot; percentage niet geverifieerd, controleer het bij de veiling'; waarschuw = true; }
+    else if (v.naam === 'Onbekend') { tekst += ' &middot; standaardpercentage, controleer het bij de veiling'; waarschuw = true; }
+  }
+  box.className = 'veiling-hint on' + (waarschuw ? ' unknown' : '');
+  box.innerHTML = ic(waarschuw ? 'alert' : 'check') + '<span>' + tekst + '</span>';
+}
+function zetTariefFormulier(k) {
+  vulVeilingKeuze();
+  var det = detecteerVeiling(k.url);
+  var naam = veilingVan(k);
+  var sel = document.getElementById('veiling-kies');
+  if (det.naam !== 'Onbekend' && naam === det.naam) sel.value = 'auto';
+  else if (huisOpNaam(naam)) sel.value = naam;
+  else sel.value = (det.naam === 'Onbekend' && !k.url) ? 'auto' : (det.naam === 'Onbekend' ? 'auto' : 'anders');
+  vkHandmatigFlag = false;
+  syncVeilingVelden();
+  if (k.tarief_handmatig) {
+    var t = tariefVan(k);
+    document.getElementById('vk-opgeld').value = pctTxt(t.opgeld * 100);
+    document.getElementById('vk-btw').value = pctTxt(t.btw * 100);
+    vkHandmatigFlag = true;
+    updateVeilingHint();
+  }
+}
+
+// ── Percentages van één kavel aanpassen ──
+function pasTariefAan(idx) {
+  var k = kavels[idx]; if (!k) return;
+  var t = tariefVan(k);
+  var opts = '<option value="">Kies een veilinghuis om over te nemen…</option>';
+  getVeilingCfg().huizen.forEach(function(v) { opts += '<option value="' + esc(v.naam) + '">' + esc(v.naam) + ' (' + pctTxt(v.opgeld * 100) + '% + ' + pctTxt(v.btw * 100) + '% btw)</option>'; });
+  var h = '<p class="help" style="margin:0 0 12px">Geldt alleen voor dit kavel. Kosten, maximaal bod en advies worden direct opnieuw berekend.</p>' +
+    '<div class="field"><select class="input select" id="pt-huis" onchange="ptNeemOver()">' + opts + '</select></div>' +
+    '<div class="vk-grid"><div><label class="ctl-l" for="pt-opgeld">Veilingkosten</label><div class="money pct"><input class="input" id="pt-opgeld" type="text" inputmode="decimal" value="' + pctTxt(t.opgeld * 100) + '"><span>%</span></div></div>' +
+    '<div><label class="ctl-l" for="pt-btw">Btw</label><div class="money pct"><input class="input" id="pt-btw" type="text" inputmode="decimal" value="' + pctTxt(t.btw * 100) + '"><span>%</span></div></div></div>' +
+    '<div class="msg err" id="pt-err" role="alert"></div>';
+  openModal('Percentages aanpassen', h, [
+    { label: 'Annuleren', cls: 'btn-secondary' },
+    { label: 'Opslaan en herberekenen', cls: 'btn-primary', keepOpen: true, fn: function() { ptOpslaan(idx); } }
+  ]);
+}
+function ptNeemOver() {
+  var h = huisOpNaam(document.getElementById('pt-huis').value);
+  if (!h) return;
+  document.getElementById('pt-opgeld').value = pctTxt(h.opgeld * 100);
+  document.getElementById('pt-btw').value = pctTxt(h.btw * 100);
+}
+function ptOpslaan(idx) {
+  var k = kavels[idx]; if (!k) { closeModal(); return; }
+  var o = leesPct(document.getElementById('pt-opgeld').value), b = leesPct(document.getElementById('pt-btw').value);
+  var fout = '';
+  if (o === null || !isFinite(o) || o > 50) fout = 'Vul bij veilingkosten een percentage tussen 0 en 50 in.';
+  else if (b === null || !isFinite(b) || b > 30) fout = 'Vul bij btw een percentage tussen 0 en 30 in.';
+  var box = document.getElementById('pt-err');
+  if (fout) { box.textContent = fout; box.style.display = 'block'; return; }
+  k.veiling_tarief = { opgeld: o / 100, btw: b / 100 };
+  k.tarief_handmatig = true;
+  var gekozen = document.getElementById('pt-huis').value;
+  if (gekozen && huisOpNaam(gekozen)) { k.veiling = gekozen; if (k.kosten) k.kosten.site = gekozen; }
+  herberekenKosten(k);
+  closeModal();
+  slaKavelsOp(); renderOverzicht();
+  toonAnalyseResultaat(k, true);
+  toast('Percentages bijgewerkt: ' + pctTxt(o) + '% + ' + pctTxt(b) + '% btw');
+}
+
+// ── Veilinghuizen beheren ──
+var bhDraft = null;
+function beheerVeilingen() {
+  var cfg = getVeilingCfg();
+  bhDraft = { huizen: kopie(cfg.huizen), standaard: kopie(cfg.standaard) };
+  openModal('Veilinghuizen en percentages', bhHtml(), [
+    { label: 'Annuleren', cls: 'btn-secondary' },
+    { label: 'Opslaan', cls: 'btn-primary', keepOpen: true, fn: bhOpslaan }
+  ]);
+}
+function bhHtml() {
+  var h = '<p class="help" style="margin:0 0 12px">Stel per veilinghuis de veilingkosten en btw in. Alleen HNVI (19% + 21% btw) is bevestigd; de andere percentages zijn aannames, controleer ze bij de veiling zelf. Herkenning: delen van de link (gescheiden met komma\'s) waaraan de app het veilinghuis herkent.</p>';
+  bhDraft.huizen.forEach(function(v, i) {
+    h += '<div class="bh-row"><div class="bh-top"><input class="input" id="bh-n-' + i + '" type="text" value="' + esc(v.naam) + '" aria-label="Naam veilinghuis">' +
+      '<button class="btn btn-ghost btn-icon btn-sm" type="button" onclick="bhVerwijder(' + i + ')" aria-label="Verwijder ' + esc(v.naam) + '">' + ic('trash') + '</button></div>' +
+      '<label class="ctl-l" for="bh-m-' + i + '">Herkenning in de link</label><input class="input" id="bh-m-' + i + '" type="text" value="' + esc(v.match) + '" placeholder="bijv. hnvi.nl">' +
+      '<div class="vk-grid"><div><label class="ctl-l" for="bh-o-' + i + '">Veilingkosten</label><div class="money pct"><input class="input" id="bh-o-' + i + '" type="text" inputmode="decimal" value="' + pctTxt(v.opgeld * 100) + '"><span>%</span></div></div>' +
+      '<div><label class="ctl-l" for="bh-b-' + i + '">Btw</label><div class="money pct"><input class="input" id="bh-b-' + i + '" type="text" inputmode="decimal" value="' + pctTxt(v.btw * 100) + '"><span>%</span></div></div></div>' +
+      '<div class="help">' + esc(bronLabel(v)) + '</div></div>';
+  });
+  h += '<button class="btn btn-secondary btn-sm" type="button" onclick="bhVoegToe()">' + ic('plus') + 'Veilinghuis toevoegen</button>';
+  h += '<div class="bh-row" style="margin-top:14px"><div class="ctl-l">Onbekend veilinghuis (standaard)</div><div class="vk-grid">' +
+    '<div><label class="ctl-l" for="bh-so">Veilingkosten</label><div class="money pct"><input class="input" id="bh-so" type="text" inputmode="decimal" value="' + pctTxt(bhDraft.standaard.opgeld * 100) + '"><span>%</span></div></div>' +
+    '<div><label class="ctl-l" for="bh-sb">Btw</label><div class="money pct"><input class="input" id="bh-sb" type="text" inputmode="decimal" value="' + pctTxt(bhDraft.standaard.btw * 100) + '"><span>%</span></div></div></div></div>';
+  h += '<div class="bh-reset"><button class="btn btn-ghost btn-sm" type="button" onclick="bhHerstel()">' + ic('undo') + 'Standaardwaarden herstellen</button></div>';
+  h += '<div class="msg err" id="bh-err" role="alert"></div>';
+  return h;
+}
+function bhLees() {
+  bhDraft.huizen.forEach(function(v, i) {
+    var n = document.getElementById('bh-n-' + i); if (!n) return;
+    v.naam = n.value; v.match = document.getElementById('bh-m-' + i).value;
+    v._o = document.getElementById('bh-o-' + i).value; v._b = document.getElementById('bh-b-' + i).value;
+  });
+  var so = document.getElementById('bh-so'), sb = document.getElementById('bh-sb');
+  if (so) { bhDraft._so = so.value; bhDraft._sb = sb.value; }
+}
+function bhRender() {
+  var body = document.getElementById('modal-body');
+  body.innerHTML = bhHtml();
+  // behoud ingevoerde (nog niet gevalideerde) tekst
+  bhDraft.huizen.forEach(function(v, i) {
+    if (v._o != null) document.getElementById('bh-o-' + i).value = v._o;
+    if (v._b != null) document.getElementById('bh-b-' + i).value = v._b;
+  });
+  if (bhDraft._so != null) { document.getElementById('bh-so').value = bhDraft._so; document.getElementById('bh-sb').value = bhDraft._sb; }
+}
+function bhVoegToe() { bhLees(); bhDraft.huizen.push({ naam: '', match: '', opgeld: 0.17, btw: 0.21, _o: '17', _b: '21' }); bhRender(); var n = document.getElementById('bh-n-' + (bhDraft.huizen.length - 1)); if (n) n.focus(); }
+function bhVerwijder(i) { bhLees(); bhDraft.huizen.splice(i, 1); bhRender(); }
+function bhHerstel() { bhDraft = { huizen: kopie(VEILING_STD), standaard: kopie(VEILING_ONBEKEND_STD) }; bhRender(); }
+function bhOpslaan() {
+  bhLees();
+  var box = document.getElementById('bh-err');
+  var fout = '', huizen = [], namen = {};
+  for (var i = 0; i < bhDraft.huizen.length && !fout; i++) {
+    var v = bhDraft.huizen[i];
+    var naam = String(v.naam || '').trim();
+    var o = leesPct(v._o != null ? v._o : pctTxt(v.opgeld * 100)), b = leesPct(v._b != null ? v._b : pctTxt(v.btw * 100));
+    var sleutel = naam.toLowerCase();
+    if (!naam) fout = 'Geef elk veilinghuis een naam.';
+    else if (sleutel === 'auto' || sleutel === 'anders' || sleutel === 'onbekend') fout = '"' + naam + '" is geen toegestane naam. Kies een andere naam.';
+    else if (namen[sleutel]) fout = 'De naam "' + naam + '" komt twee keer voor.';
+    else if (o === null || !isFinite(o) || o > 50) fout = 'Controleer het percentage veilingkosten van ' + naam + ' (0 tot 50).';
+    else if (b === null || !isFinite(b) || b > 30) fout = 'Controleer het btw-percentage van ' + naam + ' (0 tot 30).';
+    else {
+      namen[sleutel] = 1;
+      huizen.push({ naam: naam, match: String(v.match || '').trim() || sleutel.replace(/\s+/g, ''), opgeld: o / 100, btw: b / 100 });
+    }
+  }
+  var so = leesPct(bhDraft._so), sb = leesPct(bhDraft._sb);
+  if (!fout && (so === null || !isFinite(so) || so > 50)) fout = 'Controleer het standaardpercentage veilingkosten (0 tot 50).';
+  if (!fout && (sb === null || !isFinite(sb) || sb > 30)) fout = 'Controleer het standaard btw-percentage (0 tot 30).';
+  if (fout) { box.textContent = fout; box.style.display = 'block'; return; }
+  if (!bewaarVeilingCfg({ huizen: huizen, standaard: { opgeld: so / 100, btw: sb / 100 } })) {
+    box.textContent = 'Opslaan lukt niet in deze browser (opslag geblokkeerd).'; box.style.display = 'block'; return;
+  }
+  closeModal();
+  vulVeilingKeuze(); syncVeilingVelden();
+  toast('Veilinghuizen opgeslagen');
+  controleerTarieven(true);
+}
+
+// Lopende kavels die nog met een ander percentage dan de huidige instelling zijn doorgerekend
+function verouderdeKavels() {
+  return kavels.filter(function(k) {
+    if (k.status === 'gewonnen' || k.tarief_handmatig) return false;
+    var h = huisOpNaam(veilingVan(k)); if (!h) return false;
+    var t = tariefVan(k);
+    return Math.abs(t.opgeld - h.opgeld) > 1e-9 || Math.abs(t.btw - h.btw) > 1e-9;
+  });
+}
+function controleerTarieven(altijd) {
+  var lijst = verouderdeKavels();
+  if (!lijst.length) return;
+  var sig = JSON.stringify(getVeilingCfg()) + '|' + lijst.length;
+  var gezien = null;
+  try { gezien = localStorage.getItem('va_tarief_gevraagd'); } catch (e) {}
+  if (!altijd && gezien === sig) return;
+  var per = {};
+  lijst.forEach(function(k) {
+    var n = veilingVan(k), t = tariefVan(k), h = huisOpNaam(n);
+    if (!per[n]) per[n] = { n: 0, oud: t.opgeld, nieuw: h.opgeld };
+    per[n].n++;
+  });
+  var tekst = '<p>Deze lopende kavels rekenen nog met een ander percentage dan nu is ingesteld:</p><ul class="bh-list">';
+  Object.keys(per).forEach(function(n) {
+    tekst += '<li><strong>' + esc(n) + '</strong>: ' + per[n].n + (per[n].n === 1 ? ' kavel' : ' kavels') + ', nu ' + pctTxt(per[n].oud * 100) + '%, wordt ' + pctTxt(per[n].nieuw * 100) + '%</li>';
+  });
+  tekst += '</ul><p class="help">Kosten, maximaal bod en advies worden opnieuw berekend. Gewonnen kavels en kavels waarvan je zelf het percentage hebt aangepast blijven ongewijzigd.</p>';
+  try { localStorage.setItem('va_tarief_gevraagd', sig); } catch (e) {}
+  openModal('Bestaande kavels herberekenen?', tekst, [
+    { label: 'Nu niet', cls: 'btn-secondary' },
+    { label: 'Herberekenen', cls: 'btn-primary', fn: function() {
+      var l = verouderdeKavels();
+      l.forEach(function(k) { var h = huisOpNaam(veilingVan(k)); k.veiling_tarief = { opgeld: h.opgeld, btw: h.btw }; herberekenKosten(k); });
+      slaKavelsOp(); updateBadge(); renderOverzicht();
+      toast(l.length + (l.length === 1 ? ' kavel herberekend' : ' kavels herberekend'));
+    } }
+  ]);
+}
+
 function analyseer() {
   var url = document.getElementById('kavel-url').value.trim();
   var bodStr = document.getElementById('huidig-bod').value.trim();
@@ -1218,6 +1575,8 @@ function analyseer() {
   var urlNaam = url ? naamUitUrl(url) : '';
   var product = (extra || urlNaam || 'onbekend product').replace(/"/g, '').replace(/'/g, '').trim();
   var bod = bodStr ? parseBedrag(bodStr) : null;
+  var veilingInfo = formTarief(url);
+  if (veilingInfo.fout) { toonMsg('analyse-err', veilingInfo.fout); return; }
   var kavelnr = url ? ((url.match(/\/(\d+)(?:\?|$)/) || [])[1]) : null;
 
   setFase('bezig');
@@ -1252,7 +1611,6 @@ function analyseer() {
     var mp = prijzen.marktplaats;
 
     // Detecteer veilingsite en bijbehorende kostenstructuur
-    var veilingInfo = detecteerVeiling(url);
     var kosten = null;
     if (bod) {
       var opgeld = veilingInfo.opgeld;
@@ -1261,7 +1619,7 @@ function analyseer() {
       var vk = bod * opgeld;
       var btw = totaal - bod - vk;
       var marge = mp.gemiddeld - totaal;
-      kosten = { bod: bod, vk: vk, btw: btw, totaal: totaal, marge: marge, site: veilingInfo.naam, opgeld_pct: Math.round(opgeld*100) };
+      kosten = { bod: bod, vk: vk, btw: btw, totaal: totaal, marge: marge, site: veilingInfo.naam, opgeld_pct: Math.round(opgeld*1000)/10 };
     }
 
     var advies = 'twijfel', adviesReden = '', roi = 50;
@@ -1282,7 +1640,7 @@ function analyseer() {
     var maxBod = mp ? Math.round(mp.laag * 0.8 / ((1 + veilingInfo.opgeld) * (1 + veilingInfo.btw))) : null;
     var kavelData = {
       id: Date.now(), url: url, titel: prijzen.productnaam || product,
-      veiling: veilingInfo ? veilingInfo.naam : 'Onbekend', kavelnummer: kavelnr, huidig_bod: bod,
+      veiling: veilingInfo ? veilingInfo.naam : 'Onbekend', veiling_tarief: { opgeld: veilingInfo.opgeld, btw: veilingInfo.btw }, tarief_handmatig: !!veilingInfo.handmatig, kavelnummer: kavelnr, huidig_bod: bod,
       kosten: kosten, mp_gemiddeld: mp.gemiddeld, mp_laag: mp.laag, mp_hoog: mp.hoog,
       ebay_gemiddeld: prijzen.ebay ? prijzen.ebay.gemiddeld : null,
       nieuwprijs: prijzen.nieuwprijs, advies: advies, adviesReden: adviesReden,
@@ -1491,20 +1849,8 @@ function pasControleToe(k, gem, laag, nieuw, partij) {
   k.mp_gemiddeld = gem;
   if (laag != null) { mp.laag = laag; k.mp_laag = laag; }
   if (nieuw != null) { k.prijzen.nieuwprijs = nieuw; k.nieuwprijs = nieuw; k.prijzen.nieuwprijs_bron = 'Door jou gecontroleerd'; }
-  var vi = detecteerVeiling(k.url);
-  k.maxBod = Math.round((laag != null ? laag : gem) * 0.8 / ((1 + vi.opgeld) * (1 + vi.btw)));
-  if (k.kosten) {
-    k.kosten.marge = gem - k.kosten.totaal;
-    var m = k.kosten.marge, pct = Math.round((m / gem) * 100), advies = 'twijfel', roi = 50;
-    if (m > 0 && pct >= 20) { advies = 'kopen'; roi = Math.min(93, 55 + pct); }
-    else if (m < -50 || pct < -10) { advies = 'skip'; roi = Math.max(8, 50 + pct / 2); }
-    else { roi = Math.max(25, Math.min(68, 50 + pct / 2)); }
-    k.advies = advies; k.roi = Math.round(roi);
-    k.adviesReden = m > 0
-      ? 'Inkoopprijs ' + fmt(k.kosten.totaal) + ' vs MP ~' + fmt(gem) + ' marge ' + fmt(m) + ' (' + pct + '% van verkoopprijs).'
-      : 'Inkoopprijs ' + fmt(k.kosten.totaal) + ' ligt ' + fmt(Math.abs(m)) + ' boven MP prijs van ' + fmt(gem) + ' (' + pct + '%).';
-  }
   k.controle = { mp_gem: gem, mp_laag: laag, nieuw: nieuw, partij: partij || null, op: Date.now() };
+  herberekenKosten(k);
 }
 function togglePartij() {
   var aan = document.getElementById('ctl-partij').checked;
@@ -1555,6 +1901,7 @@ function herstelAiSchatting(idx) {
   if (!k.ai_backup) return;
   herstelBasis(k);
   delete k.controle; delete k.ai_backup;
+  herberekenKosten(k);
   slaKavelsOp(); renderOverzicht();
   toonAnalyseResultaat(k, true);
   toast('Teruggezet naar de AI-schatting');
@@ -1592,7 +1939,10 @@ function toonAnalyseResultaat(d, behoudScroll) {
 
   // Financiële analyse
   h += '<div class="card"><div class="card-h"><h2>Financiële analyse</h2>';
+  h += '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">';
   if (d.kosten && d.kosten.site) h += '<span class="kc-meta">' + esc(d.kosten.site) + ' &middot; ' + (d.eigen_bod ? 'Mijn bod' : 'Huidig bod') + '</span>';
+  if (idx >= 0) h += '<button class="btn btn-secondary btn-sm" onclick="pasTariefAan(' + idx + ')">' + ic('percent') + 'Percentages aanpassen</button>';
+  h += '</div>';
   h += '</div>';
   if (d.kosten && mp && !ond) {
     var k = d.kosten, pct = mp.gemiddeld ? Math.round(k.marge / mp.gemiddeld * 100) : 0;
@@ -1607,7 +1957,7 @@ function toonAnalyseResultaat(d, behoudScroll) {
     var btwPct = (k.bod + k.vk) ? Math.round(k.btw / (k.bod + k.vk) * 100) : 21;
     h += '<table class="ctable"><tbody>';
     h += '<tr><td>' + (d.eigen_bod ? 'Mijn bod' : 'Huidig bod') + '</td><td>' + fmt(k.bod) + '</td></tr>';
-    h += '<tr class="sub"><td>+ Veilingkosten (' + (k.opgeld_pct || 17) + '%)</td><td>' + fmt(k.vk) + '</td></tr>';
+    h += '<tr class="sub"><td>+ Veilingkosten (' + pctTxt(k.opgeld_pct != null ? k.opgeld_pct : 17) + '%)</td><td>' + fmt(k.vk) + '</td></tr>';
     h += '<tr class="sub"><td>+ Btw (' + btwPct + '% over bod en veilingkosten)</td><td>' + fmt(k.btw) + '</td></tr>';
     h += '<tr class="tot"><td>= Totale kosten</td><td>' + fmt(k.totaal) + '</td></tr>';
     h += '<tr class="sub"><td>Marktwaarde (Marktplaats gemiddeld)</td><td>' + fmt(mp.gemiddeld) + '</td></tr>';
@@ -1617,7 +1967,7 @@ function toonAnalyseResultaat(d, behoudScroll) {
     var kk = d.kosten, btwP = (kk.bod + kk.vk) ? Math.round(kk.btw / (kk.bod + kk.vk) * 100) : 21;
     h += '<table class="ctable"><tbody>';
     h += '<tr><td>' + (d.eigen_bod ? 'Mijn bod' : 'Huidig bod') + '</td><td>' + fmt(kk.bod) + '</td></tr>';
-    h += '<tr class="sub"><td>+ Veilingkosten (' + (kk.opgeld_pct || 17) + '%)</td><td>' + fmt(kk.vk) + '</td></tr>';
+    h += '<tr class="sub"><td>+ Veilingkosten (' + pctTxt(kk.opgeld_pct != null ? kk.opgeld_pct : 17) + '%)</td><td>' + fmt(kk.vk) + '</td></tr>';
     h += '<tr class="sub"><td>+ Btw (' + btwP + '% over bod en veilingkosten)</td><td>' + fmt(kk.btw) + '</td></tr>';
     h += '<tr class="tot"><td>= Totale kosten</td><td>' + fmt(kk.totaal) + '</td></tr>';
     h += '</tbody></table>';
@@ -1858,7 +2208,7 @@ function heranalyseer(idx) {
   if (k.huidig_bod) document.getElementById('huidig-bod').value = String(k.huidig_bod);
   var type = k.eigen_bod ? 'eigen' : 'ander';
   setBodType(type, document.getElementById('bod-' + type));
-  updateVeilingHint();
+  zetTariefFormulier(k);
   setFase('invoer');
 }
 
@@ -1979,7 +2329,9 @@ setSyncStatus('ok');
 setStap(1);
 setFase('invoer');
 renderOverzicht();
+vulVeilingKeuze(); syncVeilingVelden();
 if (SHEETS_URL) { syncVanSheets(); }
+setTimeout(function() { controleerTarieven(false); }, 600);
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.getRegistrations().then(function(regs) {
