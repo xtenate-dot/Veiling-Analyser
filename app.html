@@ -434,6 +434,12 @@ details.faq .fb ul{padding-left:20px}
   .kc-actions .btn{padding:0 8px;font-size:12.5px}
   .kc-actions .btn-icon{width:32px;padding:0}
 }
+
+.ctl-links{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:4px}
+.ctl-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:16px 0 8px}
+.ctl-l{display:block;font-size:13.5px;font-weight:600;margin-bottom:6px}
+.ctl-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}
+@media (max-width:640px){.ctl-grid{grid-template-columns:1fr}.ctl-actions .btn{flex:1 1 100%}}
 </style>
 </head>
 <body>
@@ -680,7 +686,14 @@ details.faq .fb ul{padding-left:20px}
           <summary>Hoe betrouwbaar zijn de marktprijzen?</summary>
           <div class="fb">
             <p>De prijzen zijn een schatting van het AI-model en worden niet live opgehaald. Ze kunnen afwijken van wat er nu op Marktplaats of eBay staat.</p>
-            <p>De indicator Betrouwbaarheid laat zien hoe zeker het model zelf is van de prijs. Controleer bij een serieuze kandidaat altijd een paar vergelijkbare advertenties.</p>
+            <p>De indicator Betrouwbaarheid laat zien hoe zeker het model zelf is van de prijs. Controleer bij een serieuze kandidaat altijd een paar vergelijkbare advertenties (zie hieronder).</p>
+          </div>
+        </details>
+        <details class="faq">
+          <summary>Hoe controleer ik de marktprijs?</summary>
+          <div class="fb">
+            <p>Open een kavel via Details. Onder &ldquo;Prijzen controleren&rdquo; zoek je met &eacute;&eacute;n klik op Marktplaats, eBay, bol.com of Google Shopping naar vergelijkbare advertenties. Vul het gemiddelde in (en eventueel de laagste prijs en de nieuwprijs) en kies &ldquo;Opslaan en herberekenen&rdquo;.</p>
+            <p>Marge, advies en maximaal rendabel bod worden dan opnieuw berekend met jouw prijs. De kavel krijgt het label &ldquo;Prijzen gecontroleerd&rdquo;. Je kunt altijd terug naar de oorspronkelijke AI-schatting. De nieuwprijs en eBay-prijs tellen nooit mee in het advies.</p>
           </div>
         </details>
         <details class="faq">
@@ -1308,7 +1321,7 @@ function adviesRedenen(d) {
     else if (m > 0) r.push(['warn', 'De verwachte marge is ' + pct + '% van de verkoopprijs, onder de 20% die voor een aanrader nodig is.']);
     else if (m < -50 || pct < -10) r.push(['bad', 'Het verwachte verlies is ' + fmt(-m) + ' (' + Math.abs(pct) + '% van de verkoopprijs).']);
     else r.push(['warn', 'De marge is negatief maar klein (' + fmtS(m) + ').']);
-    if (mp.laag) {
+    if (mp.laag && !(d.controle && !d.controle.mp_laag)) {
       var lm = mp.laag - k.totaal;
       if (lm > 0) r.push(['ok', 'Ook bij de laagste verwachte prijs (' + fmt(mp.laag) + ') blijft er winst over.']);
       else r.push(['warn', 'Bij de laagste verwachte prijs (' + fmt(mp.laag) + ') is er geen winst meer (' + fmtS(lm) + ').']);
@@ -1317,14 +1330,18 @@ function adviesRedenen(d) {
     r.push(['warn', 'Er is nog geen bod ingevuld, dus de marge kan niet worden berekend.']);
     if (d.maxBod) r.push(['info', 'Tot ' + fmt(d.maxBod) + ' blijven de totale kosten onder 80% van de laagste verwachte prijs.']);
   }
-  if (mp) {
+  if (d.controle) {
+    r.push(['ok', 'De marktwaarde komt uit jouw controle van vergelijkbare advertenties (' + new Date(d.controle.op).toLocaleDateString('nl-NL') + ').']);
+    if (d.prijzen && d.prijzen.nieuwprijs && mp && mp.gemiddeld >= d.prijzen.nieuwprijs) r.push(['warn', 'De tweedehands prijs ligt niet onder de nieuwprijs. Controleer beide bedragen.']);
+    r.push(['info', d.controle.nieuw ? 'De eBay-prijs blijft een schatting van het AI-model.' : 'Nieuwprijs en eBay-prijs blijven schattingen van het AI-model.']);
+  } else if (mp) {
     if (mp.vertrouwen === 'hoog') r.push(['ok', 'De marktprijs wordt door de analyse als betrouwbaar ingeschat.']);
     else if (mp.vertrouwen === 'middel') r.push(['warn', 'De marktprijs is indicatief: het model is er matig zeker van.']);
     else r.push(['warn', 'De marktprijs is onzeker: het model heeft weinig houvast.']);
     if (mp.hoog && mp.laag && mp.gemiddeld && (mp.hoog - mp.laag) / mp.gemiddeld > 0.6) r.push(['warn', 'De verwachte prijs loopt sterk uiteen (' + fmt(mp.laag) + ' tot ' + fmt(mp.hoog) + ').']);
     if (d.prijzen && d.prijzen.nieuwprijs && mp.gemiddeld >= d.prijzen.nieuwprijs) r.push(['warn', 'De tweedehands prijs ligt niet onder de nieuwprijs. Controleer beide schattingen.']);
   }
-  r.push(['info', 'Prijzen zijn een schatting van het AI-model en niet live opgehaald. Controleer vergelijkbare advertenties voordat je biedt.']);
+  if (!d.controle) r.push(['info', 'Prijzen zijn een schatting van het AI-model en niet live opgehaald. Controleer vergelijkbare advertenties voordat je biedt.']);
   return r;
 }
 
@@ -1353,17 +1370,122 @@ function kostenBalk(k, mpGem) {
   return h;
 }
 
-function platformKaart(naam, p, tagsLabel, tags, globe) {
+function platformKaart(naam, p, tagsLabel, tags, ctl) {
   var c = vertrouwenInfo(p.vertrouwen);
-  var h = '<div class="card"><div class="plat-h"><h3>' + naam + '</h3><span class="conf ' + c.cls + '"><i></i>Betrouwbaarheid ' + c.label.toLowerCase() + '</span></div>';
-  h += '<div class="range"><span>' + fmt(p.laag) + '</span><b>' + fmt(p.gemiddeld) + '</b><span>' + fmt(p.hoog) + '</span></div>';
-  h += '<div class="kc-meta">Laag &middot; gemiddeld &middot; hoog &middot; verkooptijd ' + esc(p.verkooptijd || '-') + '</div>';
+  var h = '<div class="card"><div class="plat-h"><h3>' + naam + '</h3>' + (ctl ? '<span class="conf pos"><i></i>Gecontroleerd</span>' : '<span class="conf ' + c.cls + '"><i></i>Betrouwbaarheid ' + c.label.toLowerCase() + '</span>') + '</div>';
+  if (ctl) {
+    h += '<div class="range">' + (ctl.mp_laag ? '<span>' + fmt(ctl.mp_laag) + '</span>' : '') + '<b>' + fmt(p.gemiddeld) + '</b></div>';
+    h += '<div class="kc-meta">' + (ctl.mp_laag ? 'Laagste &middot; gemiddeld &middot; ' : 'Gemiddeld &middot; ') + 'door jou gecontroleerd op ' + new Date(ctl.op).toLocaleDateString('nl-NL') + '. Verkooptijd (schatting): ' + esc(p.verkooptijd || '-') + '</div>';
+  } else {
+    h += '<div class="range"><span>' + fmt(p.laag) + '</span><b>' + fmt(p.gemiddeld) + '</b><span>' + fmt(p.hoog) + '</span></div>';
+    h += '<div class="kc-meta">Laag &middot; gemiddeld &middot; hoog &middot; verkooptijd ' + esc(p.verkooptijd || '-') + '</div>';
+  }
   if (p.tip) h += '<div class="tip">' + esc(p.tip) + '</div>';
   if (tags && tags.length) { h += '<div class="tags">'; tags.forEach(function(t) { h += '<span class="tag">' + esc(t) + '</span>'; }); h += '</div>'; }
   return h + '</div>';
 }
 
-function toonAnalyseResultaat(d) {
+// ── Prijzen controleren (handmatig, gratis) ─────────────────────────────────
+var BACKUP_KEYS = ['prijzen', 'kosten', 'advies', 'adviesReden', 'roi', 'maxBod', 'mp_gemiddeld', 'mp_laag', 'mp_hoog', 'nieuwprijs'];
+function kopie(x) { return x === undefined ? undefined : JSON.parse(JSON.stringify(x)); }
+function herstelBasis(k) {
+  BACKUP_KEYS.forEach(function(key) {
+    if (k.ai_backup[key] === undefined) delete k[key]; else k[key] = kopie(k.ai_backup[key]);
+  });
+}
+function openZoek(site) {
+  var t = document.getElementById('ctl-zoek').value.trim();
+  if (!t) { toast('Vul eerst een zoekterm in.', null, true); return; }
+  var q = encodeURIComponent(t);
+  var urls = {
+    mp: 'https://www.marktplaats.nl/q/' + t.split(/\s+/).map(encodeURIComponent).join('+') + '/',
+    ebay: 'https://www.ebay.nl/sch/i.html?_nkw=' + q,
+    bol: 'https://www.bol.com/nl/nl/s/?searchtext=' + q,
+    google: 'https://www.google.com/search?tbm=shop&q=' + q
+  };
+  window.open(urls[site], '_blank', 'noopener');
+}
+function controleKaart(d, idx) {
+  if (idx < 0) return '';
+  var c = d.controle;
+  var val = function(v) { return v ? esc(String(v)) : ''; };
+  var h = '<div class="card" id="controle-kaart"><div class="card-h"><h2>Prijzen controleren</h2>' +
+    (c ? '<span class="conf pos"><i></i>Gecontroleerd op ' + new Date(c.op).toLocaleDateString('nl-NL') + '</span>' : '<span class="conf warn"><i></i>Nog niet gecontroleerd</span>') + '</div>';
+  h += '<p class="card-sub">De prijzen in deze analyse zijn schattingen van het AI-model. Zoek vergelijkbare advertenties op en vul het gemiddelde in. Marge en advies worden dan opnieuw berekend.</p>';
+  h += '<div class="field"><label for="ctl-zoek">Zoekterm</label><input class="input" id="ctl-zoek" type="text" value="' + esc(d.titel || '') + '"><div class="help">Maak de zoekterm preciezer met type, model of opslag.</div></div>';
+  h += '<div class="ctl-links">' +
+    '<button class="btn btn-secondary btn-sm" onclick="openZoek(\'mp\')">' + ic('external') + 'Marktplaats</button>' +
+    '<button class="btn btn-secondary btn-sm" onclick="openZoek(\'ebay\')">' + ic('external') + 'eBay</button>' +
+    '<button class="btn btn-secondary btn-sm" onclick="openZoek(\'bol\')">' + ic('external') + 'bol.com</button>' +
+    '<button class="btn btn-secondary btn-sm" onclick="openZoek(\'google\')">' + ic('external') + 'Google Shopping</button></div>';
+  h += '<div class="note">' + ic('info') + '<span>Kijk naar 5 tot 10 advertenties met dezelfde specificaties en staat. Let op verschillen binnen één productnaam (bijvoorbeeld M3, M3 Pro en M3 Max) en laat &ldquo;gezocht&rdquo;-advertenties, accessoires en uitschieters buiten beschouwing.</span></div>';
+  h += '<div class="ctl-grid">' +
+    '<div><label class="ctl-l" for="ctl-gem">Marktplaats gemiddeld</label><div class="money"><span>&euro;</span><input class="input" id="ctl-gem" type="text" inputmode="decimal" placeholder="bijv. 1250" value="' + val(c && c.mp_gem) + '"></div></div>' +
+    '<div><label class="ctl-l" for="ctl-laag">Laagste vergelijkbare <span class="opt">(optioneel)</span></label><div class="money"><span>&euro;</span><input class="input" id="ctl-laag" type="text" inputmode="decimal" value="' + val(c && c.mp_laag) + '"></div></div>' +
+    '<div><label class="ctl-l" for="ctl-nieuw">Nieuwprijs <span class="opt">(optioneel)</span></label><div class="money"><span>&euro;</span><input class="input" id="ctl-nieuw" type="text" inputmode="decimal" value="' + val(c && c.nieuw) + '"></div></div></div>';
+  h += '<div class="help">Zonder laagste prijs rekent het maximaal rendabele bod met 80% van je gemiddelde.</div>';
+  h += '<div class="msg err" id="ctl-err" role="alert"></div>';
+  h += '<div class="ctl-actions"><button class="btn btn-primary" onclick="bewaarControle(' + idx + ')">' + ic('check') + 'Opslaan en herberekenen</button>' +
+    (c ? '<button class="btn btn-secondary" onclick="herstelAiSchatting(' + idx + ')">' + ic('undo') + 'Terug naar AI-schatting</button>' : '') + '</div></div>';
+  return h;
+}
+function pasControleToe(k, gem, laag, nieuw) {
+  if (!k.ai_backup) {
+    k.ai_backup = {};
+    BACKUP_KEYS.forEach(function(key) { k.ai_backup[key] = kopie(k[key]); });
+  }
+  herstelBasis(k);
+  k.prijzen = k.prijzen || {};
+  var mp = k.prijzen.marktplaats = k.prijzen.marktplaats || {};
+  mp.gemiddeld = gem;
+  k.mp_gemiddeld = gem;
+  if (laag != null) { mp.laag = laag; k.mp_laag = laag; }
+  if (nieuw != null) { k.prijzen.nieuwprijs = nieuw; k.nieuwprijs = nieuw; k.prijzen.nieuwprijs_bron = 'Door jou gecontroleerd'; }
+  var vi = detecteerVeiling(k.url);
+  k.maxBod = Math.round((laag != null ? laag : gem) * 0.8 / ((1 + vi.opgeld) * (1 + vi.btw)));
+  if (k.kosten) {
+    k.kosten.marge = gem - k.kosten.totaal;
+    var m = k.kosten.marge, pct = Math.round((m / gem) * 100), advies = 'twijfel', roi = 50;
+    if (m > 0 && pct >= 20) { advies = 'kopen'; roi = Math.min(93, 55 + pct); }
+    else if (m < -50 || pct < -10) { advies = 'skip'; roi = Math.max(8, 50 + pct / 2); }
+    else { roi = Math.max(25, Math.min(68, 50 + pct / 2)); }
+    k.advies = advies; k.roi = Math.round(roi);
+    k.adviesReden = m > 0
+      ? 'Inkoopprijs ' + fmt(k.kosten.totaal) + ' vs MP ~' + fmt(gem) + ' marge ' + fmt(m) + ' (' + pct + '% van verkoopprijs).'
+      : 'Inkoopprijs ' + fmt(k.kosten.totaal) + ' ligt ' + fmt(Math.abs(m)) + ' boven MP prijs van ' + fmt(gem) + ' (' + pct + '%).';
+  }
+  k.controle = { mp_gem: gem, mp_laag: laag, nieuw: nieuw, op: Date.now() };
+}
+function bewaarControle(idx) {
+  var k = kavels[idx];
+  var lees = function(id) {
+    var v = document.getElementById(id).value.trim();
+    if (!v) return null;
+    return /^[\d.,\s€]+$/.test(v) ? parseBedrag(v) : NaN;
+  };
+  var gem = lees('ctl-gem'), laag = lees('ctl-laag'), nieuw = lees('ctl-nieuw');
+  var fout = '';
+  if (gem === null || !isFinite(gem) || gem <= 0) fout = 'Voer de gemiddelde Marktplaats-prijs in als geldig bedrag, bijvoorbeeld 1250.';
+  else if (laag !== null && (!isFinite(laag) || laag <= 0)) fout = 'Voer de laagste prijs als geldig bedrag in, of laat het veld leeg.';
+  else if (laag !== null && laag > gem) fout = 'De laagste prijs kan niet hoger zijn dan het gemiddelde.';
+  else if (nieuw !== null && (!isFinite(nieuw) || nieuw <= 0)) fout = 'Voer de nieuwprijs als geldig bedrag in, of laat het veld leeg.';
+  if (fout) { toonMsg('ctl-err', fout); return; }
+  pasControleToe(k, gem, laag, nieuw);
+  slaKavelsOp(); renderOverzicht();
+  toonAnalyseResultaat(k, true);
+  toast('Prijzen opgeslagen. Marge en advies zijn opnieuw berekend.');
+}
+function herstelAiSchatting(idx) {
+  var k = kavels[idx];
+  if (!k.ai_backup) return;
+  herstelBasis(k);
+  delete k.controle; delete k.ai_backup;
+  slaKavelsOp(); renderOverzicht();
+  toonAnalyseResultaat(k, true);
+  toast('Teruggezet naar de AI-schatting');
+}
+
+function toonAnalyseResultaat(d, behoudScroll) {
   var mp = d.prijzen && d.prijzen.marktplaats ? d.prijzen.marktplaats : null;
   var eb = d.prijzen && d.prijzen.ebay ? d.prijzen.ebay : null;
   var a = adviesInfo(d.advies);
@@ -1379,6 +1501,7 @@ function toonAnalyseResultaat(d) {
   // Hero: advies
   h += '<div class="card hero v-' + a.key + '">';
   h += '<div class="hero-top"><span class="pill pill-lg pill-' + a.key + '">' + a.label + '</span>';
+  if (d.controle) h += '<span class="conf pos"><i></i>Prijzen gecontroleerd</span>';
   h += '<span class="hero-meta">' + esc(veilingVan(d)) + (d.kavelnummer ? ' &middot; Kavel ' + esc(d.kavelnummer) : '');
   if (url) h += ' &middot; <a href="' + esc(url) + '" target="_blank" rel="noopener">Bekijk kavel</a>';
   h += '</span></div>';
@@ -1386,9 +1509,9 @@ function toonAnalyseResultaat(d) {
   h += '<p class="uitleg">' + (d.kosten ? esc(a.tekst) : 'Er is nog geen bod ingevuld, dus de marge kan niet worden berekend.') + '</p>';
   if (d.adviesReden) h += '<p class="reden">' + esc(d.adviesReden) + '</p>';
   h += '<div class="hero-kpis">';
-  h += '<div class="kpi"><div class="kpi-l">Maximaal rendabel bod</div><div class="kpi-v">' + (d.maxBod ? fmt(d.maxBod) : '-') + '</div><div class="kpi-s">Totale kosten blijven onder 80% van de laagste prijs</div></div>';
+  h += '<div class="kpi"><div class="kpi-l">Maximaal rendabel bod</div><div class="kpi-v">' + (d.maxBod ? fmt(d.maxBod) : '-') + '</div><div class="kpi-s">' + (d.controle && !d.controle.mp_laag ? 'Totale kosten blijven onder 80% van je gecontroleerde gemiddelde' : 'Totale kosten blijven onder 80% van de laagste prijs') + '</div></div>';
   h += '<div class="kpi"><div class="kpi-l">Handelspotentieel</div><div class="kpi-v">' + (d.roi || 0) + '<span style="font-size:13px;font-weight:500;color:var(--ink-3)"> / 100</span></div><div class="meter"><i data-w="' + (d.roi || 0) + '"></i></div></div>';
-  h += '<div class="kpi"><div class="kpi-l">Betrouwbaarheid prijzen</div><div class="kpi-v"><span class="conf ' + conf.cls + '" style="font-size:20px;font-weight:700;color:var(--ink)"><i></i>' + conf.label + '</span></div><div class="kpi-s">Zekerheid van het AI-model, geen garantie</div></div>';
+  h += '<div class="kpi"><div class="kpi-l">Betrouwbaarheid prijzen</div><div class="kpi-v"><span class="conf ' + (d.controle ? 'pos' : conf.cls) + '" style="font-size:20px;font-weight:700;color:var(--ink)"><i></i>' + (d.controle ? 'Gecontroleerd' : conf.label) + '</span></div><div class="kpi-s">' + (d.controle ? 'Marktprijs door jou nagekeken' : 'Zekerheid van het AI-model, geen garantie') + '</div></div>';
   h += '</div></div>';
 
   // Financiële analyse
@@ -1420,6 +1543,8 @@ function toonAnalyseResultaat(d) {
   }
   h += '</div>';
 
+  h += controleKaart(d, idx);
+
   // Waarom dit advies
   h += '<div class="card"><div class="card-h"><h2>Waarom dit advies?</h2></div><ul class="why">';
   adviesRedenen(d).forEach(function(r) {
@@ -1432,11 +1557,11 @@ function toonAnalyseResultaat(d) {
   if (d.prijzen) {
     h += '<div class="card"><div class="card-h"><h2>Marktprijzen</h2></div><div class="prices-strip">';
     if (d.prijzen.nieuwprijs) h += '<div class="ps"><div class="ps-l">Nieuwprijs</div><div class="ps-v">' + fmt(d.prijzen.nieuwprijs) + '</div><div class="ps-s">' + esc(d.prijzen.nieuwprijs_bron || '') + '</div></div>';
-    if (mp) h += '<div class="ps"><div class="ps-l">Tweedehands (Marktplaats)</div><div class="ps-v">' + fmt(mp.gemiddeld) + '</div><div class="ps-s">' + fmt(mp.laag) + ' tot ' + fmt(mp.hoog) + '</div></div>';
+    if (mp) h += '<div class="ps"><div class="ps-l">Tweedehands (Marktplaats)</div><div class="ps-v">' + fmt(mp.gemiddeld) + '</div><div class="ps-s">' + (d.controle ? 'Door jou gecontroleerd' : fmt(mp.laag) + ' tot ' + fmt(mp.hoog)) + '</div></div>';
     if (eb) h += '<div class="ps"><div class="ps-l">eBay</div><div class="ps-v">' + fmt(eb.gemiddeld) + '</div><div class="ps-s">' + fmt(eb.laag) + ' tot ' + fmt(eb.hoog) + '</div></div>';
     h += '</div></div>';
     h += '<div class="pgrid">';
-    if (mp) h += platformKaart('Marktplaats', mp, 'Zoekwoorden', mp.zoekwoorden);
+    if (mp) h += platformKaart('Marktplaats', mp, 'Zoekwoorden', mp.zoekwoorden, d.controle);
     if (eb) h += platformKaart('eBay', eb, 'Keywords', eb.keywords);
     h += '</div>';
     if (d.prijzen.aandachtspunten && d.prijzen.aandachtspunten.length) {
@@ -1449,7 +1574,7 @@ function toonAnalyseResultaat(d) {
   var box = document.getElementById('analyse-result');
   box.innerHTML = h;
   setFase('resultaat');
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+  if (!behoudScroll) window.scrollTo({ top: 0, behavior: 'smooth' });
   requestAnimationFrame(function() {
     requestAnimationFrame(function() {
       box.querySelectorAll('.meter > i').forEach(function(i) { i.style.width = i.getAttribute('data-w') + '%'; });
@@ -1520,7 +1645,8 @@ function maakKavelKaart(k, i, opts) {
     var pct = k.mp_gemiddeld ? Math.round(k.kosten.marge / k.mp_gemiddeld * 100) : null;
     var c = mp ? vertrouwenInfo(mp.vertrouwen) : null;
     h += '<div class="kc-result"><span class="marge ' + (k.kosten.marge > 0 ? 'pos' : k.kosten.marge < 0 ? 'neg' : '') + '">' + fmtS(k.kosten.marge) + ' marge' + (pct != null ? ' &middot; ' + pct + '%' : '') + '</span>';
-    if (c) h += '<span class="conf ' + c.cls + '"><i></i>Betrouwbaarheid ' + c.label.toLowerCase() + '</span>';
+    if (k.controle) h += '<span class="conf pos"><i></i>Prijs gecontroleerd</span>';
+    else if (c) h += '<span class="conf ' + c.cls + '"><i></i>Betrouwbaarheid ' + c.label.toLowerCase() + '</span>';
     h += '</div>';
   } else if (!opts.gewonnen && k.maxBod) {
     h += '<div class="kc-result"><span class="kc-meta">Geen bod ingevuld &middot; max. rendabel bod <b>' + fmt(k.maxBod) + '</b></span></div>';
