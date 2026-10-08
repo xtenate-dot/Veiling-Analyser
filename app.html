@@ -440,6 +440,11 @@ details.faq .fb ul{padding-left:20px}
 .ctl-l{display:block;font-size:13.5px;font-weight:600;margin-bottom:6px}
 .ctl-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}
 @media (max-width:640px){.ctl-grid{grid-template-columns:1fr}.ctl-actions .btn{flex:1 1 100%}}
+.ctl-check{display:flex;align-items:center;gap:10px;margin:16px 0 4px;font-size:14px;font-weight:600;cursor:pointer}
+.ctl-check input{width:18px;height:18px;accent-color:var(--accent)}
+.ver{font-size:11.5px;color:var(--ink-3);padding:6px 10px 0}
+.ver-main{text-align:center;margin-top:32px}
+@media (min-width:900px){.ver-main{display:none}}
 </style>
 </head>
 <body>
@@ -460,6 +465,7 @@ details.faq .fb ul{padding-left:20px}
       <button class="foot-item" onclick="setSheetsUrl()"><i class="ico" data-i="cloud"></i><span class="lbl">Synchronisatie<span class="sub js-sync-sub">Niet gekoppeld</span></span></button>
       <button class="foot-item" onclick="resetApiKey()"><i class="ico" data-i="key"></i><span class="lbl">API-sleutel<span class="sub js-key-sub">Ontbreekt</span></span></button>
       <button class="foot-item" onclick="toggleTheme()"><i class="ico" data-i="moon"></i><span class="lbl js-theme-lbl">Donkere weergave</span></button>
+      <div class="ver">Versie 8 okt 2026 &middot; korte zoekterm</div>
     </div>
   </aside>
 
@@ -697,11 +703,19 @@ details.faq .fb ul{padding-left:20px}
           </div>
         </details>
         <details class="faq">
+          <summary>Wat doe ik met een partij van meerdere stuks?</summary>
+          <div class="fb">
+            <p>De AI-analyse gaat uit van &eacute;&eacute;n product. Bij een partij, bijvoorbeeld &ldquo;280 stuks kleding&rdquo;, is de schatting dus niet bruikbaar. De app herkent dit aan woorden als &ldquo;stuks&rdquo;, &ldquo;partij&rdquo; of &ldquo;pallet&rdquo; in de titel en toont dan &ldquo;Controle nodig&rdquo; in plaats van een advies.</p>
+            <p>Zet bij Prijzen controleren het vinkje &ldquo;meerdere stuks&rdquo; aan en vul het aantal stuks, de opbrengst per stuk en het deel dat je verwacht te verkopen in. De marktwaarde van de partij is aantal &times; opbrengst per stuk &times; verwacht verkocht. Het advies volgt daarna uit dezelfde berekening als bij een los product. Bij een partij komt de herkenning uit de titel; staat er geen aantal of woord in, dan zet je het vinkje zelf aan.</p>
+          </div>
+        </details>
+        <details class="faq">
           <summary>Waar worden mijn gegevens bewaard?</summary>
           <div class="fb">Je kavels staan in de browser van dit apparaat. Als je synchronisatie met Google Sheets aanzet, worden ze ook in jouw eigen sheet bewaard, zodat je ze op telefoon en laptop ziet. Voor een analyse stuurt de app de productnaam naar Anthropic met jouw API-sleutel.</div>
         </details>
       </section>
 
+      <p class="ver ver-main">Versie 8 okt 2026 &middot; korte zoekterm</p>
     </main>
   </div>
 
@@ -1311,6 +1325,8 @@ function veilingVan(k) { return k.veiling || (k.kosten && k.kosten.site) || 'Onb
 
 function adviesRedenen(d) {
   var r = [];
+  if (partijOnbetrouwbaar(d)) r.push(['warn', 'Dit lijkt een partij van meerdere stuks' + (partijAantal(d) ? ' (ongeveer ' + partijAantal(d) + ')' : '') + '. De prijsschatting gaat uit van één product en is hier waarschijnlijk niet bruikbaar. Vul onder Prijzen controleren de opbrengst per stuk in.']);
+  if (partijOnbetrouwbaar(d)) return r;
   var mp = d.prijzen && d.prijzen.marktplaats;
   var k = d.kosten;
   if (k && mp && mp.gemiddeld) {
@@ -1385,6 +1401,27 @@ function platformKaart(naam, p, tagsLabel, tags, ctl) {
   return h + '</div>';
 }
 
+// ── Zoekterm en partij-detectie ──────────────────────────────────────────────
+function korteZoekterm(t) {
+  var s = String(t || '')
+    .replace(/\b\d+\s*(stuks|stuk|st|pcs|pieces)\b\.?/gi, ' ')
+    .replace(/\bo\.?\s?a\.?(?=\s|$)/gi, ' ')
+    .replace(/[(),;:!?"'\/\\]/g, ' ');
+  var stop = { en: 1, de: 1, het: 1, een: 1, van: 1, ruim: 1, circa: 1, ca: 1, diverse: 1, div: 1, met: 1, incl: 1, '&': 1, '+': 1 };
+  var w = s.split(/\s+/).filter(function(x) {
+    return x && !stop[x.toLowerCase().replace(/\.$/, '')] && !/^\d{5,}$/.test(x);
+  });
+  return w.slice(0, 6).join(' ');
+}
+// null = geen partij, 0 = partij met onbekend aantal, anders het aantal stuks
+function partijAantal(d) {
+  var tekst = (d.titel || '') + ' ' + naamUitUrl(d.url || '');
+  var m = tekst.match(/\b(\d{2,})\s*(stuks|stuk|st|pcs|pieces|artikelen|items)\b/i);
+  if (m) return parseInt(m[1], 10);
+  return /\b(partij|pallet|assortiment)\b/i.test(tekst) ? 0 : null;
+}
+function partijOnbetrouwbaar(d) { return partijAantal(d) !== null && !d.controle; }
+
 // ── Prijzen controleren (handmatig, gratis) ─────────────────────────────────
 var BACKUP_KEYS = ['prijzen', 'kosten', 'advies', 'adviesReden', 'roi', 'maxBod', 'mp_gemiddeld', 'mp_laag', 'mp_hoog', 'nieuwprijs'];
 function kopie(x) { return x === undefined ? undefined : JSON.parse(JSON.stringify(x)); }
@@ -1412,24 +1449,37 @@ function controleKaart(d, idx) {
   var h = '<div class="card" id="controle-kaart"><div class="card-h"><h2>Prijzen controleren</h2>' +
     (c ? '<span class="conf pos"><i></i>Gecontroleerd op ' + new Date(c.op).toLocaleDateString('nl-NL') + '</span>' : '<span class="conf warn"><i></i>Nog niet gecontroleerd</span>') + '</div>';
   h += '<p class="card-sub">De prijzen in deze analyse zijn schattingen van het AI-model. Zoek vergelijkbare advertenties op en vul het gemiddelde in. Marge en advies worden dan opnieuw berekend.</p>';
-  h += '<div class="field"><label for="ctl-zoek">Zoekterm</label><input class="input" id="ctl-zoek" type="text" value="' + esc(d.titel || '') + '"><div class="help">Maak de zoekterm preciezer met type, model of opslag.</div></div>';
+  var kort = korteZoekterm(d.titel || '');
+  h += '<div class="field"><label for="ctl-zoek">Zoekterm</label><input class="input" id="ctl-zoek" type="text" value="' + esc(kort) + '"><div class="help">' +
+    (kort !== (d.titel || '').trim() ? 'De titel is ingekort, want lange titels vinden op Marktplaats vaak niets. Pas de zoekterm aan als dat nodig is. ' : '') +
+    'Maak de zoekterm preciezer met type, model of opslag.</div></div>';
   h += '<div class="ctl-links">' +
     '<button class="btn btn-secondary btn-sm" onclick="openZoek(\'mp\')">' + ic('external') + 'Marktplaats</button>' +
     '<button class="btn btn-secondary btn-sm" onclick="openZoek(\'ebay\')">' + ic('external') + 'eBay</button>' +
     '<button class="btn btn-secondary btn-sm" onclick="openZoek(\'bol\')">' + ic('external') + 'bol.com</button>' +
     '<button class="btn btn-secondary btn-sm" onclick="openZoek(\'google\')">' + ic('external') + 'Google Shopping</button></div>';
   h += '<div class="note">' + ic('info') + '<span>Kijk naar 5 tot 10 advertenties met dezelfde specificaties en staat. Let op verschillen binnen één productnaam (bijvoorbeeld M3, M3 Pro en M3 Max) en laat &ldquo;gezocht&rdquo;-advertenties, accessoires en uitschieters buiten beschouwing.</span></div>';
-  h += '<div class="ctl-grid">' +
+  var pa = partijAantal(d);
+  var isPartij = c ? !!c.partij : pa !== null;
+  var pc = (c && c.partij) || {};
+  h += '<label class="ctl-check"><input type="checkbox" id="ctl-partij" onchange="togglePartij()"' + (isPartij ? ' checked' : '') + '> Dit kavel bestaat uit meerdere stuks (partij)</label>';
+  h += '<div id="ctl-partijvel" style="display:' + (isPartij ? 'block' : 'none') + '"><div class="note">' + ic('info') + '<span>Zoek een paar losse stuks uit deze partij op en kijk wat ze gemiddeld opbrengen. De marktwaarde van de partij is dan aantal &times; opbrengst per stuk &times; het deel dat je verwacht te verkopen.</span></div>' +
+    '<div class="ctl-grid">' +
+    '<div><label class="ctl-l" for="ctl-aantal">Aantal stuks</label><input class="input" id="ctl-aantal" type="text" inputmode="numeric" oninput="updatePartijTotaal()" value="' + val(pc.aantal || (pa || '')) + '"></div>' +
+    '<div><label class="ctl-l" for="ctl-stuk">Opbrengst per stuk</label><div class="money"><span>&euro;</span><input class="input" id="ctl-stuk" type="text" inputmode="decimal" oninput="updatePartijTotaal()" value="' + val(pc.per_stuk) + '"></div></div>' +
+    '<div><label class="ctl-l" for="ctl-pct">Verwacht verkocht <span class="opt">(%)</span></label><input class="input" id="ctl-pct" type="text" inputmode="numeric" placeholder="100" oninput="updatePartijTotaal()" value="' + val(pc.verkocht_pct) + '"></div></div>' +
+    '<div class="help" id="ctl-totaal"></div></div>';
+  h += '<div id="ctl-normaal" style="display:' + (isPartij ? 'none' : 'block') + '"><div class="ctl-grid">' +
     '<div><label class="ctl-l" for="ctl-gem">Marktplaats gemiddeld</label><div class="money"><span>&euro;</span><input class="input" id="ctl-gem" type="text" inputmode="decimal" placeholder="bijv. 1250" value="' + val(c && c.mp_gem) + '"></div></div>' +
     '<div><label class="ctl-l" for="ctl-laag">Laagste vergelijkbare <span class="opt">(optioneel)</span></label><div class="money"><span>&euro;</span><input class="input" id="ctl-laag" type="text" inputmode="decimal" value="' + val(c && c.mp_laag) + '"></div></div>' +
-    '<div><label class="ctl-l" for="ctl-nieuw">Nieuwprijs <span class="opt">(optioneel)</span></label><div class="money"><span>&euro;</span><input class="input" id="ctl-nieuw" type="text" inputmode="decimal" value="' + val(c && c.nieuw) + '"></div></div></div>';
+    '<div><label class="ctl-l" for="ctl-nieuw">Nieuwprijs <span class="opt">(optioneel)</span></label><div class="money"><span>&euro;</span><input class="input" id="ctl-nieuw" type="text" inputmode="decimal" value="' + val(c && c.nieuw) + '"></div></div></div></div>';
   h += '<div class="help">Zonder laagste prijs rekent het maximaal rendabele bod met 80% van je gemiddelde.</div>';
   h += '<div class="msg err" id="ctl-err" role="alert"></div>';
   h += '<div class="ctl-actions"><button class="btn btn-primary" onclick="bewaarControle(' + idx + ')">' + ic('check') + 'Opslaan en herberekenen</button>' +
     (c ? '<button class="btn btn-secondary" onclick="herstelAiSchatting(' + idx + ')">' + ic('undo') + 'Terug naar AI-schatting</button>' : '') + '</div></div>';
   return h;
 }
-function pasControleToe(k, gem, laag, nieuw) {
+function pasControleToe(k, gem, laag, nieuw, partij) {
   if (!k.ai_backup) {
     k.ai_backup = {};
     BACKUP_KEYS.forEach(function(key) { k.ai_backup[key] = kopie(k[key]); });
@@ -1454,23 +1504,48 @@ function pasControleToe(k, gem, laag, nieuw) {
       ? 'Inkoopprijs ' + fmt(k.kosten.totaal) + ' vs MP ~' + fmt(gem) + ' marge ' + fmt(m) + ' (' + pct + '% van verkoopprijs).'
       : 'Inkoopprijs ' + fmt(k.kosten.totaal) + ' ligt ' + fmt(Math.abs(m)) + ' boven MP prijs van ' + fmt(gem) + ' (' + pct + '%).';
   }
-  k.controle = { mp_gem: gem, mp_laag: laag, nieuw: nieuw, op: Date.now() };
+  k.controle = { mp_gem: gem, mp_laag: laag, nieuw: nieuw, partij: partij || null, op: Date.now() };
+}
+function togglePartij() {
+  var aan = document.getElementById('ctl-partij').checked;
+  document.getElementById('ctl-partijvel').style.display = aan ? 'block' : 'none';
+  document.getElementById('ctl-normaal').style.display = aan ? 'none' : 'block';
+  updatePartijTotaal();
+}
+function leesBedragVeld(id) {
+  var v = document.getElementById(id).value.trim();
+  if (!v) return null;
+  return /^[\d.,\s€]+$/.test(v) ? parseBedrag(v) : NaN;
+}
+function updatePartijTotaal() {
+  var el = document.getElementById('ctl-totaal');
+  if (!el) return;
+  var n = leesBedragVeld('ctl-aantal'), p = leesBedragVeld('ctl-stuk'), pct = leesBedragVeld('ctl-pct');
+  if (pct === null) pct = 100;
+  el.textContent = (n > 0 && p > 0 && pct > 0 && pct <= 100 && isFinite(n) && isFinite(p) && isFinite(pct))
+    ? 'Marktwaarde partij: ' + fmt(n * p * pct / 100) + ' (' + n + ' × ' + fmt(p) + (pct < 100 ? ' × ' + pct + '%' : '') + ')'
+    : '';
 }
 function bewaarControle(idx) {
   var k = kavels[idx];
-  var lees = function(id) {
-    var v = document.getElementById(id).value.trim();
-    if (!v) return null;
-    return /^[\d.,\s€]+$/.test(v) ? parseBedrag(v) : NaN;
-  };
-  var gem = lees('ctl-gem'), laag = lees('ctl-laag'), nieuw = lees('ctl-nieuw');
-  var fout = '';
-  if (gem === null || !isFinite(gem) || gem <= 0) fout = 'Voer de gemiddelde Marktplaats-prijs in als geldig bedrag, bijvoorbeeld 1250.';
-  else if (laag !== null && (!isFinite(laag) || laag <= 0)) fout = 'Voer de laagste prijs als geldig bedrag in, of laat het veld leeg.';
-  else if (laag !== null && laag > gem) fout = 'De laagste prijs kan niet hoger zijn dan het gemiddelde.';
-  else if (nieuw !== null && (!isFinite(nieuw) || nieuw <= 0)) fout = 'Voer de nieuwprijs als geldig bedrag in, of laat het veld leeg.';
+  var partijAan = document.getElementById('ctl-partij').checked;
+  var gem, laag = null, nieuw = null, partij = null, fout = '';
+  if (partijAan) {
+    var n = leesBedragVeld('ctl-aantal'), p = leesBedragVeld('ctl-stuk'), pct = leesBedragVeld('ctl-pct');
+    if (pct === null) pct = 100;
+    if (n === null || !isFinite(n) || n < 1 || Math.round(n) !== n) fout = 'Voer het aantal stuks in als geheel getal, bijvoorbeeld 280.';
+    else if (p === null || !isFinite(p) || p <= 0) fout = 'Voer de gemiddelde opbrengst per stuk in als geldig bedrag, bijvoorbeeld 15.';
+    else if (!isFinite(pct) || pct <= 0 || pct > 100) fout = 'Voer bij verwacht verkocht een percentage tussen 1 en 100 in, of laat het leeg voor 100%.';
+    else { gem = n * p * pct / 100; partij = { aantal: n, per_stuk: p, verkocht_pct: pct === 100 ? null : pct }; }
+  } else {
+    gem = leesBedragVeld('ctl-gem'); laag = leesBedragVeld('ctl-laag'); nieuw = leesBedragVeld('ctl-nieuw');
+    if (gem === null || !isFinite(gem) || gem <= 0) fout = 'Voer de gemiddelde Marktplaats-prijs in als geldig bedrag, bijvoorbeeld 1250.';
+    else if (laag !== null && (!isFinite(laag) || laag <= 0)) fout = 'Voer de laagste prijs als geldig bedrag in, of laat het veld leeg.';
+    else if (laag !== null && laag > gem) fout = 'De laagste prijs kan niet hoger zijn dan het gemiddelde.';
+    else if (nieuw !== null && (!isFinite(nieuw) || nieuw <= 0)) fout = 'Voer de nieuwprijs als geldig bedrag in, of laat het veld leeg.';
+  }
   if (fout) { toonMsg('ctl-err', fout); return; }
-  pasControleToe(k, gem, laag, nieuw);
+  pasControleToe(k, gem, laag, nieuw, partij);
   slaKavelsOp(); renderOverzicht();
   toonAnalyseResultaat(k, true);
   toast('Prijzen opgeslagen. Marge en advies zijn opnieuw berekend.');
@@ -1488,7 +1563,8 @@ function herstelAiSchatting(idx) {
 function toonAnalyseResultaat(d, behoudScroll) {
   var mp = d.prijzen && d.prijzen.marktplaats ? d.prijzen.marktplaats : null;
   var eb = d.prijzen && d.prijzen.ebay ? d.prijzen.ebay : null;
-  var a = adviesInfo(d.advies);
+  var ond = partijOnbetrouwbaar(d);
+  var a = ond ? { key: 'wacht', label: 'Controle nodig', tekst: '' } : adviesInfo(d.advies);
   var idx = kavels.indexOf(d);
   var conf = vertrouwenInfo(mp ? mp.vertrouwen : null);
   var url = veiligeUrl(d.url);
@@ -1506,23 +1582,23 @@ function toonAnalyseResultaat(d, behoudScroll) {
   if (url) h += ' &middot; <a href="' + esc(url) + '" target="_blank" rel="noopener">Bekijk kavel</a>';
   h += '</span></div>';
   h += '<h2>' + esc(d.titel || 'Onbekend product') + '</h2>';
-  h += '<p class="uitleg">' + (d.kosten ? esc(a.tekst) : 'Er is nog geen bod ingevuld, dus de marge kan niet worden berekend.') + '</p>';
-  if (d.adviesReden) h += '<p class="reden">' + esc(d.adviesReden) + '</p>';
+  h += '<p class="uitleg">' + (ond ? 'Dit lijkt een partij van meerdere stuks' + (partijAantal(d) ? ' (ongeveer ' + partijAantal(d) + ')' : '') + '. De AI-schatting gaat uit van één product, dus er is nog geen betrouwbaar advies. Vul hieronder bij Prijzen controleren de opbrengst per stuk in.' : d.kosten ? esc(a.tekst) : 'Er is nog geen bod ingevuld, dus de marge kan niet worden berekend.') + '</p>';
+  if (d.adviesReden && !ond) h += '<p class="reden">' + esc(d.adviesReden) + '</p>';
   h += '<div class="hero-kpis">';
-  h += '<div class="kpi"><div class="kpi-l">Maximaal rendabel bod</div><div class="kpi-v">' + (d.maxBod ? fmt(d.maxBod) : '-') + '</div><div class="kpi-s">' + (d.controle && !d.controle.mp_laag ? 'Totale kosten blijven onder 80% van je gecontroleerde gemiddelde' : 'Totale kosten blijven onder 80% van de laagste prijs') + '</div></div>';
-  h += '<div class="kpi"><div class="kpi-l">Handelspotentieel</div><div class="kpi-v">' + (d.roi || 0) + '<span style="font-size:13px;font-weight:500;color:var(--ink-3)"> / 100</span></div><div class="meter"><i data-w="' + (d.roi || 0) + '"></i></div></div>';
-  h += '<div class="kpi"><div class="kpi-l">Betrouwbaarheid prijzen</div><div class="kpi-v"><span class="conf ' + (d.controle ? 'pos' : conf.cls) + '" style="font-size:20px;font-weight:700;color:var(--ink)"><i></i>' + (d.controle ? 'Gecontroleerd' : conf.label) + '</span></div><div class="kpi-s">' + (d.controle ? 'Marktprijs door jou nagekeken' : 'Zekerheid van het AI-model, geen garantie') + '</div></div>';
+  h += '<div class="kpi"><div class="kpi-l">Maximaal rendabel bod</div><div class="kpi-v">' + (d.maxBod && !ond ? fmt(d.maxBod) : '-') + '</div><div class="kpi-s">' + (d.controle && !d.controle.mp_laag ? 'Totale kosten blijven onder 80% van je gecontroleerde gemiddelde' : 'Totale kosten blijven onder 80% van de laagste prijs') + '</div></div>';
+  h += '<div class="kpi"><div class="kpi-l">Handelspotentieel</div><div class="kpi-v">' + (ond ? '-' : (d.roi || 0) + '<span style="font-size:13px;font-weight:500;color:var(--ink-3)"> / 100</span>') + '</div>' + (ond ? '<div class="kpi-s">Pas beschikbaar na controle van de prijs</div>' : '<div class="meter"><i data-w="' + (d.roi || 0) + '"></i></div>') + '</div>';
+  h += '<div class="kpi"><div class="kpi-l">Betrouwbaarheid prijzen</div><div class="kpi-v"><span class="conf ' + (d.controle ? 'pos' : ond ? 'warn' : conf.cls) + '" style="font-size:20px;font-weight:700;color:var(--ink)"><i></i>' + (d.controle ? 'Gecontroleerd' : ond ? 'Niet bruikbaar' : conf.label) + '</span></div><div class="kpi-s">' + (d.controle ? 'Marktprijs door jou nagekeken' : ond ? 'Schatting geldt voor \u00e9\u00e9n product' : 'Zekerheid van het AI-model, geen garantie') + '</div></div>';
   h += '</div></div>';
 
   // Financiële analyse
   h += '<div class="card"><div class="card-h"><h2>Financiële analyse</h2>';
   if (d.kosten && d.kosten.site) h += '<span class="kc-meta">' + esc(d.kosten.site) + ' &middot; ' + (d.eigen_bod ? 'Mijn bod' : 'Huidig bod') + '</span>';
   h += '</div>';
-  if (d.kosten && mp) {
+  if (d.kosten && mp && !ond) {
     var k = d.kosten, pct = mp.gemiddeld ? Math.round(k.marge / mp.gemiddeld * 100) : 0;
     var margeCls = k.marge > 0 ? 'pos' : k.marge < 0 ? 'neg' : '';
     h += '<div class="metrics">';
-    h += '<div class="metric"><div class="metric-l">Marktwaarde</div><div class="metric-v">' + fmt(mp.gemiddeld) + '</div><div class="metric-s">Marktplaats gemiddeld</div></div>';
+    h += '<div class="metric"><div class="metric-l">Marktwaarde</div><div class="metric-v">' + fmt(mp.gemiddeld) + '</div><div class="metric-s">' + (d.controle && d.controle.partij ? d.controle.partij.aantal + ' × ' + fmt(d.controle.partij.per_stuk) + (d.controle.partij.verkocht_pct ? ' × ' + d.controle.partij.verkocht_pct + '%' : '') : 'Marktplaats gemiddeld') + '</div></div>';
     h += '<div class="metric"><div class="metric-l">Totale kosten</div><div class="metric-v">' + fmt(k.totaal) + '</div><div class="metric-s">Incl. veilingkosten en btw</div></div>';
     h += '<div class="metric"><div class="metric-l">Geschatte marge</div><div class="metric-v ' + margeCls + '">' + fmtS(k.marge) + '</div><div class="metric-s">Marktwaarde min kosten</div></div>';
     h += '<div class="metric"><div class="metric-l">Marge</div><div class="metric-v ' + margeCls + '">' + pct + '%</div><div class="metric-s">Van de verkoopprijs</div></div>';
@@ -1537,6 +1613,15 @@ function toonAnalyseResultaat(d, behoudScroll) {
     h += '<tr class="sub"><td>Marktwaarde (Marktplaats gemiddeld)</td><td>' + fmt(mp.gemiddeld) + '</td></tr>';
     h += '<tr class="res"><td>Geschatte marge</td><td class="' + margeCls + '">' + fmtS(k.marge) + '</td></tr>';
     h += '</tbody></table>';
+  } else if (d.kosten && ond) {
+    var kk = d.kosten, btwP = (kk.bod + kk.vk) ? Math.round(kk.btw / (kk.bod + kk.vk) * 100) : 21;
+    h += '<table class="ctable"><tbody>';
+    h += '<tr><td>' + (d.eigen_bod ? 'Mijn bod' : 'Huidig bod') + '</td><td>' + fmt(kk.bod) + '</td></tr>';
+    h += '<tr class="sub"><td>+ Veilingkosten (' + (kk.opgeld_pct || 17) + '%)</td><td>' + fmt(kk.vk) + '</td></tr>';
+    h += '<tr class="sub"><td>+ Btw (' + btwP + '% over bod en veilingkosten)</td><td>' + fmt(kk.btw) + '</td></tr>';
+    h += '<tr class="tot"><td>= Totale kosten</td><td>' + fmt(kk.totaal) + '</td></tr>';
+    h += '</tbody></table>';
+    h += '<div class="note">' + ic('alert') + '<span>Marktwaarde en marge worden pas getoond nadat je onder Prijzen controleren de opbrengst per stuk hebt ingevuld.</span></div>';
   } else {
     h += '<div class="empty small" style="border-style:solid"><h3>Nog geen bod ingevuld</h3><p>Vul een bod in om de totale kosten en de marge te zien.' + (d.maxBod ? ' Bieden tot ' + fmt(d.maxBod) + ' is volgens de berekening rendabel.' : '') + '</p>' +
          (idx >= 0 ? '<button class="btn btn-primary" onclick="heranalyseer(' + idx + ')">Bod invullen</button>' : '') + '</div>';
@@ -1555,7 +1640,9 @@ function toonAnalyseResultaat(d, behoudScroll) {
 
   // Marktprijzen
   if (d.prijzen) {
-    h += '<div class="card"><div class="card-h"><h2>Marktprijzen</h2></div><div class="prices-strip">';
+    h += '<div class="card"><div class="card-h"><h2>Marktprijzen</h2></div>';
+    if (ond) h += '<div class="note" style="margin:0 0 14px">' + ic('alert') + '<span>Deze prijzen gelden voor één product, niet voor de hele partij.</span></div>';
+    h += '<div class="prices-strip">';
     if (d.prijzen.nieuwprijs) h += '<div class="ps"><div class="ps-l">Nieuwprijs</div><div class="ps-v">' + fmt(d.prijzen.nieuwprijs) + '</div><div class="ps-s">' + esc(d.prijzen.nieuwprijs_bron || '') + '</div></div>';
     if (mp) h += '<div class="ps"><div class="ps-l">Tweedehands (Marktplaats)</div><div class="ps-v">' + fmt(mp.gemiddeld) + '</div><div class="ps-s">' + (d.controle ? 'Door jou gecontroleerd' : fmt(mp.laag) + ' tot ' + fmt(mp.hoog)) + '</div></div>';
     if (eb) h += '<div class="ps"><div class="ps-l">eBay</div><div class="ps-v">' + fmt(eb.gemiddeld) + '</div><div class="ps-s">' + fmt(eb.laag) + ' tot ' + fmt(eb.hoog) + '</div></div>';
@@ -1614,7 +1701,8 @@ function thumbHtml(k) {
 function maakKavelKaart(k, i, opts) {
   opts = opts || {};
   var echteIdx = kavels.indexOf(k);
-  var a = adviesInfo(k.advies);
+  var ond = !opts.gewonnen && partijOnbetrouwbaar(k);
+  var a = ond ? { key: 'wacht', label: 'Controle nodig' } : adviesInfo(k.advies);
   var mp = k.prijzen && k.prijzen.marktplaats;
   var url = veiligeUrl(k.url);
   var card = document.createElement('article');
@@ -1638,10 +1726,12 @@ function maakKavelKaart(k, i, opts) {
   h += '<div class="kc-figs">';
   h += '<div><div class="fig-l">' + f1l + '</div><div class="fig-v">' + (k.huidig_bod ? fmt(k.huidig_bod) : '-') + '</div></div>';
   h += '<div><div class="fig-l">' + f2l + '</div><div class="fig-v">' + (k.kosten ? fmt(k.kosten.totaal) : '-') + '</div></div>';
-  h += '<div><div class="fig-l">' + f3l + '</div><div class="fig-v">' + (k.mp_gemiddeld ? fmt(k.mp_gemiddeld) : '-') + '</div></div>';
+  h += '<div><div class="fig-l">' + f3l + '</div><div class="fig-v">' + (k.mp_gemiddeld && !ond ? fmt(k.mp_gemiddeld) : '-') + '</div></div>';
   h += '</div>';
 
-  if (k.kosten && k.kosten.marge != null) {
+  if (ond) {
+    h += '<div class="kc-result"><span class="kc-meta">Partij van meerdere stuks: controleer eerst de opbrengst per stuk.</span></div>';
+  } else if (k.kosten && k.kosten.marge != null) {
     var pct = k.mp_gemiddeld ? Math.round(k.kosten.marge / k.mp_gemiddeld * 100) : null;
     var c = mp ? vertrouwenInfo(mp.vertrouwen) : null;
     h += '<div class="kc-result"><span class="marge ' + (k.kosten.marge > 0 ? 'pos' : k.kosten.marge < 0 ? 'neg' : '') + '">' + fmtS(k.kosten.marge) + ' marge' + (pct != null ? ' &middot; ' + pct + '%' : '') + '</span>';
@@ -1651,7 +1741,7 @@ function maakKavelKaart(k, i, opts) {
   } else if (!opts.gewonnen && k.maxBod) {
     h += '<div class="kc-result"><span class="kc-meta">Geen bod ingevuld &middot; max. rendabel bod <b>' + fmt(k.maxBod) + '</b></span></div>';
   }
-  if (!opts.gewonnen && k.adviesReden) h += '<div class="kc-reden">' + esc(k.adviesReden) + '</div>';
+  if (!opts.gewonnen && k.adviesReden && !ond) h += '<div class="kc-reden">' + esc(k.adviesReden) + '</div>';
 
   h += '<div class="kc-actions"></div>';
   card.innerHTML = h;
