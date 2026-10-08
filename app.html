@@ -6,340 +6,1058 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Veiling Analyser">
-<meta name="theme-color" content="#1a472a">
+<meta name="theme-color" content="#F5F6F8" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0F1218" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon48.png">
+<link rel="apple-touch-icon" href="icons/icon512.png">
 <title>Veiling Analyser</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script>try{var t=localStorage.getItem('va_theme');if(t==='dark'||t==='light')document.documentElement.setAttribute('data-theme',t);}catch(e){}</script>
 <style>
+/* ── Design tokens ─────────────────────────────────────────────── */
+:root{
+  --bg:#F5F6F8; --surface:#FFFFFF; --surface-2:#F0F2F5; --line:#E2E5EB; --line-2:#CBD0DA;
+  --ink:#14171F; --ink-2:#4B5262; --ink-3:#6B7385;
+  --accent:#3A4BDC; --accent-ink:#FFFFFF; --accent-hover:#2E3DC0; --accent-soft:#ECEEFC; --accent-line:#C9CFF7;
+  --pos:#127A4E; --pos-soft:#E3F4EB; --pos-line:#B4DFC8;
+  --warn:#955700; --warn-soft:#FFF1D6; --warn-line:#F1D08E;
+  --neg:#BE3434; --neg-soft:#FCE9E9; --neg-line:#EDBABA;
+  --seg-bod:#4B5262; --seg-vk:#8D95A6; --seg-btw:#C3C8D3;
+  --shadow:0 1px 2px rgba(20,23,31,.06),0 6px 18px rgba(20,23,31,.06);
+  --overlay:rgba(20,23,31,.45);
+  --r-sm:8px; --r:12px; --r-lg:16px;
+  --sidebar-w:240px; --topbar-h:56px;
+  --ff:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;
+  color-scheme:light;
+}
+:root[data-theme="dark"]{
+  --bg:#0F1218; --surface:#171B23; --surface-2:#1E232D; --line:#2A303C; --line-2:#3A4150;
+  --ink:#E9ECF2; --ink-2:#A9B1C0; --ink-3:#8A93A5;
+  --accent:#8896FF; --accent-ink:#0F1218; --accent-hover:#A0ABFF; --accent-soft:#1F2547; --accent-line:#363F7A;
+  --pos:#4FCB96; --pos-soft:#12291F; --pos-line:#1F5A41;
+  --warn:#F0B35E; --warn-soft:#2B2112; --warn-line:#5C4318;
+  --neg:#F28383; --neg-soft:#2E1818; --neg-line:#6A2D2D;
+  --seg-bod:#A9B1C0; --seg-vk:#6E778A; --seg-btw:#444B5A;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.35);
+  --overlay:rgba(0,0,0,.6);
+  color-scheme:dark;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0F1218; --surface:#171B23; --surface-2:#1E232D; --line:#2A303C; --line-2:#3A4150;
+    --ink:#E9ECF2; --ink-2:#A9B1C0; --ink-3:#8A93A5;
+    --accent:#8896FF; --accent-ink:#0F1218; --accent-hover:#A0ABFF; --accent-soft:#1F2547; --accent-line:#363F7A;
+    --pos:#4FCB96; --pos-soft:#12291F; --pos-line:#1F5A41;
+    --warn:#F0B35E; --warn-soft:#2B2112; --warn-line:#5C4318;
+    --neg:#F28383; --neg-soft:#2E1818; --neg-line:#6A2D2D;
+    --seg-bod:#A9B1C0; --seg-vk:#6E778A; --seg-btw:#444B5A;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.35);
+    --overlay:rgba(0,0,0,.6);
+    color-scheme:dark;
+  }
+}
+
+/* ── Base ──────────────────────────────────────────────────────── */
 *{box-sizing:border-box;margin:0;padding:0}
-:root{--brand:#1a472a;--brand-light:#e8f5e9;--accent:#f4a261;--bg:#f5f7f4;--surface:#fff;--border:#dde3d8;--text:#1c2b1e;--muted:#6b7c6e}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
-header{background:var(--brand);color:white;padding:14px 22px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:100}
-.logo{width:36px;height:36px;background:var(--accent);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
-header h1{font-size:16px;font-weight:700}
-header p{font-size:11px;opacity:.65;margin-top:1px}
-.hdr-r{margin-left:auto;display:flex;gap:8px}
-.hbtn{padding:7px 13px;border-radius:7px;border:none;font-size:13px;font-weight:600;cursor:pointer}
-.hbtn-ghost{background:rgba(255,255,255,.15);color:white}
-.hbtn-ghost:hover{background:rgba(255,255,255,.25)}
-.hbtn-accent{background:var(--accent);color:white}
-.apikey-bar{background:#fff8e1;border-bottom:1px solid #ffe082;padding:10px 22px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:13px}
-.apikey-bar input{flex:1;min-width:200px;padding:7px 10px;border:1px solid #ffe082;border-radius:7px;font-size:13px;font-family:monospace;outline:none}
-.apikey-bar .save-btn{padding:7px 14px;background:var(--brand);color:white;border:none;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap}
-.apikey-ok{background:#e8f5e9;border-bottom:1px solid #c8e6c9;padding:8px 22px;font-size:13px;color:#1a6b35;display:flex;align-items:center;gap:8px}
-.tabs{display:flex;background:white;border-bottom:1px solid var(--border);padding:0 18px;gap:4px;overflow-x:auto}
-.tab{padding:11px 15px;font-size:13px;font-weight:600;cursor:pointer;border-bottom:3px solid transparent;color:var(--muted);white-space:nowrap;transition:all .15s}
-.tab.active{color:var(--brand);border-bottom-color:var(--brand)}
-.tab-badge{background:var(--accent);color:white;font-size:10px;font-weight:700;padding:1px 6px;border-radius:20px;margin-left:4px}
-.sel-balk{background:#fff8e1;border-bottom:1px solid #ffe082;padding:9px 18px;display:none;align-items:center;gap:10px;flex-wrap:wrap}
-.sel-balk span{font-size:13px;font-weight:600;color:#7a5c00}
-.sel-del-btn{padding:7px 13px;background:#e53935;color:white;border:none;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer}
-.sel-action{padding:6px 12px;background:transparent;color:#7a5c00;border:1px solid #ffe082;border-radius:7px;font-size:13px;cursor:pointer}
-.main{max-width:960px;margin:0 auto;padding:20px 18px}
-.panel{display:none}.panel.active{display:block}
-.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:16px}
-.card-title{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:14px}
-input[type=text],textarea{width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;background:var(--bg);color:var(--text);font-family:inherit;outline:none;transition:border-color .15s}
-input:focus,textarea:focus{border-color:var(--brand);background:white}
-textarea{resize:vertical;min-height:75px}
-label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:5px;margin-top:12px}
-label:first-child{margin-top:0}
-.hint{font-size:12px;color:var(--muted);margin-bottom:6px}
-.btn-primary{width:100%;padding:13px;background:var(--brand);color:white;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;margin-top:14px;transition:background .15s}
-.btn-primary:hover{background:#143d21}
-.btn-primary:disabled{background:#9ab39e;cursor:not-allowed}
-.btn-sm{background:var(--brand-light);color:var(--brand);border:none;border-radius:7px;font-size:12px;font-weight:600;padding:5px 10px;cursor:pointer}
-.btn-sm:hover{background:#c8e6c9}
-.btn-danger{background:#fde8e8;color:#c62828;border:none;border-radius:7px;font-size:12px;padding:5px 8px;cursor:pointer}
-.bod-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
-.bod-btn{padding:10px;border-radius:8px;border:1.5px solid var(--border);background:white;color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;transition:all .15s}
-.bod-btn.active{background:var(--brand);color:white;border-color:var(--brand)}
-.spinner{width:17px;height:17px;border:2.5px solid rgba(255,255,255,.3);border-top-color:white;border-radius:50%;animation:spin .65s linear infinite;flex-shrink:0}
+html{-webkit-text-size-adjust:100%}
+body{font-family:var(--ff);font-size:15px;line-height:1.5;background:var(--bg);color:var(--ink);min-height:100vh;-webkit-font-smoothing:antialiased;font-variant-numeric:tabular-nums}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer;background:none;border:none}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
+h1,h2,h3,h4{letter-spacing:-.01em}
+.ico{display:inline-flex;width:18px;height:18px;flex-shrink:0}
+.ico svg{width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+/* ── Layout ────────────────────────────────────────────────────── */
+.app{display:grid;grid-template-columns:var(--sidebar-w) minmax(0,1fr);min-height:100vh}
+.sidebar{position:sticky;top:0;height:100vh;display:flex;flex-direction:column;gap:20px;padding:18px 12px 14px;background:var(--surface);border-right:1px solid var(--line)}
+.content{min-width:0}
+.main{max-width:1080px;margin:0 auto;padding:36px 36px 72px}
+.topbar{display:none}
+.tabbar{display:none}
+
+.brand{display:flex;align-items:center;gap:10px;padding:2px 8px}
+.brand-mark{width:30px;height:30px;border-radius:9px;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center}
+.brand-mark .ico{width:18px;height:18px}
+.brand-name{font-weight:700;font-size:15px;letter-spacing:-.015em}
+
+.nav{display:flex;flex-direction:column;gap:2px}
+.nav-item{display:flex;align-items:center;gap:10px;height:38px;padding:0 10px;border-radius:var(--r-sm);color:var(--ink-2);font-weight:550;font-size:14px;text-align:left;transition:background .12s,color .12s}
+.nav-item:hover{background:var(--surface-2);color:var(--ink)}
+.nav-item.active{background:var(--accent-soft);color:var(--accent);font-weight:600}
+.nav-count{margin-left:auto;min-width:22px;height:20px;padding:0 7px;border-radius:999px;background:var(--surface-2);color:var(--ink-2);font-size:12px;font-weight:600;display:inline-grid;place-items:center}
+.nav-item.active .nav-count{background:var(--accent);color:var(--accent-ink)}
+
+.side-foot{margin-top:auto;display:flex;flex-direction:column;gap:2px;padding-top:12px;border-top:1px solid var(--line)}
+.foot-item{display:flex;align-items:center;gap:10px;min-height:40px;padding:4px 10px;border-radius:var(--r-sm);color:var(--ink-2);font-size:13.5px;text-align:left;width:100%;transition:background .12s}
+.foot-item:hover{background:var(--surface-2);color:var(--ink)}
+.foot-item .lbl{display:flex;flex-direction:column;line-height:1.25;min-width:0}
+.foot-item .sub{font-size:12px;color:var(--ink-3)}
+.foot-item .sub.ok{color:var(--pos)}
+.foot-item .sub.err{color:var(--neg)}
+
+@media (max-width:899px){
+  .app{display:block}
+  .sidebar{display:none}
+  .topbar{display:flex;position:sticky;top:0;z-index:40;height:var(--topbar-h);align-items:center;gap:8px;padding:0 14px;background:var(--surface);border-bottom:1px solid var(--line)}
+  .topbar .brand{padding:0;margin-right:auto}
+  .main{padding:20px 16px calc(92px + env(safe-area-inset-bottom))}
+  .tabbar{display:grid;grid-template-columns:repeat(4,1fr);position:fixed;left:0;right:0;bottom:0;z-index:50;background:var(--surface);border-top:1px solid var(--line);padding:6px 6px calc(6px + env(safe-area-inset-bottom))}
+  .tab-item{display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 0;border-radius:var(--r-sm);color:var(--ink-3);font-size:11.5px;font-weight:600;position:relative}
+  .tab-item .ico{width:22px;height:22px}
+  .tab-item.active{color:var(--accent)}
+  .tab-item .dot-n{position:absolute;top:2px;left:calc(50% + 6px);min-width:17px;height:17px;padding:0 5px;border-radius:999px;background:var(--accent);color:var(--accent-ink);font-size:10.5px;font-weight:700;display:grid;place-items:center}
+}
+
+/* ── Page header ───────────────────────────────────────────────── */
+.panel{display:none}
+.panel.active{display:block}
+.ph{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:24px}
+.ph h1{font-size:26px;line-height:1.2;font-weight:700;letter-spacing:-.025em}
+.ph p{margin-top:4px;color:var(--ink-2);font-size:14.5px;max-width:60ch}
+.ph-actions{display:flex;gap:8px;flex-wrap:wrap}
+@media (max-width:899px){.ph h1{font-size:22px}.ph{margin-bottom:18px}}
+
+/* ── Buttons ───────────────────────────────────────────────────── */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:38px;padding:0 14px;border-radius:var(--r-sm);font-size:14px;font-weight:600;white-space:nowrap;border:1px solid transparent;transition:background .12s,border-color .12s,transform .06s,color .12s}
+.btn:active:not(:disabled){transform:translateY(1px)}
+.btn:disabled{opacity:.55;cursor:not-allowed}
+.btn-primary{background:var(--accent);color:var(--accent-ink)}
+.btn-primary:hover:not(:disabled){background:var(--accent-hover)}
+.btn-secondary{background:var(--surface);color:var(--ink);border-color:var(--line-2)}
+.btn-secondary:hover:not(:disabled){background:var(--surface-2)}
+.btn-secondary[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent-line);color:var(--accent)}
+.btn-ghost{color:var(--ink-2)}
+.btn-ghost:hover:not(:disabled){background:var(--surface-2);color:var(--ink)}
+.btn-danger{background:var(--neg);color:#fff}
+.btn-danger:hover:not(:disabled){filter:brightness(.92)}
+.btn-sm{height:32px;padding:0 11px;font-size:13px}
+.btn-icon{width:32px;padding:0}
+.btn-lg{height:46px;font-size:15px;padding:0 20px}
+.btn-block{width:100%}
+.btn-del:hover:not(:disabled){background:var(--neg-soft);color:var(--neg)}
+.spinner{width:16px;height:16px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0}
 @keyframes spin{to{transform:rotate(360deg)}}
-.steps{display:flex;flex-direction:column;gap:6px;margin-top:14px}
-.step{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--muted);padding:9px 12px;background:var(--bg);border-radius:8px;border:1px solid var(--border)}
-.step.active{color:var(--brand);background:var(--brand-light);border-color:#b2dfbe;font-weight:600}
-.step.done{color:#1a6b35}
-.step-spin{width:14px;height:14px;border:2px solid rgba(26,71,42,.2);border-top-color:var(--brand);border-radius:50%;animation:spin .65s linear infinite;flex-shrink:0}
-.msg{padding:11px 14px;border-radius:8px;font-size:13px;margin-top:10px;display:none;line-height:1.5}
-.msg.err{background:#fde8e8;color:#8b1a1a}
-.verdict{border-radius:12px;padding:16px 18px;margin-bottom:16px;border:1px solid}
-.v-kopen{background:#dcf5e4;border-color:#a8dbb9}
-.v-twijfel{background:#fff8e1;border-color:#ffe082}
-.v-skip{background:#fde8e8;border-color:#f5b8b8}
-.verdict h3{font-size:16px;font-weight:700;margin-bottom:5px}
-.v-kopen h3{color:#1a6b35}.v-twijfel h3{color:#7a5c00}.v-skip h3{color:#8b1a1a}
-.verdict p{font-size:14px;line-height:1.6}
-.costs-box{background:#fffbf0;border:1px solid #ffe082;border-radius:11px;padding:15px;margin-bottom:16px}
-.costs-box h4{font-size:11px;font-weight:700;color:#7a5c00;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px}
-.c-row{display:flex;justify-content:space-between;font-size:14px;padding:5px 0;border-bottom:1px solid #fff3c444}
-.c-row:last-child{border:none;font-weight:700;font-size:15px}
-.c-pos{color:#1a6b35;font-weight:700}.c-neg{color:#e63946;font-weight:700}
-.price-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px}
-.p-card{background:var(--surface);border:1px solid var(--border);border-radius:11px;padding:15px}
-.p-platform{font-size:14px;font-weight:700;margin-bottom:10px}
-.mp{color:#ff6600}
-.ebay{background:linear-gradient(90deg,#e53238,#0064d2);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
-.p-main{font-size:24px;font-weight:800}
-.p-range{font-size:13px;color:var(--muted)}
-.p-sub{font-size:12px;color:var(--muted);margin:3px 0 8px}
-.p-tip{font-size:13px;background:var(--bg);border-radius:7px;padding:9px 11px;line-height:1.5}
-.badge{font-size:11px;font-weight:600;padding:2px 7px;border-radius:20px}
-.b-high{background:#dcf5e4;color:#1a6b35}.b-mid{background:#fff3cd;color:#856404}.b-low{background:#fde8e8;color:#8b1a1a}
-.tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
-.tag{background:#f0f4f0;font-size:12px;padding:2px 8px;border-radius:20px}
-.roi-wrap{background:var(--surface);border:1px solid var(--border);border-radius:11px;padding:15px;margin-bottom:16px}
-.roi-bar{height:9px;background:var(--border);border-radius:99px;overflow:hidden;margin:7px 0 5px}
-.roi-fill{height:100%;border-radius:99px;background:linear-gradient(90deg,#f4a261,#2d6a4f)}
-.roi-labels{display:flex;justify-content:space-between;font-size:11px;color:var(--muted)}
-.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px}
-.detail-card{background:var(--surface);border:1px solid var(--border);border-radius:11px;padding:15px}
-.detail-card ul{list-style:none}
-.detail-card ul li{font-size:13px;padding:5px 0;border-bottom:1px solid var(--bg);display:flex;gap:7px;line-height:1.4}
-.detail-card ul li:last-child{border:none}
-.detail-card ul li::before{content:'-->';color:var(--brand);font-weight:700;flex-shrink:0}
-.stat{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 16px;text-align:center}
-.stat-num{font-size:22px;font-weight:800}
-.stat-lbl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
-.stats-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px}
-.filter-bar{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:16px}
-.filter-btn{padding:6px 13px;border-radius:20px;border:1.5px solid var(--border);background:white;font-size:13px;font-weight:600;cursor:pointer;color:var(--muted);transition:all .15s}
-.filter-btn.active{background:var(--brand);color:white;border-color:var(--brand)}
-.kavel-list{display:flex;flex-direction:column;gap:10px}
-.kavel-row{background:var(--surface);border:1px solid var(--border);border-radius:11px;padding:12px 14px;display:grid;grid-template-columns:auto auto 1fr auto;gap:10px;align-items:center;transition:border-color .15s}
-.kavel-row:hover{border-color:#b2dfbe}
-.selectie-col{display:none}
-.selectie-modus .selectie-col{display:block}
-.kavel-checkbox{width:18px;height:18px;accent-color:var(--brand);cursor:pointer}
-.kavel-row.geselecteerd{background:#e8f5e9;border-color:#81c784}
-.kavel-num{font-size:11px;font-weight:700;color:var(--muted);width:20px}
-.kavel-titel{font-size:14px;font-weight:700;margin-bottom:3px;line-height:1.3}
-.kavel-meta{font-size:12px;color:var(--muted);margin-bottom:6px}
-.kavel-pills{display:flex;flex-wrap:wrap;gap:5px;margin-top:4px}
-.pill{font-size:11px;padding:2px 7px;border-radius:20px;font-weight:600}
-.pill-bod{background:#e8f5e9;color:var(--brand)}
-.pill-eigen-bod{background:#e3f2fd;color:#1565c0}
-.pill-totaal{background:#fffbf0;color:#7a5c00;border:1px solid #ffe082}
-.pill-marge-pos{background:#dcf5e4;color:#1a6b35}
-.pill-marge-neg{background:#fde8e8;color:#c62828}
-.pill-mp{background:#fff3e0;color:#e65100}
-.pill-status{color:white}
-.s-klaar{background:#43a047}.s-twijfel{background:#fb8c00}.s-skip{background:#e53935}.s-wacht{background:#9e9e9e}
-.kavel-acties{display:flex;gap:5px;align-items:center}
-.kavel-reden{font-size:11px;color:var(--muted);font-style:italic;margin-top:4px}
-.back-btn{display:inline-flex;align-items:center;gap:6px;font-size:14px;font-weight:600;color:var(--brand);cursor:pointer;margin-bottom:16px;padding:7px 11px;background:var(--brand-light);border-radius:8px;border:none}
-.empty{text-align:center;padding:48px 20px;color:var(--muted)}
-.empty-icon{font-size:48px;margin-bottom:14px}
-.empty h3{font-size:16px;font-weight:700;color:var(--text);margin-bottom:8px}
-.empty p{font-size:14px;line-height:1.6;max-width:400px;margin:0 auto 18px}
-.upload-zone{border:2px dashed var(--border);border-radius:10px;padding:18px;text-align:center;cursor:pointer;position:relative;transition:all .15s;background:var(--bg)}
-.upload-zone:hover,.upload-zone.drag{border-color:var(--brand);background:var(--brand-light)}
-.upload-zone input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
-.upload-zone p{font-size:13px;color:var(--muted)}
-.previews{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}
-.prev{position:relative;width:72px;height:72px}
-.prev img{width:72px;height:72px;object-fit:cover;border-radius:7px;border:1px solid var(--border);display:block}
-.prev-del{position:absolute;top:-6px;right:-6px;width:20px;height:20px;background:#e63946;color:white;border:none;border-radius:50%;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center}
-@media(max-width:600px){
-  .price-grid,.detail-grid{grid-template-columns:1fr}
-  .kavel-row{grid-template-columns:auto auto 1fr;gap:7px}
-  .kavel-acties{grid-column:1/-1;flex-wrap:wrap}
-  header{padding:12px 16px}
+
+/* ── Cards, fields ─────────────────────────────────────────────── */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:22px}
+.card + .card{margin-top:16px}
+.card-h{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
+.card-h h2,.card-h h3{font-size:16px;font-weight:650}
+.card-sub{font-size:13.5px;color:var(--ink-2);margin-top:-8px;margin-bottom:14px}
+
+.field{margin-bottom:22px}
+.field > label,.field > .lbl{display:block;font-size:14px;font-weight:600;margin-bottom:6px}
+.opt{font-weight:400;color:var(--ink-3);font-size:13px}
+.help{font-size:13px;color:var(--ink-3);margin-top:6px;line-height:1.45}
+.input,.select,.textarea{width:100%;height:42px;padding:0 12px;border:1px solid var(--line-2);border-radius:var(--r-sm);background:var(--surface);color:var(--ink);outline:none;transition:border-color .12s,box-shadow .12s}
+.textarea{height:auto;min-height:92px;padding:10px 12px;resize:vertical;line-height:1.45}
+.input::placeholder,.textarea::placeholder{color:var(--ink-3)}
+.input:focus,.select:focus,.textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.select{appearance:none;-webkit-appearance:none;padding-right:34px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' fill='none' stroke='%236B7385' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M1 1.5l5 5 5-5'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center}
+@media (max-width:899px){.input,.select,.textarea{font-size:16px}}
+.money{position:relative}
+.money > span{position:absolute;left:13px;top:50%;transform:translateY(-50%);font-weight:600;color:var(--ink-3);pointer-events:none}
+.money .input{padding-left:30px;font-weight:600;font-size:16px}
+.seg{display:grid;grid-template-columns:1fr 1fr;gap:2px;padding:3px;background:var(--surface-2);border-radius:10px;margin-bottom:10px}
+.seg button{height:34px;border-radius:8px;font-size:13.5px;font-weight:600;color:var(--ink-2);display:flex;align-items:center;justify-content:center;gap:6px;transition:background .12s,color .12s}
+.seg button.active{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgba(20,23,31,.12)}
+.veiling-hint{display:none;align-items:center;gap:8px;margin-top:8px;padding:8px 10px;border-radius:var(--r-sm);font-size:13px;background:var(--surface-2);color:var(--ink-2)}
+.veiling-hint.on{display:flex}
+.veiling-hint.unknown{background:var(--warn-soft);color:var(--warn)}
+.veiling-hint strong{color:var(--ink)}
+.veiling-hint.unknown strong{color:var(--warn)}
+
+.drop{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:22px 16px;border:1.5px dashed var(--line-2);border-radius:var(--r);text-align:center;background:var(--surface-2);color:var(--ink-2);font-size:14px;transition:border-color .12s,background .12s}
+.drop:hover,.drop.drag{border-color:var(--accent);background:var(--accent-soft)}
+.drop input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.drop strong{color:var(--accent)}
+.previews{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.prev{position:relative;width:68px;height:68px}
+.prev img{width:68px;height:68px;object-fit:cover;border-radius:var(--r-sm);border:1px solid var(--line);display:block}
+.prev-del{position:absolute;top:-7px;right:-7px;width:22px;height:22px;border-radius:50%;background:var(--ink);color:var(--bg);display:grid;place-items:center;font-size:14px;line-height:1}
+
+.msg{display:none;align-items:flex-start;gap:10px;padding:12px 14px;border-radius:var(--r-sm);font-size:14px;line-height:1.45;margin-top:14px}
+.msg.err{background:var(--neg-soft);color:var(--neg);border:1px solid var(--neg-line)}
+.msg .ico{margin-top:1px}
+
+.banner{display:none;gap:12px;align-items:center;flex-wrap:wrap;padding:14px 16px;margin-bottom:22px;background:var(--warn-soft);border:1px solid var(--warn-line);border-radius:var(--r);color:var(--ink)}
+.banner .b-text{flex:1 1 260px;font-size:14px}
+.banner .b-text strong{display:block;margin-bottom:2px}
+.banner .b-form{display:flex;gap:8px;flex:1 1 320px}
+.banner .b-form .input{height:38px}
+
+/* ── Stepper ───────────────────────────────────────────────────── */
+.stepper{list-style:none;display:flex;align-items:center;gap:10px;margin-bottom:22px;flex-wrap:nowrap}
+.stepper li{display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600;color:var(--ink-3);white-space:nowrap}
+.stepper li + li::before{content:"";width:28px;height:1.5px;background:var(--line-2);margin-right:2px}
+.stepper .sn{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:700;border:1.5px solid var(--line-2);color:var(--ink-3);background:var(--surface)}
+.stepper .sn .ico{width:13px;height:13px;stroke-width:2.5}
+.stepper li[data-state="active"]{color:var(--ink)}
+.stepper li[data-state="active"] .sn{border-color:var(--accent);background:var(--accent);color:var(--accent-ink)}
+.stepper li[data-state="done"]{color:var(--ink-2)}
+.stepper li[data-state="done"] .sn{border-color:var(--pos);background:var(--pos-soft);color:var(--pos)}
+@media (max-width:480px){.stepper{gap:6px}.stepper li{font-size:12.5px}.stepper li + li::before{width:12px}.stepper li[data-state="todo"] .st-l,.stepper li[data-state="done"] .st-l{display:none}}
+
+/* ── Progress / skeleton ───────────────────────────────────────── */
+.bezig-h{display:flex;align-items:center;gap:12px;margin-bottom:6px}
+.bezig-h .spinner{width:20px;height:20px;border-color:var(--accent);border-right-color:transparent}
+.bezig-h h2{font-size:17px}
+.bezig-status{color:var(--ink-2);font-size:14px;margin-bottom:18px}
+.steps{display:flex;flex-direction:column;gap:8px;margin-bottom:20px}
+.step{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:var(--r-sm);font-size:14px;color:var(--ink-3);background:var(--surface)}
+.step .si{width:20px;height:20px;border-radius:50%;border:1.5px solid var(--line-2);display:grid;place-items:center;flex-shrink:0}
+.step.active{color:var(--ink);border-color:var(--accent-line);background:var(--accent-soft);font-weight:600}
+.step.active .si{border:2px solid var(--accent);border-right-color:transparent;animation:spin .7s linear infinite}
+.step.done{color:var(--ink-2)}
+.step.done .si{background:var(--pos);border-color:var(--pos);color:#fff}
+.step.done .si .ico{width:12px;height:12px;stroke-width:3}
+.skel{border-radius:var(--r-sm);background:linear-gradient(90deg,var(--surface-2) 25%,var(--line) 50%,var(--surface-2) 75%);background-size:200% 100%;animation:shimmer 1.4s linear infinite}
+@keyframes shimmer{to{background-position:-200% 0}}
+.skel-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:10px}
+.skel-row .skel{height:64px}
+.skel-wide{height:18px;margin-bottom:8px;width:100%}
+
+/* ── Stats / filters / toolbar ─────────────────────────────────── */
+.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:22px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px 18px}
+.stat-lbl{font-size:13px;color:var(--ink-2);display:flex;align-items:center;gap:6px}
+.stat-num{font-size:28px;font-weight:700;letter-spacing:-.025em;line-height:1.2;margin-top:4px}
+.stat-num.pos{color:var(--pos)}
+@media (max-width:760px){.stats{grid-template-columns:repeat(2,minmax(0,1fr))}.stat-num{font-size:24px}}
+
+.toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.search{position:relative;flex:1 1 220px;min-width:0}
+.search .ico{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--ink-3);pointer-events:none}
+.search .input{padding-left:38px}
+.toolbar .select{flex:0 0 200px;width:200px}
+@media (max-width:520px){.toolbar .select{flex:1 1 100%;width:100%}}
+.chips{display:flex;gap:6px;overflow-x:auto;padding:2px 0 6px;margin-bottom:14px;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{height:32px;padding:0 12px;border-radius:999px;border:1px solid var(--line-2);background:var(--surface);font-size:13px;font-weight:600;color:var(--ink-2);white-space:nowrap;display:inline-flex;align-items:center;gap:7px;transition:background .12s,color .12s,border-color .12s}
+.chip:hover{background:var(--surface-2)}
+.chip .n{font-weight:600;font-size:12px;color:var(--ink-3)}
+.chip.active{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.chip.active .n{color:var(--bg);opacity:.7}
+
+.sel-balk{display:none;align-items:center;gap:8px;flex-wrap:wrap;position:sticky;top:calc(var(--topbar-h) + 8px);z-index:30;padding:10px 12px;margin-bottom:12px;background:var(--surface);border:1px solid var(--accent-line);border-radius:var(--r);box-shadow:var(--shadow)}
+@media (min-width:900px){.sel-balk{top:12px}}
+.sel-balk .cnt{font-size:14px;font-weight:600;margin-right:auto}
+
+/* ── Kavel cards ───────────────────────────────────────────────── */
+.kgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,330px),1fr));gap:14px}
+.kavel-row{position:relative;display:flex;flex-direction:column;gap:12px;min-width:0;padding:16px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);transition:border-color .12s,box-shadow .12s}
+.kavel-row:hover{border-color:var(--line-2);box-shadow:var(--shadow)}
+.kavel-row.geselecteerd{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+.selectie-modus .kavel-row{cursor:pointer}
+.selectie-col{display:none;align-items:center}
+.selectie-modus .selectie-col{display:flex}
+.kavel-checkbox{width:18px;height:18px;accent-color:var(--accent);cursor:pointer}
+.kc-top{display:flex;gap:12px;align-items:flex-start}
+.kc-thumb{width:48px;height:48px;border-radius:10px;flex-shrink:0;overflow:hidden;display:grid;place-items:center;background:var(--surface-2);color:var(--ink-2);font-weight:700;font-size:15px;border:1px solid var(--line)}
+.kc-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.kc-head{flex:1;min-width:0}
+.kc-title{font-size:15px;font-weight:650;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+.kc-meta{font-size:12.5px;color:var(--ink-3);margin-top:3px;overflow-wrap:anywhere}
+.kc-tag{display:inline-block;margin-top:6px;padding:1px 8px;border-radius:999px;font-size:12px;font-weight:600;background:var(--accent-soft);color:var(--accent)}
+.kc-figs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;padding:10px 12px;background:var(--surface-2);border-radius:10px}
+.fig-l{font-size:12px;color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fig-v{font-size:15px;font-weight:650;margin-top:1px}
+.kc-result{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:13.5px}
+.marge{font-weight:700}
+.marge.pos{color:var(--pos)}
+.marge.neg{color:var(--neg)}
+.kc-reden{font-size:13px;color:var(--ink-2);line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.kc-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:auto;padding-top:2px}
+.kc-actions .btn-del{margin-left:auto}
+
+.pill{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px;border-radius:999px;font-size:11.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap;border:1px solid transparent;flex-shrink:0}
+.pill::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.pill-kopen{background:var(--pos-soft);color:var(--pos);border-color:var(--pos-line)}
+.pill-twijfel{background:var(--warn-soft);color:var(--warn);border-color:var(--warn-line)}
+.pill-skip{background:var(--neg-soft);color:var(--neg);border-color:var(--neg-line)}
+.pill-wacht{background:var(--surface-2);color:var(--ink-2);border-color:var(--line)}
+.pill-lg{height:30px;padding:0 14px;font-size:12.5px}
+.conf{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2)}
+.conf i{width:8px;height:8px;border-radius:50%;background:var(--ink-3)}
+.conf.pos i{background:var(--pos)}.conf.warn i{background:var(--warn)}.conf.neg i{background:var(--neg)}
+
+/* ── Empty states ──────────────────────────────────────────────── */
+.empty{text-align:center;padding:56px 24px;background:var(--surface);border:1px dashed var(--line-2);border-radius:var(--r-lg)}
+.empty-ico{width:56px;height:56px;border-radius:16px;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;margin:0 auto 16px}
+.empty-ico .ico{width:26px;height:26px}
+.empty h2,.empty h3{font-size:18px;font-weight:650;margin-bottom:6px}
+.empty p{color:var(--ink-2);font-size:14.5px;max-width:44ch;margin:0 auto 20px}
+.empty .btns{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+.empty.small{padding:36px 20px}
+.welcome-steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;max-width:640px;margin:0 auto 24px;text-align:left}
+.welcome-steps div{padding:12px 14px;background:var(--surface-2);border-radius:var(--r-sm);font-size:13.5px;color:var(--ink-2)}
+.welcome-steps b{display:block;color:var(--ink);font-size:14px;margin-bottom:2px}
+@media (max-width:640px){.welcome-steps{grid-template-columns:1fr}}
+
+/* ── Result page ───────────────────────────────────────────────── */
+.res-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:16px}
+.res-bar .grp{display:flex;gap:8px;flex-wrap:wrap}
+.hero{padding:24px;border-left:4px solid var(--line-2)}
+.hero.v-kopen{border-left-color:var(--pos)}
+.hero.v-twijfel{border-left-color:var(--warn)}
+.hero.v-skip{border-left-color:var(--neg)}
+.hero-top{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.hero-meta{font-size:13px;color:var(--ink-3)}
+.hero h2{font-size:24px;line-height:1.25;font-weight:700;letter-spacing:-.02em;overflow-wrap:anywhere}
+.hero .uitleg{margin-top:10px;font-size:15px;color:var(--ink);max-width:68ch}
+.hero .reden{margin-top:6px;font-size:14px;color:var(--ink-2);max-width:68ch}
+.hero-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:20px}
+.kpi{padding:12px 14px;background:var(--surface-2);border-radius:10px;min-width:0}
+.kpi-l{font-size:12.5px;color:var(--ink-3)}
+.kpi-v{font-size:20px;font-weight:700;letter-spacing:-.015em;margin-top:2px}
+.kpi-s{font-size:12.5px;color:var(--ink-2);margin-top:2px}
+.meter{height:6px;border-radius:99px;background:var(--line);overflow:hidden;margin-top:8px}
+.meter > i{display:block;height:100%;border-radius:99px;background:var(--accent);width:0;transition:width .7s cubic-bezier(.2,.7,.2,1)}
+@media (max-width:640px){.hero{padding:18px}.hero h2{font-size:20px}.hero-kpis{grid-template-columns:1fr}}
+
+.metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:22px}
+.metric{padding:14px 16px;border:1px solid var(--line);border-radius:10px;min-width:0}
+.metric-l{font-size:13px;color:var(--ink-2)}
+.metric-v{font-size:24px;font-weight:700;letter-spacing:-.02em;margin-top:2px}
+.metric-v.pos{color:var(--pos)}.metric-v.neg{color:var(--neg)}
+.metric-s{font-size:12.5px;color:var(--ink-3);margin-top:2px}
+@media (max-width:760px){.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.metric-v{font-size:21px}}
+
+.fbar{position:relative;padding-top:28px;margin-bottom:6px}
+.fbar-mark{position:absolute;top:0;font-size:12.5px;font-weight:650;white-space:nowrap;transform:translateX(-50%)}
+.fbar-mark.l{transform:none}
+.fbar-mark.r{transform:translateX(-100%)}
+.fbar-line{position:absolute;top:20px;bottom:-4px;width:2px;background:var(--ink);transform:translateX(-1px);border-radius:2px;z-index:2}
+.fbar-track{position:relative;display:flex;height:30px;border-radius:8px;overflow:hidden;background:var(--surface-2)}
+.fbar-track > div{height:100%;transition:width .8s cubic-bezier(.2,.7,.2,1)}
+.fbar-track .s-bod{background:var(--seg-bod)}
+.fbar-track .s-vk{background:var(--seg-vk)}
+.fbar-track .s-btw{background:var(--seg-btw)}
+.fbar-track .s-winst{background:var(--pos)}
+.fbar-track .s-verlies{position:absolute;top:0;bottom:0;background:repeating-linear-gradient(135deg,var(--neg) 0 5px,transparent 5px 10px);opacity:.85;z-index:1}
+.legend{display:flex;gap:6px 16px;flex-wrap:wrap;margin:12px 0 22px;font-size:13px;color:var(--ink-2)}
+.legend span{display:inline-flex;align-items:center;gap:7px}
+.legend i{width:10px;height:10px;border-radius:3px;display:inline-block}
+
+.ctable{width:100%;border-collapse:collapse;font-size:14.5px}
+.ctable td{padding:9px 0;border-bottom:1px solid var(--line)}
+.ctable td:last-child{text-align:right;font-weight:600}
+.ctable td small{display:block;font-size:12.5px;color:var(--ink-3);font-weight:400}
+.ctable .tot td{border-bottom:none;border-top:2px solid var(--ink);padding-top:12px;font-size:16px;font-weight:700}
+.ctable .tot td:first-child{font-weight:700}
+.ctable .sub td{color:var(--ink-2)}
+.ctable .res td{border-bottom:none;font-weight:700}
+.ctable .res td:last-child.pos{color:var(--pos)}
+.ctable .res td:last-child.neg{color:var(--neg)}
+
+.why{list-style:none;display:flex;flex-direction:column;gap:2px}
+.why li{display:flex;gap:12px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--line);font-size:14.5px;line-height:1.45}
+.why li:last-child{border-bottom:none}
+.why .wi{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;flex-shrink:0;margin-top:1px}
+.why .wi .ico{width:13px;height:13px;stroke-width:2.5}
+.why .ok .wi{background:var(--pos-soft);color:var(--pos)}
+.why .bad .wi{background:var(--neg-soft);color:var(--neg)}
+.why .warn .wi{background:var(--warn-soft);color:var(--warn)}
+.why .info .wi{background:var(--accent-soft);color:var(--accent)}
+.note{display:flex;gap:10px;align-items:flex-start;margin-top:14px;padding:12px 14px;background:var(--surface-2);border-radius:var(--r-sm);font-size:13px;color:var(--ink-2);line-height:1.5}
+.note .ico{margin-top:1px;color:var(--ink-3)}
+
+.pgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:16px}
+.pgrid .card + .card{margin-top:0}
+.prices-strip{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:6px}
+.ps{padding:12px 14px;border:1px solid var(--line);border-radius:10px;min-width:0}
+.ps-l{font-size:13px;color:var(--ink-2)}
+.ps-v{font-size:21px;font-weight:700;letter-spacing:-.015em;margin-top:2px}
+.ps-s{font-size:12.5px;color:var(--ink-3);margin-top:2px;overflow-wrap:anywhere}
+.plat-h{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:12px}
+.plat-h h3{font-size:16px}
+.range{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.range b{font-size:26px;letter-spacing:-.02em}
+.range span{font-size:13.5px;color:var(--ink-3)}
+.tip{margin-top:12px;padding:10px 12px;background:var(--surface-2);border-radius:var(--r-sm);font-size:13.5px;line-height:1.5;color:var(--ink-2)}
+.tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.tag{padding:2px 10px;border-radius:999px;background:var(--surface-2);font-size:12.5px;color:var(--ink-2)}
+.attn{list-style:none}
+.attn li{display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--line);font-size:14px;line-height:1.45}
+.attn li:last-child{border-bottom:none}
+.attn li::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--warn);margin-top:8px;flex-shrink:0}
+@media (max-width:760px){.pgrid{grid-template-columns:1fr}.prices-strip{grid-template-columns:1fr}}
+.disclaimer{margin-top:16px;font-size:12.5px;color:var(--ink-3);text-align:center}
+
+/* ── Handleiding ───────────────────────────────────────────────── */
+.howto{list-style:none;display:flex;flex-direction:column;gap:16px}
+.howto li{display:flex;gap:14px;align-items:flex-start}
+.howto .hn{width:28px;height:28px;border-radius:50%;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;font-weight:700;font-size:13px;flex-shrink:0}
+.howto b{display:block;font-size:15px}
+.howto span{font-size:14px;color:var(--ink-2)}
+details.faq{border:1px solid var(--line);border-radius:var(--r);background:var(--surface)}
+details.faq + details.faq{margin-top:10px}
+details.faq summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 18px;font-weight:600;font-size:15px}
+details.faq summary::-webkit-details-marker{display:none}
+details.faq summary::after{content:"";width:8px;height:8px;border-right:2px solid var(--ink-3);border-bottom:2px solid var(--ink-3);transform:rotate(45deg);transition:transform .15s;margin-right:4px}
+details.faq[open] summary::after{transform:rotate(-135deg)}
+details.faq .fb{padding:0 18px 16px;font-size:14.5px;color:var(--ink-2);line-height:1.6}
+details.faq .fb p + p,details.faq .fb ul{margin-top:8px}
+details.faq .fb ul{padding-left:20px}
+.sec-h{font-size:17px;font-weight:650;margin:28px 0 12px}
+.calc{margin-top:10px;padding:12px 14px;background:var(--surface-2);border-radius:var(--r-sm);font-size:14px;line-height:1.9}
+.calc strong{color:var(--ink)}
+
+/* ── Modal & toast ─────────────────────────────────────────────── */
+.modal-backdrop{position:fixed;inset:0;z-index:100;background:var(--overlay);display:none;align-items:center;justify-content:center;padding:16px}
+.modal-backdrop.open{display:flex}
+.modal{width:100%;max-width:460px;background:var(--surface);border-radius:var(--r-lg);padding:24px;box-shadow:var(--shadow);border:1px solid var(--line);animation:pop .16s ease-out}
+@keyframes pop{from{transform:translateY(8px);opacity:0}to{transform:none;opacity:1}}
+.modal h3{font-size:18px;font-weight:650;margin-bottom:8px}
+.modal .mb{font-size:14.5px;color:var(--ink-2);line-height:1.55;margin-bottom:20px;overflow-wrap:anywhere}
+.modal .mb .input{margin-top:10px}
+.modal-actions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+.toasts{position:fixed;z-index:120;left:50%;transform:translateX(-50%);bottom:24px;display:flex;flex-direction:column;gap:8px;align-items:center;width:calc(100% - 32px);max-width:440px;pointer-events:none}
+@media (max-width:899px){.toasts{bottom:calc(84px + env(safe-area-inset-bottom))}}
+.toast{pointer-events:auto;display:flex;align-items:center;gap:12px;width:100%;padding:11px 14px;background:var(--ink);color:var(--bg);border-radius:10px;box-shadow:var(--shadow);font-size:14px;animation:pop .18s ease-out}
+.toast.err{background:var(--neg);color:#fff}
+.toast .ta{margin-left:auto;font-weight:700;color:inherit;text-decoration:underline;white-space:nowrap;padding:2px 4px}
+
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{animation-duration:.01ms !important;animation-iteration-count:1 !important;transition-duration:.01ms !important}
+}
+
+@media (max-width:520px){
+  .kc-actions{gap:4px;flex-wrap:nowrap}
+  .kc-actions .btn{padding:0 8px;font-size:12.5px}
+  .kc-actions .btn-icon{width:32px;padding:0}
 }
 </style>
 </head>
 <body>
+<div class="app">
 
-<div id="apikey-bar" class="apikey-bar" style="display:none">
-  <span>&#128273; <strong>API Key vereist</strong> &mdash; haal op via <a href="https://console.anthropic.com/settings/keys" target="_blank" style="color:var(--brand)">console.anthropic.com</a></span>
-  <input type="password" id="apikey-input" placeholder="sk-ant-..." />
-  <button class="save-btn" onclick="slaApiKeyOp()">Opslaan</button>
-</div>
-<div id="apikey-ok" class="apikey-ok" style="display:none">
-  &#9989; API Key ingesteld &mdash; <a href="#" onclick="resetApiKey()" style="color:var(--brand);margin-left:8px">Wijzigen</a>
-</div>
-
-<header>
-  <div class="logo">&#128296;</div>
-  <div>
-    <h1>Veiling Analyser</h1>
-    <p>Kavels analyseren &middot; Prijzen opzoeken &middot; Marge berekenen</p>
-  </div>
-  <div class="hdr-r">
-    <button class="hbtn hbtn-ghost" onclick="setSheetsUrl()">&#9729; Sync</button>
-    <button class="hbtn hbtn-ghost" id="selecteer-btn" onclick="toggleSelectie()">&#9745; Selecteren</button>
-    <button class="hbtn hbtn-accent" onclick="switchTab('analyse')">+ Kavel toevoegen</button>
-  </div>
-</header>
-
-<div class="sel-balk" id="sel-balk">
-  <span id="sel-aantal">0 geselecteerd</span>
-  <button class="sel-del-btn" onclick="verwijderSelectie()">&#128465; Verwijder</button>
-  <button class="sel-action" onclick="allesAanvinken()">&#10003; Alles</button>
-  <button class="sel-action" onclick="allesUitvinken()">&#10007; Geen</button>
-  <button class="sel-action" style="margin-left:auto" onclick="toggleSelectie()">Annuleren</button>
-</div>
-
-<div class="tabs">
-  <div class="tab active" onclick="switchTab('overzicht')">&#128203; Overzicht <span class="tab-badge" id="badge">0</span></div>
-  <div class="tab" onclick="switchTab('analyse')">&#128269; Kavel analyseren</div>
-  <div class="tab" onclick="switchTab('gewonnen')">&#127942; Gewonnen <span class="tab-badge" id="badge-gewonnen">0</span></div>
-  <div class="tab" onclick="switchTab('handleiding')">&#128214; Handleiding</div>
-</div>
-
-<div class="main">
-
-<div id="tab-overzicht" class="panel active">
-  <div id="ov-leeg" class="empty" style="display:none">
-    <div class="empty-icon">&#127991;</div>
-    <h3>Nog geen kavels</h3>
-    <p>Ga naar "Kavel analyseren" en voeg je eerste kavel toe.</p>
-    <button class="btn-sm" onclick="switchTab('analyse')">+ Kavel toevoegen</button>
-  </div>
-  <div id="ov-inhoud" style="display:none">
-    <div class="stats-row" id="stats-row"></div>
-    <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
-      <button class="btn-sm" onclick="switchTab('analyse')">+ Toevoegen</button>
+  <aside class="sidebar" aria-label="Hoofdnavigatie">
+    <div class="brand">
+      <span class="brand-mark"><i class="ico" data-i="brand"></i></span>
+      <span class="brand-name">Veiling Analyser</span>
     </div>
-    <div class="filter-bar">
-      <button class="filter-btn active" onclick="setFilter('alles',this)">Alles</button>
-      <button class="filter-btn" onclick="setFilter('kopen',this)">&#10003; Aanraders</button>
-      <button class="filter-btn" onclick="setFilter('twijfel',this)">~ Twijfel</button>
-      <button class="filter-btn" onclick="setFilter('skip',this)">&#10007; Skip</button>
-      <button class="filter-btn" onclick="setFilter('wacht',this)">&#8987; Niet geanalyseerd</button>
-      <button class="filter-btn" onclick="setFilter('eigen',this)">&#128587; Mijn kavels</button>
+    <nav class="nav">
+      <button class="nav-item active" data-tab="overzicht" onclick="switchTab('overzicht')"><i class="ico" data-i="grid"></i><span>Overzicht</span><span class="nav-count js-badge">0</span></button>
+      <button class="nav-item" data-tab="analyse" onclick="switchTab('analyse')"><i class="ico" data-i="search"></i><span>Kavel analyseren</span></button>
+      <button class="nav-item" data-tab="gewonnen" onclick="switchTab('gewonnen')"><i class="ico" data-i="trophy"></i><span>Gewonnen</span><span class="nav-count js-badge-gewonnen">0</span></button>
+      <button class="nav-item" data-tab="handleiding" onclick="switchTab('handleiding')"><i class="ico" data-i="book"></i><span>Handleiding</span></button>
+    </nav>
+    <div class="side-foot">
+      <button class="foot-item" onclick="setSheetsUrl()"><i class="ico" data-i="cloud"></i><span class="lbl">Synchronisatie<span class="sub js-sync-sub">Niet gekoppeld</span></span></button>
+      <button class="foot-item" onclick="resetApiKey()"><i class="ico" data-i="key"></i><span class="lbl">API-sleutel<span class="sub js-key-sub">Ontbreekt</span></span></button>
+      <button class="foot-item" onclick="toggleTheme()"><i class="ico" data-i="moon"></i><span class="lbl js-theme-lbl">Donkere weergave</span></button>
     </div>
-    <div class="kavel-list" id="kavel-list"></div>
-  </div>
-</div>
+  </aside>
 
-<div id="tab-analyse" class="panel">
-  <div id="analyse-result" style="display:none"></div>
-  <div class="card" id="analyse-form">
-    <div class="card-title">&#128279; Kavel toevoegen</div>
-    <label>Kavel URL</label>
-    <input type="text" id="kavel-url" placeholder="Plak de link van het kavel (HNVI, Troostwijk, BVA, Vavato...)" />
-    <label style="margin-top:14px">&#128182; Bod (euro)</label>
-    <div class="bod-row">
-      <button class="bod-btn active" id="bod-ander" onclick="setBodType('ander',this)">&#128100; Huidig bod (iemand anders)</button>
-      <button class="bod-btn" id="bod-eigen" onclick="setBodType('eigen',this)">&#128587; Mijn bod</button>
-    </div>
-    <div class="hint" id="bod-hint">Huidig hoogste bod op de veiling</div>
-    <div style="position:relative">
-      <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);font-weight:700;color:var(--muted)">&#8364;</span>
-      <input type="text" id="huidig-bod" placeholder="bijv. 250" style="padding-left:26px;font-size:16px;font-weight:700" />
-    </div>
-    <label style="margin-top:14px">&#128247; Foto's <span style="font-weight:400;font-size:11px;color:#9ab39e">- optioneel</span></label>
-    <div class="upload-zone" id="upload-zone">
-      <input type="file" id="foto-input" accept="image/*" multiple />
-      <p>&#128247; Sleep foto's hierheen of <strong style="color:var(--brand)">klik om te uploaden</strong></p>
-    </div>
-    <div class="previews" id="previews"></div>
-    <label style="margin-top:14px">&#128221; Extra opmerkingen <span style="font-weight:400;font-size:11px;color:#9ab39e">- optioneel</span></label>
-    <textarea id="extra-txt" placeholder="Eigen observaties, bijzonderheden..."></textarea>
-    <button class="btn-primary" id="analyse-btn" onclick="analyseer()">
-      <span id="analyse-btn-txt">&#128269; Analyseer kavel</span>
-    </button>
-    <div class="msg err" id="analyse-err"></div>
-    <div id="stappen" style="display:none">
-      <div class="steps">
-        <div class="step" id="stap1"><span>&#128269;</span> Productnaam bepalen</div>
-        <div class="step" id="stap2"><span>&#128176;</span> Marktprijzen ophalen</div>
-        <div class="step" id="stap3"><span>&#128202;</span> Advies berekenen</div>
+  <div class="content">
+    <header class="topbar">
+      <div class="brand"><span class="brand-mark"><i class="ico" data-i="brand"></i></span><span class="brand-name">Veiling Analyser</span></div>
+      <button class="btn btn-ghost btn-icon" onclick="setSheetsUrl()" aria-label="Synchronisatie"><i class="ico" data-i="cloud"></i></button>
+      <button class="btn btn-ghost btn-icon" onclick="resetApiKey()" aria-label="API-sleutel"><i class="ico" data-i="key"></i></button>
+      <button class="btn btn-ghost btn-icon" onclick="toggleTheme()" aria-label="Weergave wisselen"><i class="ico" data-i="moon"></i></button>
+    </header>
+
+    <main class="main">
+
+      <div id="apikey-bar" class="banner" role="region" aria-label="API-sleutel">
+        <div class="b-text"><strong>Voeg je API-sleutel toe om te kunnen analyseren</strong>
+          Haal een sleutel op via <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>. De sleutel blijft op dit apparaat en wordt alleen naar Anthropic gestuurd.</div>
+        <div class="b-form">
+          <input class="input" type="password" id="apikey-input" placeholder="sk-ant-..." autocomplete="off" aria-label="API-sleutel" />
+          <button class="btn btn-primary" onclick="slaApiKeyOp()">Opslaan</button>
+        </div>
       </div>
-    </div>
+
+      <!-- ── Overzicht ── -->
+      <section id="tab-overzicht" class="panel active">
+        <div class="ph">
+          <div>
+            <h1>Overzicht</h1>
+            <p>Bekijk je veilingen en ontdek welke kavels interessant zijn.</p>
+          </div>
+          <div class="ph-actions">
+            <button class="btn btn-secondary" id="selecteer-btn" onclick="toggleSelectie()" aria-pressed="false"><i class="ico" data-i="select"></i><span id="selecteer-lbl">Selecteren</span></button>
+            <button class="btn btn-primary" onclick="nieuwKavel()"><i class="ico" data-i="plus"></i>Kavel toevoegen</button>
+          </div>
+        </div>
+
+        <div id="ov-leeg" style="display:none">
+          <div class="empty">
+            <div class="empty-ico"><i class="ico" data-i="tag"></i></div>
+            <h2>Welkom bij Veiling Analyser</h2>
+            <p>Vind sneller interessante veilingdeals op basis van marktwaarde, kosten en potentiële marge.</p>
+            <div class="welcome-steps">
+              <div><b>Plak de link</b>Van het kavel op de veilingsite.</div>
+              <div><b>Vul het bod in</b>Het huidige bod of je eigen bod.</div>
+              <div><b>Bekijk het advies</b>Aanrader, twijfel of skip, met de berekening erbij.</div>
+            </div>
+            <div class="btns"><button class="btn btn-primary btn-lg" onclick="nieuwKavel()"><i class="ico" data-i="plus"></i>Mijn eerste kavel analyseren</button></div>
+          </div>
+        </div>
+
+        <div id="ov-inhoud" style="display:none">
+          <div class="stats" id="stats-row"></div>
+
+          <div class="sel-balk" id="sel-balk">
+            <span class="cnt" id="sel-aantal">0 geselecteerd</span>
+            <button class="btn btn-secondary btn-sm" onclick="allesAanvinken()"><i class="ico" data-i="check"></i>Alles</button>
+            <button class="btn btn-secondary btn-sm" onclick="allesUitvinken()">Geen</button>
+            <button class="btn btn-danger btn-sm" onclick="verwijderSelectie()"><i class="ico" data-i="trash"></i>Verwijderen</button>
+            <button class="btn btn-ghost btn-sm" onclick="toggleSelectie()">Annuleren</button>
+          </div>
+
+          <div class="toolbar">
+            <div class="search"><i class="ico" data-i="search"></i><input class="input" type="search" id="zoek" placeholder="Zoek op productnaam" aria-label="Zoek op productnaam" oninput="setZoek(this.value)" /></div>
+            <select class="select" id="sorteer" aria-label="Sorteren" onchange="setSorteer(this.value)">
+              <option value="nieuw">Nieuwste eerst</option>
+              <option value="advies">Advies</option>
+              <option value="marge">Hoogste marge</option>
+              <option value="prijs">Bod: laag naar hoog</option>
+            </select>
+          </div>
+          <div class="chips" id="chips" role="tablist" aria-label="Filter"></div>
+          <div class="kgrid" id="kavel-list"></div>
+        </div>
+      </section>
+
+      <!-- ── Kavel analyseren ── -->
+      <section id="tab-analyse" class="panel">
+        <div class="ph">
+          <div>
+            <h1>Kavel analyseren</h1>
+            <p>Plak de link, vul het bod in en ontdek of het kavel de moeite waard is.</p>
+          </div>
+        </div>
+
+        <ol class="stepper" id="stepper" aria-label="Voortgang">
+          <li data-state="active"><span class="sn">1</span><span class="st-l">Kavelgegevens</span></li>
+          <li data-state="todo"><span class="sn">2</span><span class="st-l">Analyse</span></li>
+          <li data-state="todo"><span class="sn">3</span><span class="st-l">Resultaat</span></li>
+        </ol>
+
+        <div id="analyse-result" style="display:none"></div>
+
+        <div class="card" id="analyse-form">
+          <div class="field">
+            <label for="kavel-url">Veiling-URL</label>
+            <input class="input" type="text" id="kavel-url" inputmode="url" autocomplete="off" placeholder="https://…" oninput="updateVeilingHint()" />
+            <div class="help">Plak hier de link naar het veilingkavel. Veilingkosten en btw worden berekend op basis van de herkende veiling.</div>
+            <div class="veiling-hint" id="veiling-hint"></div>
+          </div>
+
+          <div class="field">
+            <span class="lbl">Bod</span>
+            <div class="seg" role="group" aria-label="Soort bod">
+              <button type="button" class="bod-btn active" id="bod-ander" onclick="setBodType('ander',this)">Huidig bod</button>
+              <button type="button" class="bod-btn" id="bod-eigen" onclick="setBodType('eigen',this)">Mijn bod</button>
+            </div>
+            <div class="money"><span>&euro;</span><input class="input" type="text" inputmode="decimal" id="huidig-bod" placeholder="bijv. 250" aria-label="Bedrag in euro" /></div>
+            <div class="help" id="bod-hint">Huidig hoogste bod op de veiling</div>
+          </div>
+
+          <div class="field">
+            <span class="lbl">Foto&rsquo;s <span class="opt">(optioneel)</span></span>
+            <div class="drop" id="upload-zone">
+              <input type="file" id="foto-input" accept="image/*" multiple aria-label="Foto's toevoegen" />
+              <i class="ico" data-i="image"></i>
+              <span>Sleep foto&rsquo;s hierheen of <strong>kies bestanden</strong></span>
+            </div>
+            <div class="previews" id="previews"></div>
+            <div class="help">De eerste foto wordt bewaard als miniatuur bij het kavel. De prijsanalyse gebruikt foto&rsquo;s nog niet.</div>
+          </div>
+
+          <div class="field">
+            <label for="extra-txt">Productnaam of opmerkingen <span class="opt">(optioneel)</span></label>
+            <textarea class="textarea" id="extra-txt" placeholder="Bijv. Apple MacBook Pro 14 inch M3, 512 GB"></textarea>
+            <div class="help">Let op: wat je hier invult gebruikt de analyse als productnaam. Laat het leeg om de naam uit de link te halen.</div>
+          </div>
+
+          <button class="btn btn-primary btn-lg btn-block" id="analyse-btn" onclick="analyseer()"><span id="analyse-btn-txt">Analyseer kavel</span></button>
+          <div class="msg err" id="analyse-err" role="alert"></div>
+        </div>
+
+        <div class="card" id="analyse-bezig" style="display:none" aria-live="polite">
+          <div class="bezig-h"><span class="spinner"></span><h2>Kavel wordt geanalyseerd</h2></div>
+          <p class="bezig-status" id="bezig-status">Product wordt ge&iuml;dentificeerd&hellip;</p>
+          <div id="stappen" class="steps">
+            <div class="step" id="stap1"></div>
+            <div class="step" id="stap2"></div>
+            <div class="step" id="stap3"></div>
+          </div>
+          <div class="skel-row"><div class="skel"></div><div class="skel"></div><div class="skel"></div></div>
+          <div class="skel skel-wide"></div>
+          <div class="skel skel-wide" style="width:70%"></div>
+        </div>
+      </section>
+
+      <!-- ── Gewonnen ── -->
+      <section id="tab-gewonnen" class="panel">
+        <div class="ph">
+          <div>
+            <h1>Gewonnen</h1>
+            <p>Kavels die je hebt gewonnen. Ze blijven bewaard, los van je overzicht.</p>
+          </div>
+        </div>
+        <div id="gew-leeg" style="display:none">
+          <div class="empty">
+            <div class="empty-ico"><i class="ico" data-i="trophy"></i></div>
+            <h2>Nog geen gewonnen kavels</h2>
+            <p>Gewonnen kavels komen hier te staan zodra je ze markeert. Zo blijft je overzicht beperkt tot kavels waar je nog op kunt bieden.</p>
+            <div class="btns"><button class="btn btn-secondary" onclick="switchTab('overzicht')">Naar overzicht</button></div>
+          </div>
+        </div>
+        <div id="gew-inhoud" style="display:none">
+          <div class="kgrid" id="gewonnen-list"></div>
+        </div>
+      </section>
+
+      <!-- ── Handleiding ── -->
+      <section id="tab-handleiding" class="panel">
+        <div class="ph">
+          <div>
+            <h1>Handleiding</h1>
+            <p>Zo werkt Veiling Analyser en hoe je het advies moet lezen.</p>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-h"><h2>Hoe werkt Veiling Analyser?</h2></div>
+          <ol class="howto">
+            <li><span class="hn">1</span><div><b>Voeg een kavel toe</b><span>Plak de link van het kavel. De app herkent HNVI, Troostwijk, BVA, Vavato en DTZ en gebruikt hun veilingkosten.</span></div></li>
+            <li><span class="hn">2</span><div><b>Vul je bod in</b><span>Kies &ldquo;Huidig bod&rdquo; voor het hoogste bod nu, of &ldquo;Mijn bod&rdquo; voor het bedrag dat jij wilt bieden of hebt geboden.</span></div></li>
+            <li><span class="hn">3</span><div><b>Laat de analyse uitvoeren</b><span>De app bepaalt het product, schat de marktprijzen en rekent de kosten door.</span></div></li>
+            <li><span class="hn">4</span><div><b>Bekijk marktwaarde en totale kosten</b><span>Zie in &eacute;&eacute;n blik wat je kwijt bent en wat je er naar verwachting voor terugkrijgt.</span></div></li>
+            <li><span class="hn">5</span><div><b>Volg het advies</b><span>Gebruik het als startpunt en controleer de marktprijs zelf voordat je biedt.</span></div></li>
+          </ol>
+        </div>
+
+        <h2 class="sec-h">Veelgestelde vragen</h2>
+        <details class="faq" open>
+          <summary>Hoe wordt het advies berekend?</summary>
+          <div class="fb">
+            <p>Het advies vergelijkt je totale kosten met de geschatte gemiddelde Marktplaats-prijs. Het verschil is de verwachte marge.</p>
+            <p>Een eventuele eBay-prijs wordt getoond ter vergelijking, maar telt niet mee in het advies.</p>
+          </div>
+        </details>
+        <details class="faq">
+          <summary>Hoe worden de kosten berekend?</summary>
+          <div class="fb">
+            <p>Veilingkosten gaan over het bod. De btw gaat over het bod plus de veilingkosten.</p>
+            <div class="calc">
+              Bod: <strong>&euro;1.000</strong><br>
+              &times; 0,17 (veilingkosten, voorbeeld HNVI; verschilt per veiling) = <strong>&euro;170</strong> (totaal: &euro;1.170)<br>
+              &times; 0,21 (btw over het totaal) = <strong>&euro;245,70</strong> (totaal: &euro;1.415,70)<br>
+              Totale kosten: <strong>&euro;1.415,70</strong>
+            </div>
+            <p>Alleen het percentage van HNVI (17% + 21% btw) is bevestigd. De percentages voor andere veilingen zijn aannames; controleer ze bij de veiling zelf.</p>
+          </div>
+        </details>
+        <details class="faq">
+          <summary>Wat betekent Aanrader?</summary>
+          <div class="fb">De verwachte marge is positief en bedraagt minstens 20% van de geschatte verkoopprijs. Er is dan ruimte voor tegenvallers.</div>
+        </details>
+        <details class="faq">
+          <summary>Wat betekent Twijfel?</summary>
+          <div class="fb">De marge is positief maar onder de 20%, of je zit rond break-even (een verlies tot &euro;50 en niet meer dan 10% van de verkoopprijs). Zonder ingevuld bod staat het advies ook op Twijfel, omdat de marge dan niet te berekenen is.</div>
+        </details>
+        <details class="faq">
+          <summary>Wat betekent Skip?</summary>
+          <div class="fb">De totale kosten liggen meer dan &euro;50 boven de geschatte marktwaarde, of het verwachte verlies is groter dan 10% van de verkoopprijs.</div>
+        </details>
+        <details class="faq">
+          <summary>Wat is het maximaal rendabele bod?</summary>
+          <div class="fb">Het bod waarbij de totale kosten (inclusief veilingkosten en btw) op 80% van de laagste verwachte Marktplaats-prijs uitkomen. Het is een rekenhulp, geen garantie.</div>
+        </details>
+        <details class="faq">
+          <summary>Hoe betrouwbaar zijn de marktprijzen?</summary>
+          <div class="fb">
+            <p>De prijzen zijn een schatting van het AI-model en worden niet live opgehaald. Ze kunnen afwijken van wat er nu op Marktplaats of eBay staat.</p>
+            <p>De indicator Betrouwbaarheid laat zien hoe zeker het model zelf is van de prijs. Controleer bij een serieuze kandidaat altijd een paar vergelijkbare advertenties.</p>
+          </div>
+        </details>
+        <details class="faq">
+          <summary>Waar worden mijn gegevens bewaard?</summary>
+          <div class="fb">Je kavels staan in de browser van dit apparaat. Als je synchronisatie met Google Sheets aanzet, worden ze ook in jouw eigen sheet bewaard, zodat je ze op telefoon en laptop ziet. Voor een analyse stuurt de app de productnaam naar Anthropic met jouw API-sleutel.</div>
+        </details>
+      </section>
+
+    </main>
   </div>
+
+  <nav class="tabbar" aria-label="Navigatie">
+    <button class="tab-item active" data-tab="overzicht" onclick="switchTab('overzicht')"><i class="ico" data-i="grid"></i><span>Overzicht</span></button>
+    <button class="tab-item" data-tab="analyse" onclick="switchTab('analyse')"><i class="ico" data-i="search"></i><span>Analyseren</span></button>
+    <button class="tab-item" data-tab="gewonnen" onclick="switchTab('gewonnen')"><i class="ico" data-i="trophy"></i><span>Gewonnen</span></button>
+    <button class="tab-item" data-tab="handleiding" onclick="switchTab('handleiding')"><i class="ico" data-i="book"></i><span>Handleiding</span></button>
+  </nav>
 </div>
 
-<div id="tab-gewonnen" class="panel">
-  <div id="gew-leeg" class="empty" style="display:none">
-    <div class="empty-icon">&#127942;</div>
-    <h3>Nog geen gewonnen kavels</h3>
-    <p>Markeer een kavel als "Gewonnen" in het overzicht om hem hier te zien.</p>
-  </div>
-  <div id="gew-inhoud" style="display:none">
-    <div class="kavel-list" id="gewonnen-list"></div>
+<div class="modal-backdrop" id="modal" onclick="if(event.target===this)closeModal()">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <h3 id="modal-title"></h3>
+    <div class="mb" id="modal-body"></div>
+    <div class="modal-actions" id="modal-actions"></div>
   </div>
 </div>
-
-<div id="tab-handleiding" class="panel">
-  <div class="card">
-    <div class="card-title">Hoe werkt het</div>
-    <div style="display:flex;flex-direction:column;gap:16px">
-      <div style="display:flex;gap:12px;align-items:flex-start">
-        <div style="width:28px;height:28px;background:var(--brand);color:white;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0;font-size:13px">1</div>
-        <div><strong>Kavel URL plakken</strong><br><span style="font-size:13px;color:var(--muted)">Kopieer de link van het kavel op de veilingsite en plak hem in de app. De app herkent HNVI, Troostwijk, BVA, Vavato en DTZ automatisch.</span></div>
-      </div>
-      <div style="display:flex;gap:12px;align-items:flex-start">
-        <div style="width:28px;height:28px;background:var(--brand);color:white;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0;font-size:13px">2</div>
-        <div><strong>Bod invullen</strong><br><span style="font-size:13px;color:var(--muted)">Vul het huidig bod in. Kies "Mijn bod" als het jouw eigen bieding is.</span></div>
-      </div>
-      <div style="display:flex;gap:12px;align-items:flex-start">
-        <div style="width:28px;height:28px;background:var(--brand);color:white;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0;font-size:13px">3</div>
-        <div><strong>Analyseer</strong><br><span style="font-size:13px;color:var(--muted)">De AI bepaalt de productnaam, haalt marktprijzen op en berekent je marge.</span></div>
-      </div>
-    </div>
-  </div>
-  <div class="card">
-    <div class="card-title">Kostenberekening</div>
-    <div style="font-size:14px;line-height:2;color:var(--muted)">
-      Bod: <strong style="color:var(--text)">&#8364;1.000</strong><br>
-      x 0,17 (veilingkosten, voorbeeld HNVI; verschilt per veiling) = <strong style="color:var(--text)">&#8364;170</strong> (totaal: &#8364;1.170)<br>
-      x 0,21 (BTW over totaal) = <strong style="color:var(--text)">&#8364;245,70</strong> (totaal: &#8364;1.415,70)<br>
-      <span style="border-top:1px solid var(--border);display:block;margin:6px 0"></span>
-      = Totale inkoopprijs: <strong style="color:var(--brand);font-size:16px">&#8364;1.415,70</strong>
-    </div>
-  </div>
-</div>
-
-</div>
+<div class="toasts" id="toasts" aria-live="polite"></div>
 
 <script>
+// ═══ Veiling Analyser ═══════════════════════════════════════════════════════
+// Structuur: 1 state · 2 UI-helpers · 3 opslag & sync · 4 analyse · 5 resultaat
+//            6 overzicht · 7 gewonnen · 8 selectie · 9 start
+// ────────────────────────────────────────────────────────────────────────────
+
+// ── 1. State ────────────────────────────────────────────────────────────────
 var kavels = [];
 var imgs = [];
+var huidigeThumb = null;
 var bodType = 'ander';
 var actieveFilter = 'alles';
+var zoekTerm = '';
+var sorteerOp = 'nieuw';
 var selectieModus = false;
 var geselecteerd = new Set();
 var huidigGefilterd = [];
+var vorigeLijstSig = '';
+var huidigeTab = 'overzicht';
+var faseNu = 'invoer';
 
+// ── 2. UI-helpers ───────────────────────────────────────────────────────────
+var ICONS = {
+  brand: '<path d="M4 17l5-5 4 3 7-8"/><path d="M15 7h5v5"/>',
+  grid: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  search: '<circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/>',
+  trophy: '<path d="M8 4h8v5a4 4 0 0 1-8 0V4z"/><path d="M8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4"/><path d="M12 13v4M8 20h8M10 17h4"/>',
+  book: '<path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H11v15H5.5A1.5 1.5 0 0 0 4 20.5v-15z"/><path d="M20 5.5A1.5 1.5 0 0 0 18.5 4H13v15h5.5a1.5 1.5 0 0 1 1.5 1.5v-15z"/>',
+  cloud: '<path d="M7 18h10a4 4 0 0 0 .6-7.95A5.5 5.5 0 0 0 7.1 9 4.5 4.5 0 0 0 7 18z"/>',
+  key: '<circle cx="8" cy="15" r="4"/><path d="M11 12l8-8M16 7l3 3M14 9l2 2"/>',
+  moon: '<path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+  check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+  x: '<path d="M6 6l12 12M18 6L6 18"/>',
+  alert: '<path d="M12 4l9 16H3L12 4z"/><path d="M12 10v4M12 17.5v.01"/>',
+  info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8v.01"/>',
+  trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
+  external: '<path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
+  refresh: '<path d="M20 11a8 8 0 0 0-14.5-4M4 4v4h4M4 13a8 8 0 0 0 14.5 4M20 20v-4h-4"/>',
+  back: '<path d="M19 12H5M11 6l-6 6 6 6"/>',
+  select: '<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8.5 12.5l2.5 2.5 4.5-5"/>',
+  image: '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.5"/><path d="M21 16l-5-5-8 8"/>',
+  tag: '<path d="M3 12V4h8l10 10-8 8L3 12z"/><circle cx="7.5" cy="8.5" r="1.2"/>',
+  undo: '<path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/>'
+};
+function svg(name) { return '<svg viewBox="0 0 24 24" aria-hidden="true">' + (ICONS[name] || '') + '</svg>'; }
+function ic(name) { return '<span class="ico">' + svg(name) + '</span>'; }
+function hydrateIcons() {
+  document.querySelectorAll('[data-i]').forEach(function(e) { e.innerHTML = svg(e.getAttribute('data-i')); });
+}
+
+function esc(s) {
+  return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+function veiligeUrl(u) { return /^https?:\/\//i.test(u || '') ? u : ''; }
+function fmtS(n) {
+  if (n == null || !isFinite(n)) return '-';
+  return n > 0 ? '+' + fmt(n) : n < 0 ? '−' + fmt(-n) : fmt(0);
+}
+function parseBedrag(s) {
+  s = String(s).replace(/[€\s]/g, '');
+  if (s.indexOf(',') !== -1) s = s.replace(/\./g, '').replace(',', '.');
+  else if (/^\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, '');
+  return parseFloat(s);
+}
+
+// Thema
+function themaActief() {
+  var t = document.documentElement.getAttribute('data-theme');
+  if (t) return t;
+  return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+function themaLabels() {
+  var dark = themaActief() === 'dark';
+  document.querySelectorAll('.js-theme-lbl').forEach(function(e) { e.textContent = dark ? 'Lichte weergave' : 'Donkere weergave'; });
+}
+function toggleTheme() {
+  var nxt = themaActief() === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', nxt);
+  try { localStorage.setItem('va_theme', nxt); } catch (e) {}
+  themaLabels();
+}
+
+// Modal & toast
+var modalActies = [];
+function openModal(titel, bodyHtml, acties) {
+  document.getElementById('modal-title').textContent = titel;
+  document.getElementById('modal-body').innerHTML = bodyHtml;
+  var box = document.getElementById('modal-actions');
+  box.innerHTML = '';
+  modalActies = acties || [];
+  modalActies.forEach(function(a) {
+    var b = document.createElement('button');
+    b.className = 'btn ' + (a.cls || 'btn-secondary');
+    b.textContent = a.label;
+    b.onclick = function() { if (!a.keepOpen) closeModal(); if (a.fn) a.fn(); };
+    box.appendChild(b);
+  });
+  document.getElementById('modal').classList.add('open');
+  var focusEl = document.querySelector('#modal-body input') || box.lastChild;
+  if (focusEl) setTimeout(function() { focusEl.focus(); }, 30);
+}
+function closeModal() { document.getElementById('modal').classList.remove('open'); }
+function bevestig(titel, tekst, label, gevaar, fn) {
+  openModal(titel, esc(tekst), [
+    { label: 'Annuleren', cls: 'btn-secondary' },
+    { label: label, cls: gevaar ? 'btn-danger' : 'btn-primary', fn: fn }
+  ]);
+}
+document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeModal(); });
+
+function toast(msg, actie, fout) {
+  var box = document.getElementById('toasts');
+  var t = document.createElement('div');
+  t.className = 'toast' + (fout ? ' err' : '');
+  var s = document.createElement('span'); s.textContent = msg; t.appendChild(s);
+  if (actie) {
+    var b = document.createElement('button'); b.className = 'ta'; b.textContent = actie.label;
+    b.onclick = function() { actie.fn(); t.remove(); };
+    t.appendChild(b);
+  }
+  box.appendChild(t);
+  setTimeout(function() { if (t.parentNode) t.remove(); }, actie ? 7000 : 3500);
+}
+
+function toonMsg(id, msg) {
+  var el = document.getElementById(id);
+  el.innerHTML = ic('alert') + '<span></span>';
+  el.lastChild.textContent = msg;
+  el.style.display = 'flex';
+  el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+function vriendelijkeFout(e) {
+  var m = (e && e.message) ? e.message : '';
+  var l = m.toLowerCase();
+  if (l.indexOf('rate_limit') !== -1) return 'Je hebt te veel analyses kort achter elkaar gedaan. Wacht een minuut en probeer het opnieuw.';
+  if (l.indexOf('credit balance') !== -1) return 'Je Anthropic-tegoed is op. Laad tegoed op via console.anthropic.com en probeer het opnieuw.';
+  if (l.indexOf('authentication') !== -1 || l.indexOf('x-api-key') !== -1) return 'Je API-sleutel is niet geldig. Wijzig de sleutel via het menu en probeer het opnieuw.';
+  if (l.indexOf('not_found') !== -1) return 'Het AI-model is niet beschikbaar. Neem contact op met de beheerder van deze app.';
+  if (l.indexOf('overloaded') !== -1) return 'De analyseservice is even druk. Probeer het over een paar seconden opnieuw.';
+  if (l.indexOf('failed to fetch') !== -1 || l.indexOf('networkerror') !== -1 || l.indexOf('load failed') !== -1) return 'Geen verbinding met de analyseservice. Controleer je internet en probeer het opnieuw.';
+  if (l.indexOf('api key') !== -1 || l.indexOf('api-key') !== -1) return 'Voer eerst je API-sleutel in.';
+  if (l.indexOf('marktprijzen') !== -1) return 'De marktprijzen konden niet worden opgehaald. Probeer het opnieuw.';
+  return 'De analyse is mislukt. Probeer het opnieuw. (' + m.slice(0, 120) + ')';
+}
+
+// Navigatie
+function switchTab(name) {
+  huidigeTab = name;
+  document.querySelectorAll('.nav-item, .tab-item').forEach(function(t) { t.classList.toggle('active', t.getAttribute('data-tab') === name); });
+  document.querySelectorAll('.panel').forEach(function(p) { p.classList.remove('active'); });
+  document.getElementById('tab-' + name).classList.add('active');
+  if (name === 'overzicht') renderOverzicht();
+  if (name === 'gewonnen') renderGewonnen();
+  window.scrollTo(0, 0);
+}
+function nieuwKavel() {
+  var wasResultaat = faseNu === 'resultaat';
+  switchTab('analyse');
+  if (wasResultaat) resetFormulier();
+  if (faseNu !== 'bezig') setFase('invoer');
+}
+
+// Fases van de analysepagina: invoer → bezig → resultaat
+function setFase(f) {
+  faseNu = f;
+  document.getElementById('analyse-form').style.display = f === 'invoer' ? 'block' : 'none';
+  document.getElementById('analyse-bezig').style.display = f === 'bezig' ? 'block' : 'none';
+  document.getElementById('analyse-result').style.display = f === 'resultaat' ? 'block' : 'none';
+  var st = { invoer: ['active', 'todo', 'todo'], bezig: ['done', 'active', 'todo'], resultaat: ['done', 'done', 'active'] }[f];
+  document.querySelectorAll('#stepper li').forEach(function(li, i) {
+    li.setAttribute('data-state', st[i]);
+    var sn = li.querySelector('.sn');
+    sn.innerHTML = st[i] === 'done' ? ic('check') : String(i + 1);
+  });
+}
+
+function resetFormulier() {
+  document.getElementById('kavel-url').value = '';
+  document.getElementById('huidig-bod').value = '';
+  document.getElementById('extra-txt').value = '';
+  document.getElementById('previews').innerHTML = '';
+  document.getElementById('analyse-err').style.display = 'none';
+  imgs = []; huidigeThumb = null;
+  setBodType('ander', document.getElementById('bod-ander'));
+  updateVeilingHint();
+}
+
+function updateVeilingHint() {
+  var url = document.getElementById('kavel-url').value.trim();
+  var box = document.getElementById('veiling-hint');
+  if (!url) { box.className = 'veiling-hint'; box.innerHTML = ''; return; }
+  var v = detecteerVeiling(url);
+  if (v.naam === 'Onbekend') {
+    box.className = 'veiling-hint on unknown';
+    box.innerHTML = ic('alert') + '<span>Veiling niet herkend. We rekenen met <strong>17% veilingkosten</strong> en <strong>21% btw</strong>. Controleer dit zelf.</span>';
+  } else {
+    box.className = 'veiling-hint on';
+    box.innerHTML = ic('check') + '<span>Herkend: <strong>' + esc(v.naam) + '</strong> &middot; ' + Math.round(v.opgeld * 100) + '% veilingkosten + ' + Math.round(v.btw * 100) + '% btw</span>';
+  }
+}
+
+// Foto's
+function maakThumb(dataUrl, cb) {
+  var img = new Image();
+  img.onload = function() {
+    try {
+      var c = document.createElement('canvas'); c.width = 96; c.height = 96;
+      var s = Math.min(img.width, img.height);
+      c.getContext('2d').drawImage(img, (img.width - s) / 2, (img.height - s) / 2, s, s, 0, 0, 96, 96);
+      cb(c.toDataURL('image/jpeg', 0.6));
+    } catch (e) { cb(null); }
+  };
+  img.onerror = function() { cb(null); };
+  img.src = dataUrl;
+}
+function leesFiles(files) {
+  Array.from(files).forEach(function(f) {
+    if (!f.type.startsWith('image/')) return;
+    var r = new FileReader();
+    r.onload = function(e) {
+      var id = Date.now() + Math.random();
+      var eerste = imgs.length === 0;
+      imgs.push({ id: id, base64: e.target.result.split(',')[1], mediaType: f.type });
+      if (eerste) maakThumb(e.target.result, function(t) { if (imgs.length) huidigeThumb = t; });
+      var d = document.createElement('div');
+      d.className = 'prev'; d.id = 'prev-' + id;
+      var img = document.createElement('img'); img.src = e.target.result; img.alt = '';
+      var btn = document.createElement('button'); btn.className = 'prev-del'; btn.type = 'button';
+      btn.setAttribute('aria-label', 'Foto verwijderen'); btn.textContent = '×';
+      btn.onclick = function() { delImg(id); };
+      d.appendChild(img); d.appendChild(btn);
+      document.getElementById('previews').appendChild(d);
+    };
+    r.readAsDataURL(f);
+  });
+}
+function delImg(id) {
+  imgs = imgs.filter(function(i) { return i.id !== id; });
+  var el = document.getElementById('prev-' + id);
+  if (el) el.remove();
+  if (imgs.length === 0) huidigeThumb = null;
+  else maakThumb('data:' + imgs[0].mediaType + ';base64,' + imgs[0].base64, function(t) { huidigeThumb = t; });
+}
+
+function setBodType(type, btn) {
+  bodType = type;
+  document.querySelectorAll('.bod-btn').forEach(function(b) { b.classList.remove('active'); });
+  (btn || document.getElementById('bod-' + type)).classList.add('active');
+  document.getElementById('bod-hint').textContent = type === 'eigen'
+    ? 'Jouw bod. Dit wordt gebruikt als inkoopprijs voor de margeberekening.'
+    : 'Huidig hoogste bod op de veiling';
+}
+
+// Voortgang tijdens analyse
+var STAP_LABELS = ['Product herkennen', 'Marktprijzen ophalen', 'Kosten en advies berekenen'];
+var STAP_STATUS = ['Product wordt geïdentificeerd…', 'Marktprijzen worden verzameld…', 'Veilingkosten worden berekend en advies wordt samengesteld…'];
+function setStap(n) {
+  document.getElementById('bezig-status').textContent = STAP_STATUS[n - 1] || '';
+  [1, 2, 3].forEach(function(i) {
+    var el = document.getElementById('stap' + i);
+    var st = i < n ? 'done' : i === n ? 'active' : '';
+    el.className = 'step' + (st ? ' ' + st : '');
+    el.innerHTML = '<span class="si">' + (st === 'done' ? ic('check') : '') + '</span><span>' + STAP_LABELS[i - 1] + '</span>';
+  });
+}
+function verbergStappen() { /* voortgang wordt via setFase() verborgen */ }
+
+function fmt(n) { return (n != null && isFinite(n)) ? '\u20ac' + Math.round(n).toLocaleString('nl-NL') : '-'; }
+function setBtn(id, txtId, disabled, html) {
+  document.getElementById(id).disabled = disabled;
+  document.getElementById(txtId).innerHTML = html;
+}
+
+// ── 3. API, opslag & sync ───────────────────────────────────────────────────
 function getApiKey() { return localStorage.getItem('hnvi_apikey') || ''; }
 function slaApiKeyOp() {
   var k = document.getElementById('apikey-input').value.trim();
-  if (k.indexOf('sk-ant-') !== 0) { alert('Ongeldige API key'); return; }
+  if (k.indexOf('sk-ant-') !== 0) { toast('Dit lijkt geen geldige API-sleutel. Een sleutel begint met sk-ant-.', null, true); return; }
   localStorage.setItem('hnvi_apikey', k);
+  document.getElementById('apikey-input').value = '';
   checkApiKey();
+  toast('API-sleutel opgeslagen');
 }
-function resetApiKey() { localStorage.removeItem('hnvi_apikey'); checkApiKey(); }
+function resetApiKey() {
+  if (!getApiKey()) { document.getElementById('apikey-input').focus(); window.scrollTo(0, 0); return; }
+  bevestig('API-sleutel wijzigen?', 'De huidige sleutel wordt van dit apparaat verwijderd. Je kunt daarna een nieuwe invoeren.', 'Sleutel verwijderen', false, function() {
+    localStorage.removeItem('hnvi_apikey'); checkApiKey(); window.scrollTo(0, 0);
+  });
+}
 function checkApiKey() {
   var k = getApiKey();
   document.getElementById('apikey-bar').style.display = k ? 'none' : 'flex';
-  document.getElementById('apikey-ok').style.display = k ? 'flex' : 'none';
+  document.querySelectorAll('.js-key-sub').forEach(function(e) {
+    e.textContent = k ? 'Ingesteld' : 'Ontbreekt';
+    e.className = 'sub js-key-sub ' + (k ? 'ok' : 'err');
+  });
 }
 
-// ── Google Sheets sync ────────────────────────────────────────────────────────
 var SHEETS_URL = localStorage.getItem('hnvi_sheets_url') || '';
-
+function setSyncStatus(st) {
+  var tekst = !SHEETS_URL ? 'Niet gekoppeld'
+    : st === 'bezig' ? 'Synchroniseren…'
+    : st === 'fout' ? 'Synchronisatie mislukt'
+    : 'Gekoppeld · ' + new Date().toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' });
+  document.querySelectorAll('.js-sync-sub').forEach(function(e) {
+    e.textContent = tekst;
+    e.className = 'sub js-sync-sub ' + (!SHEETS_URL ? '' : st === 'fout' ? 'err' : st === 'bezig' ? '' : 'ok');
+  });
+}
 function setSheetsUrl() {
-  var url = prompt('Plak je Google Apps Script Web App URL (eindigt op /exec):', SHEETS_URL);
-  if (url) {
-    SHEETS_URL = url.trim();
-    localStorage.setItem('hnvi_sheets_url', SHEETS_URL);
-    syncVanSheets();
-  }
+  openModal('Synchronisatie met Google Sheets',
+    'Plak de Web App-URL van je Google Apps Script (eindigt op /exec). Daarmee houd je je kavels gelijk op telefoon en laptop.' +
+    '<input class="input" id="sync-url" type="text" placeholder="https://script.google.com/macros/s/…/exec" value="' + esc(SHEETS_URL) + '" />',
+    [
+      { label: 'Annuleren', cls: 'btn-secondary' }
+    ].concat(SHEETS_URL ? [{ label: 'Ontkoppelen', cls: 'btn-secondary', fn: function() {
+      SHEETS_URL = ''; localStorage.removeItem('hnvi_sheets_url'); setSyncStatus('ok'); toast('Synchronisatie ontkoppeld');
+    } }] : []).concat([
+      { label: 'Opslaan en synchroniseren', cls: 'btn-primary', fn: function() {
+        var url = document.getElementById('sync-url').value.trim();
+        if (url) {
+          SHEETS_URL = url;
+          localStorage.setItem('hnvi_sheets_url', SHEETS_URL);
+          syncVanSheets();
+        }
+      } }
+    ]));
 }
 
 function syncNaarSheets() {
   if (!SHEETS_URL) return Promise.resolve();
+  setSyncStatus('bezig');
   return fetch(SHEETS_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain' },
     body: JSON.stringify({ actie: 'opslaan', kavels: kavels })
-  }).then(function(r) { return r.json(); }).catch(function(e) {
+  }).then(function(r) { return r.json(); }).then(function(r) {
+    setSyncStatus('ok'); return r;
+  }).catch(function(e) {
     console.error('Sync naar Sheets mislukt:', e);
+    setSyncStatus('fout');
   });
 }
 
 function syncVanSheets() {
   if (!SHEETS_URL) return Promise.resolve();
+  setSyncStatus('bezig');
   return fetch(SHEETS_URL)
     .then(function(r) { return r.json(); })
     .then(function(data) {
@@ -354,9 +1072,12 @@ function syncVanSheets() {
         localStorage.setItem('hnvi_kavels', JSON.stringify(kavels));
         updateBadge();
         renderOverzicht();
+        renderGewonnen();
       }
+      setSyncStatus('ok');
     }).catch(function(e) {
       console.error('Sync van Sheets mislukt:', e);
+      setSyncStatus('fout');
     });
 }
 
@@ -368,79 +1089,7 @@ function slaKavelsOp() {
   syncNaarSheets();
 }
 
-function switchTab(name) {
-  var namen = ['overzicht','analyse','gewonnen','handleiding'];
-  document.querySelectorAll('.tab').forEach(function(t,i) { t.classList.toggle('active', namen[i] === name); });
-  document.querySelectorAll('.panel').forEach(function(p) { p.classList.remove('active'); });
-  document.getElementById('tab-' + name).classList.add('active');
-  if (name === 'overzicht') renderOverzicht();
-  if (name === 'gewonnen') renderGewonnen();
-}
-
-var zone = document.getElementById('upload-zone');
-document.getElementById('foto-input').addEventListener('change', function(e) { leesFiles(e.target.files); });
-zone.addEventListener('dragover', function(e) { e.preventDefault(); zone.classList.add('drag'); });
-zone.addEventListener('dragleave', function() { zone.classList.remove('drag'); });
-zone.addEventListener('drop', function(e) { e.preventDefault(); zone.classList.remove('drag'); leesFiles(e.dataTransfer.files); });
-
-function leesFiles(files) {
-  Array.from(files).forEach(function(f) {
-    if (!f.type.startsWith('image/')) return;
-    var r = new FileReader();
-    r.onload = function(e) {
-      var id = Date.now() + Math.random();
-      imgs.push({ id: id, base64: e.target.result.split(',')[1], mediaType: f.type });
-      var d = document.createElement('div');
-      d.className = 'prev'; d.id = 'prev-' + id;
-      var img = document.createElement('img'); img.src = e.target.result;
-      var btn = document.createElement('button'); btn.className = 'prev-del'; btn.textContent = 'x';
-      btn.onclick = function() { delImg(id); };
-      d.appendChild(img); d.appendChild(btn);
-      document.getElementById('previews').appendChild(d);
-    };
-    r.readAsDataURL(f);
-  });
-}
-function delImg(id) {
-  imgs = imgs.filter(function(i) { return i.id !== id; });
-  var el = document.getElementById('prev-' + id);
-  if (el) el.remove();
-}
-
-function setBodType(type, btn) {
-  bodType = type;
-  document.querySelectorAll('.bod-btn').forEach(function(b) { b.classList.remove('active'); });
-  btn.classList.add('active');
-  document.getElementById('bod-hint').textContent = type === 'eigen'
-    ? 'Jouw bod - gebruikt als inkoopprijs voor margeberekening'
-    : 'Huidig hoogste bod op de veiling';
-}
-
-function setStap(n) {
-  document.getElementById('stappen').style.display = 'block';
-  var icons = ['&#128269;','&#128176;','&#128202;'];
-  var labels = ['Productnaam bepalen','Marktprijzen ophalen','Advies berekenen'];
-  [1,2,3].forEach(function(i) {
-    var el = document.getElementById('stap' + i);
-    if (i < n) {
-      el.className = 'step done';
-      el.innerHTML = '<span>&#9989;</span> ' + labels[i-1];
-    } else if (i === n) {
-      el.className = 'step active';
-      var sp = document.createElement('span'); sp.className = 'step-spin';
-      el.innerHTML = '';
-      el.appendChild(sp);
-      el.appendChild(document.createTextNode(' ' + labels[i-1]));
-    } else {
-      el.className = 'step';
-      el.innerHTML = '<span>' + icons[i-1] + '</span> ' + labels[i-1];
-    }
-  });
-}
-function verbergStappen() { document.getElementById('stappen').style.display = 'none'; }
-
-function fmt(n) { return (n != null && isFinite(n)) ? '\u20ac' + Math.round(n).toLocaleString('nl-NL') : '-'; }
-
+// ── 4. Analyse ──────────────────────────────────────────────────────────────
 function naamUitUrl(u) {
   try {
     var deel = (u.split('/veiling-kavel/')[1] || '').split('?')[0];
@@ -448,7 +1097,6 @@ function naamUitUrl(u) {
     return slug.charAt(0).toUpperCase() + slug.slice(1);
   } catch(e) { return ''; }
 }
-
 function parseJSON(txt) {
   // Verwijder markdown code block markers (```json ... ```)
   var clean = txt.replace(/```json/gi, '').replace(/```/g, '').trim();
@@ -469,7 +1117,6 @@ function parseJSON(txt) {
   }
   return null;
 }
-
 function callClaude(system, userText, maxTokens) {
   var key = getApiKey();
   console.log('API key aanwezig:', key ? 'JA (lengte ' + key.length + ')' : 'NEE');
@@ -502,8 +1149,6 @@ function callClaude(system, userText, maxTokens) {
     throw err;
   });
 }
-
-// ── Veiling site detectie ─────────────────────────────────────────────────────
 function detecteerVeiling(url) {
   if (!url) return { naam: 'Onbekend', opgeld: 0.17, btw: 0.21 };
   var u = url.toLowerCase();
@@ -526,14 +1171,17 @@ function detecteerVeiling(url) {
   // Onbekende site - standaard 17% veilingkosten + 21% BTW (controleer zelf!)
   return { naam: 'Onbekend', opgeld: 0.17, btw: 0.21 };
 }
-
 function analyseer() {
   var url = document.getElementById('kavel-url').value.trim();
   var bodStr = document.getElementById('huidig-bod').value.trim();
   var extra = document.getElementById('extra-txt').value.trim();
 
-  if (!url && imgs.length === 0 && !extra) {
-    toonMsg('analyse-err', 'Voer een kavel-URL in of voeg een beschrijving toe.'); return;
+  if (!url && !extra) {
+    toonMsg('analyse-err', 'Plak de link naar het kavel of vul een productnaam in.'); return;
+  }
+  if (bodStr) {
+    var bodCheck = /^[\d.,\s\u20ac]+$/.test(bodStr) ? parseBedrag(bodStr) : NaN;
+    if (!isFinite(bodCheck) || bodCheck <= 0) { toonMsg('analyse-err', 'Voer een geldig bedrag in, bijvoorbeeld 250.'); return; }
   }
 
   document.getElementById('analyse-err').style.display = 'none';
@@ -542,9 +1190,10 @@ function analyseer() {
 
   var urlNaam = url ? naamUitUrl(url) : '';
   var product = (extra || urlNaam || 'onbekend product').replace(/"/g, '').replace(/'/g, '').trim();
-  var bod = bodStr ? parseFloat(bodStr.replace(',', '.')) : null;
+  var bod = bodStr ? parseBedrag(bodStr) : null;
   var kavelnr = url ? ((url.match(/\/(\d+)(?:\?|$)/) || [])[1]) : null;
 
+  setFase('bezig');
   setStap(1);
 
   var prijzenPrompt = 'Geef realistische marktprijzen voor: "' + product + '"\n\n' +
@@ -615,237 +1264,367 @@ function analyseer() {
     };
 
     var idx = kavels.findIndex(function(k) { return k.url === url && url; });
+    if (huidigeThumb) kavelData.thumb = huidigeThumb; else if (idx >= 0 && kavels[idx].thumb) kavelData.thumb = kavels[idx].thumb;
     if (idx >= 0) kavels[idx] = kavelData; else kavels.unshift(kavelData);
     slaKavelsOp();
     updateBadge();
     verbergStappen();
     toonAnalyseResultaat(kavelData);
+    toast('Analyse opgeslagen in je overzicht', huidigeTab !== 'analyse' ? { label: 'Bekijk', fn: function() { switchTab('analyse'); } } : null);
 
   }).catch(function(e) {
     console.error('Analyse fout:', e);
     verbergStappen();
-    toonMsg('analyse-err', e.message || 'Er ging iets mis. Probeer opnieuw.');
+    setFase('invoer');
+    toonMsg('analyse-err', vriendelijkeFout(e));
   }).finally(function() {
-    setBtn('analyse-btn', 'analyse-btn-txt', false, '&#128269; Analyseer kavel');
+    setBtn('analyse-btn', 'analyse-btn-txt', false, 'Analyseer kavel');
   });
+}
+
+// ── 5. Resultaat ────────────────────────────────────────────────────────────
+function adviesInfo(a) {
+  if (a === 'kopen') return { key: 'kopen', label: 'Aanrader', tekst: 'Dit kavel lijkt interessant: de geschatte marktwaarde ligt ruim boven de totale kosten.' };
+  if (a === 'skip') return { key: 'skip', label: 'Skip', tekst: 'Op basis van de geschatte marktwaarde en de totale kosten lijkt dit kavel geen winst op te leveren.' };
+  if (a === 'twijfel') return { key: 'twijfel', label: 'Twijfel', tekst: 'Dit kavel is een grensgeval. Controleer de marktprijs zelf voordat je biedt.' };
+  return { key: 'wacht', label: 'Niet geanalyseerd', tekst: '' };
+}
+function vertrouwenInfo(v) {
+  if (v === 'hoog') return { label: 'Hoog', cls: 'pos' };
+  if (v === 'middel') return { label: 'Gemiddeld', cls: 'warn' };
+  return { label: 'Laag', cls: 'neg' };
+}
+function veilingVan(k) { return k.veiling || (k.kosten && k.kosten.site) || 'Onbekend'; }
+
+function adviesRedenen(d) {
+  var r = [];
+  var mp = d.prijzen && d.prijzen.marktplaats;
+  var k = d.kosten;
+  if (k && mp && mp.gemiddeld) {
+    var m = k.marge, pct = Math.round(m / mp.gemiddeld * 100);
+    if (m > 0) r.push(['ok', 'De marktwaarde (' + fmt(mp.gemiddeld) + ') ligt boven de totale kosten (' + fmt(k.totaal) + ').']);
+    else r.push(['bad', 'De totale kosten (' + fmt(k.totaal) + ') liggen niet onder de geschatte marktwaarde (' + fmt(mp.gemiddeld) + ').']);
+    if (m > 0 && pct >= 20) r.push(['ok', 'De verwachte marge is ' + pct + '% van de verkoopprijs, boven de 20% die voor een aanrader nodig is.']);
+    else if (m > 0) r.push(['warn', 'De verwachte marge is ' + pct + '% van de verkoopprijs, onder de 20% die voor een aanrader nodig is.']);
+    else if (m < -50 || pct < -10) r.push(['bad', 'Het verwachte verlies is ' + fmt(-m) + ' (' + Math.abs(pct) + '% van de verkoopprijs).']);
+    else r.push(['warn', 'De marge is negatief maar klein (' + fmtS(m) + ').']);
+    if (mp.laag) {
+      var lm = mp.laag - k.totaal;
+      if (lm > 0) r.push(['ok', 'Ook bij de laagste verwachte prijs (' + fmt(mp.laag) + ') blijft er winst over.']);
+      else r.push(['warn', 'Bij de laagste verwachte prijs (' + fmt(mp.laag) + ') is er geen winst meer (' + fmtS(lm) + ').']);
+    }
+  } else if (!k) {
+    r.push(['warn', 'Er is nog geen bod ingevuld, dus de marge kan niet worden berekend.']);
+    if (d.maxBod) r.push(['info', 'Tot ' + fmt(d.maxBod) + ' blijven de totale kosten onder 80% van de laagste verwachte prijs.']);
+  }
+  if (mp) {
+    if (mp.vertrouwen === 'hoog') r.push(['ok', 'De marktprijs wordt door de analyse als betrouwbaar ingeschat.']);
+    else if (mp.vertrouwen === 'middel') r.push(['warn', 'De marktprijs is indicatief: het model is er matig zeker van.']);
+    else r.push(['warn', 'De marktprijs is onzeker: het model heeft weinig houvast.']);
+    if (mp.hoog && mp.laag && mp.gemiddeld && (mp.hoog - mp.laag) / mp.gemiddeld > 0.6) r.push(['warn', 'De verwachte prijs loopt sterk uiteen (' + fmt(mp.laag) + ' tot ' + fmt(mp.hoog) + ').']);
+    if (d.prijzen && d.prijzen.nieuwprijs && mp.gemiddeld >= d.prijzen.nieuwprijs) r.push(['warn', 'De tweedehands prijs ligt niet onder de nieuwprijs. Controleer beide schattingen.']);
+  }
+  r.push(['info', 'Prijzen zijn een schatting van het AI-model en niet live opgehaald. Controleer vergelijkbare advertenties voordat je biedt.']);
+  return r;
+}
+
+function kostenBalk(k, mpGem) {
+  var schaal = Math.max(k.totaal, mpGem);
+  var p = function(v) { return (v / schaal * 100).toFixed(2); };
+  var pos = mpGem / schaal * 100;
+  var stand = pos < 18 ? 'l' : pos > 82 ? 'r' : '';
+  var h = '<div class="fbar" role="img" aria-label="Totale kosten ' + fmt(k.totaal) + ' tegenover marktwaarde ' + fmt(mpGem) + '">';
+  h += '<div class="fbar-mark ' + stand + '" style="left:' + pos.toFixed(2) + '%">Marktwaarde ' + fmt(mpGem) + '</div>';
+  h += '<div class="fbar-line" style="left:' + pos.toFixed(2) + '%"></div>';
+  h += '<div class="fbar-track">';
+  h += '<div class="s-bod" style="width:' + p(k.bod) + '%"></div>';
+  h += '<div class="s-vk" style="width:' + p(k.vk) + '%"></div>';
+  h += '<div class="s-btw" style="width:' + p(k.btw) + '%"></div>';
+  if (k.marge > 0) h += '<div class="s-winst" style="width:' + p(k.marge) + '%"></div>';
+  else if (k.marge < 0) h += '<div class="s-verlies" style="left:' + pos.toFixed(2) + '%;width:' + p(-k.marge) + '%"></div>';
+  h += '</div></div>';
+  h += '<div class="legend">' +
+    '<span><i style="background:var(--seg-bod)"></i>Bod</span>' +
+    '<span><i style="background:var(--seg-vk)"></i>Veilingkosten</span>' +
+    '<span><i style="background:var(--seg-btw)"></i>Btw</span>' +
+    (k.marge > 0 ? '<span><i style="background:var(--pos)"></i>Verwachte winst</span>' : '') +
+    (k.marge < 0 ? '<span><i style="background:var(--neg)"></i>Verwacht verlies</span>' : '') +
+    '</div>';
+  return h;
+}
+
+function platformKaart(naam, p, tagsLabel, tags, globe) {
+  var c = vertrouwenInfo(p.vertrouwen);
+  var h = '<div class="card"><div class="plat-h"><h3>' + naam + '</h3><span class="conf ' + c.cls + '"><i></i>Betrouwbaarheid ' + c.label.toLowerCase() + '</span></div>';
+  h += '<div class="range"><span>' + fmt(p.laag) + '</span><b>' + fmt(p.gemiddeld) + '</b><span>' + fmt(p.hoog) + '</span></div>';
+  h += '<div class="kc-meta">Laag &middot; gemiddeld &middot; hoog &middot; verkooptijd ' + esc(p.verkooptijd || '-') + '</div>';
+  if (p.tip) h += '<div class="tip">' + esc(p.tip) + '</div>';
+  if (tags && tags.length) { h += '<div class="tags">'; tags.forEach(function(t) { h += '<span class="tag">' + esc(t) + '</span>'; }); h += '</div>'; }
+  return h + '</div>';
 }
 
 function toonAnalyseResultaat(d) {
   var mp = d.prijzen && d.prijzen.marktplaats ? d.prijzen.marktplaats : null;
   var eb = d.prijzen && d.prijzen.ebay ? d.prijzen.ebay : null;
-  var vC = d.advies==='kopen'?'v-kopen':d.advies==='twijfel'?'v-twijfel':'v-skip';
-  var vE = d.advies==='kopen'?'&#9989; Goede koop!':d.advies==='twijfel'?'&#9888;&#65039; Twijfelgeval':'&#10060; Beter overslaan';
-  var confCls = function(v) { return v==='hoog'?'b-high':v==='middel'?'b-mid':'b-low'; };
-  var confTxt = function(v) { return v==='hoog'?'&#10003; Betrouwbaar':v==='middel'?'~ Indicatief':'? Onzeker'; };
-  var roiKleur = d.roi>=70?'#1a6b35':d.roi>=40?'#d97706':'#e63946';
+  var a = adviesInfo(d.advies);
+  var idx = kavels.indexOf(d);
+  var conf = vertrouwenInfo(mp ? mp.vertrouwen : null);
+  var url = veiligeUrl(d.url);
 
-  var html = '<button class="back-btn" onclick="document.getElementById(\'analyse-result\').style.display=\'none\'">&#8592; Terug</button>';
+  var h = '<div class="res-bar"><button class="btn btn-ghost btn-sm" onclick="switchTab(\'overzicht\')">' + ic('back') + 'Overzicht</button><div class="grp">';
+  if (idx >= 0) h += '<button class="btn btn-secondary btn-sm" onclick="heranalyseer(' + idx + ')">' + ic('refresh') + 'Opnieuw analyseren</button>';
+  if (idx >= 0 && d.status !== 'gewonnen') h += '<button class="btn btn-secondary btn-sm" onclick="markeerGewonnen(' + idx + ',function(){switchTab(\'overzicht\')})">' + ic('trophy') + 'Markeer als gewonnen</button>';
+  h += '<button class="btn btn-primary btn-sm" onclick="nieuwKavel()">' + ic('plus') + 'Nieuwe analyse</button></div></div>';
 
-  html += '<div class="card" style="border-left:4px solid var(--brand)">';
-  html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;margin-bottom:6px">';
-  html += '<div><h2 style="font-size:17px;font-weight:700;margin-bottom:3px">' + (d.titel||'') + '</h2>';
-  html += '<div style="font-size:12px;color:var(--muted)">Kavel ' + (d.kavelnummer||'-') + ' &middot; ' + ((d.veiling) || (d.kosten && d.kosten.site) || 'Onbekend');
-  if (d.url) html += ' &middot; <a href="' + d.url + '" target="_blank" style="color:var(--brand)">&#8599; Bekijk kavel</a>';
-  html += '</div></div>';
-  if (d.prijzen && d.prijzen.categorie) html += '<span style="background:var(--brand-light);color:var(--brand);font-size:12px;font-weight:600;padding:3px 10px;border-radius:20px">' + d.prijzen.categorie + '</span>';
-  html += '</div></div>';
+  // Hero: advies
+  h += '<div class="card hero v-' + a.key + '">';
+  h += '<div class="hero-top"><span class="pill pill-lg pill-' + a.key + '">' + a.label + '</span>';
+  h += '<span class="hero-meta">' + esc(veilingVan(d)) + (d.kavelnummer ? ' &middot; Kavel ' + esc(d.kavelnummer) : '');
+  if (url) h += ' &middot; <a href="' + esc(url) + '" target="_blank" rel="noopener">Bekijk kavel</a>';
+  h += '</span></div>';
+  h += '<h2>' + esc(d.titel || 'Onbekend product') + '</h2>';
+  h += '<p class="uitleg">' + (d.kosten ? esc(a.tekst) : 'Er is nog geen bod ingevuld, dus de marge kan niet worden berekend.') + '</p>';
+  if (d.adviesReden) h += '<p class="reden">' + esc(d.adviesReden) + '</p>';
+  h += '<div class="hero-kpis">';
+  h += '<div class="kpi"><div class="kpi-l">Maximaal rendabel bod</div><div class="kpi-v">' + (d.maxBod ? fmt(d.maxBod) : '-') + '</div><div class="kpi-s">Totale kosten blijven onder 80% van de laagste prijs</div></div>';
+  h += '<div class="kpi"><div class="kpi-l">Handelspotentieel</div><div class="kpi-v">' + (d.roi || 0) + '<span style="font-size:13px;font-weight:500;color:var(--ink-3)"> / 100</span></div><div class="meter"><i data-w="' + (d.roi || 0) + '"></i></div></div>';
+  h += '<div class="kpi"><div class="kpi-l">Betrouwbaarheid prijzen</div><div class="kpi-v"><span class="conf ' + conf.cls + '" style="font-size:20px;font-weight:700;color:var(--ink)"><i></i>' + conf.label + '</span></div><div class="kpi-s">Zekerheid van het AI-model, geen garantie</div></div>';
+  h += '</div></div>';
 
-  html += '<div class="verdict ' + vC + '"><h3>' + vE + '</h3><p>' + d.adviesReden + '</p>';
-  if (d.maxBod) html += '<p style="margin-top:7px;font-weight:600">&#128161; Maximaal rendabel bieden: <span style="font-size:15px">' + fmt(d.maxBod) + '</span></p>';
-  html += '</div>';
+  // Financiële analyse
+  h += '<div class="card"><div class="card-h"><h2>Financiële analyse</h2>';
+  if (d.kosten && d.kosten.site) h += '<span class="kc-meta">' + esc(d.kosten.site) + ' &middot; ' + (d.eigen_bod ? 'Mijn bod' : 'Huidig bod') + '</span>';
+  h += '</div>';
+  if (d.kosten && mp) {
+    var k = d.kosten, pct = mp.gemiddeld ? Math.round(k.marge / mp.gemiddeld * 100) : 0;
+    var margeCls = k.marge > 0 ? 'pos' : k.marge < 0 ? 'neg' : '';
+    h += '<div class="metrics">';
+    h += '<div class="metric"><div class="metric-l">Marktwaarde</div><div class="metric-v">' + fmt(mp.gemiddeld) + '</div><div class="metric-s">Marktplaats gemiddeld</div></div>';
+    h += '<div class="metric"><div class="metric-l">Totale kosten</div><div class="metric-v">' + fmt(k.totaal) + '</div><div class="metric-s">Incl. veilingkosten en btw</div></div>';
+    h += '<div class="metric"><div class="metric-l">Geschatte marge</div><div class="metric-v ' + margeCls + '">' + fmtS(k.marge) + '</div><div class="metric-s">Marktwaarde min kosten</div></div>';
+    h += '<div class="metric"><div class="metric-l">Marge</div><div class="metric-v ' + margeCls + '">' + pct + '%</div><div class="metric-s">Van de verkoopprijs</div></div>';
+    h += '</div>';
+    h += kostenBalk(k, mp.gemiddeld);
+    var btwPct = (k.bod + k.vk) ? Math.round(k.btw / (k.bod + k.vk) * 100) : 21;
+    h += '<table class="ctable"><tbody>';
+    h += '<tr><td>' + (d.eigen_bod ? 'Mijn bod' : 'Huidig bod') + '</td><td>' + fmt(k.bod) + '</td></tr>';
+    h += '<tr class="sub"><td>+ Veilingkosten (' + (k.opgeld_pct || 17) + '%)</td><td>' + fmt(k.vk) + '</td></tr>';
+    h += '<tr class="sub"><td>+ Btw (' + btwPct + '% over bod en veilingkosten)</td><td>' + fmt(k.btw) + '</td></tr>';
+    h += '<tr class="tot"><td>= Totale kosten</td><td>' + fmt(k.totaal) + '</td></tr>';
+    h += '<tr class="sub"><td>Marktwaarde (Marktplaats gemiddeld)</td><td>' + fmt(mp.gemiddeld) + '</td></tr>';
+    h += '<tr class="res"><td>Geschatte marge</td><td class="' + margeCls + '">' + fmtS(k.marge) + '</td></tr>';
+    h += '</tbody></table>';
+  } else {
+    h += '<div class="empty small" style="border-style:solid"><h3>Nog geen bod ingevuld</h3><p>Vul een bod in om de totale kosten en de marge te zien.' + (d.maxBod ? ' Bieden tot ' + fmt(d.maxBod) + ' is volgens de berekening rendabel.' : '') + '</p>' +
+         (idx >= 0 ? '<button class="btn btn-primary" onclick="heranalyseer(' + idx + ')">Bod invullen</button>' : '') + '</div>';
+  }
+  h += '</div>';
 
-  if (d.kosten) {
-    html += '<div class="costs-box"><h4>&#128176; Kostenberekening &mdash; ' + (d.kosten && d.kosten.site ? '<span style="font-weight:600;color:var(--brand)">' + d.kosten.site + '</span> &middot; ' : '') + (d.eigen_bod?'&#128587; Mijn bod':'&#128100; Huidig bod') + (d.kosten && d.kosten.opgeld_pct ? ' &middot; ' + d.kosten.opgeld_pct + '% opgeld' : '') + '</h4>';
-    html += '<div class="c-row"><span>Bod</span><span>' + fmt(d.kosten.bod) + '</span></div>';
-    html += '<div class="c-row"><span>Veilingkosten (' + (d.kosten.opgeld_pct || 17) + '%)</span><span>' + fmt(d.kosten.vk) + '</span></div>';
-    html += '<div class="c-row"><span>BTW over totaal (21%)</span><span>' + fmt(d.kosten.btw) + '</span></div>';
-    html += '<div class="c-row"><span>Totale inkoopprijs</span><span>' + fmt(d.kosten.totaal) + '</span></div>';
-    if (d.kosten.marge != null) {
-      html += '<div class="c-row" style="margin-top:6px;padding-top:8px;border-top:1px solid #ffe082"><span>Verwachte marge (MP gem.)</span>';
-      html += '<span class="' + (d.kosten.marge>0?'c-pos':'c-neg') + '">' + (d.kosten.marge>0?'+':'') + fmt(d.kosten.marge) + '</span></div>';
+  // Waarom dit advies
+  h += '<div class="card"><div class="card-h"><h2>Waarom dit advies?</h2></div><ul class="why">';
+  adviesRedenen(d).forEach(function(r) {
+    var icn = r[0] === 'ok' ? 'check' : r[0] === 'bad' ? 'x' : r[0] === 'warn' ? 'alert' : 'info';
+    h += '<li class="' + r[0] + '"><span class="wi">' + ic(icn) + '</span><span>' + esc(r[1]) + '</span></li>';
+  });
+  h += '</ul><div class="note">' + ic('info') + '<span>Dit advies is een berekende inschatting en geen garantie. De uitkomst hangt af van de geschatte marktprijzen en de werkelijke staat van het product.</span></div></div>';
+
+  // Marktprijzen
+  if (d.prijzen) {
+    h += '<div class="card"><div class="card-h"><h2>Marktprijzen</h2></div><div class="prices-strip">';
+    if (d.prijzen.nieuwprijs) h += '<div class="ps"><div class="ps-l">Nieuwprijs</div><div class="ps-v">' + fmt(d.prijzen.nieuwprijs) + '</div><div class="ps-s">' + esc(d.prijzen.nieuwprijs_bron || '') + '</div></div>';
+    if (mp) h += '<div class="ps"><div class="ps-l">Tweedehands (Marktplaats)</div><div class="ps-v">' + fmt(mp.gemiddeld) + '</div><div class="ps-s">' + fmt(mp.laag) + ' tot ' + fmt(mp.hoog) + '</div></div>';
+    if (eb) h += '<div class="ps"><div class="ps-l">eBay</div><div class="ps-v">' + fmt(eb.gemiddeld) + '</div><div class="ps-s">' + fmt(eb.laag) + ' tot ' + fmt(eb.hoog) + '</div></div>';
+    h += '</div></div>';
+    h += '<div class="pgrid">';
+    if (mp) h += platformKaart('Marktplaats', mp, 'Zoekwoorden', mp.zoekwoorden);
+    if (eb) h += platformKaart('eBay', eb, 'Keywords', eb.keywords);
+    h += '</div>';
+    if (d.prijzen.aandachtspunten && d.prijzen.aandachtspunten.length) {
+      h += '<div class="card"><div class="card-h"><h2>Let op</h2></div><ul class="attn">';
+      d.prijzen.aandachtspunten.forEach(function(p) { h += '<li>' + esc(p) + '</li>'; });
+      h += '</ul></div>';
     }
-    html += '</div>';
   }
 
-  html += '<div class="roi-wrap"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">';
-  html += '<span style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Handelspotentieel</span>';
-  html += '<span style="font-size:20px;font-weight:800;color:' + roiKleur + '">' + d.roi + '/100</span></div>';
-  html += '<div class="roi-bar"><div class="roi-fill" style="width:' + d.roi + '%"></div></div>';
-  html += '<div class="roi-labels"><span>Laag</span><span>Gemiddeld</span><span>Hoog</span></div></div>';
-
-  if (d.prijzen && d.prijzen.nieuwprijs) {
-    html += '<div class="card" style="margin-bottom:16px"><div class="card-title">Referentieprijzen</div>';
-    html += '<div style="display:flex;gap:20px;flex-wrap:wrap">';
-    html += '<div><div style="font-size:11px;color:var(--muted);text-transform:uppercase">Nieuwprijs</div><div style="font-size:19px;font-weight:700">' + fmt(d.prijzen.nieuwprijs) + '</div>';
-    html += '<div style="font-size:11px;color:var(--muted)">' + (d.prijzen.nieuwprijs_bron||'') + '</div></div>';
-    if (mp) html += '<div><div style="font-size:11px;color:var(--muted);text-transform:uppercase">2e hands MP</div><div style="font-size:19px;font-weight:700;color:#ff6600">' + fmt(mp.gemiddeld) + '</div></div>';
-    if (eb) html += '<div><div style="font-size:11px;color:var(--muted);text-transform:uppercase">eBay</div><div style="font-size:19px;font-weight:700;color:#0064d2">' + fmt(eb.gemiddeld) + '</div></div>';
-    html += '</div></div>';
-  }
-
-  html += '<div class="price-grid">';
-  if (mp) {
-    html += '<div class="p-card"><div class="p-platform mp">Marktplaats</div>';
-    html += '<div style="display:flex;justify-content:space-between;margin-bottom:6px"><div>';
-    html += '<div style="display:flex;align-items:baseline;gap:4px"><span class="p-range">' + fmt(mp.laag) + ' - </span><span class="p-main">' + fmt(mp.gemiddeld) + '</span><span class="p-range"> - ' + fmt(mp.hoog) + '</span></div>';
-    html += '<div class="p-sub">&#8987; ' + (mp.verkooptijd||'-') + '</div></div>';
-    html += '<span class="badge ' + confCls(mp.vertrouwen) + '">' + confTxt(mp.vertrouwen) + '</span></div>';
-    html += '<div class="p-tip">&#128161; ' + (mp.tip||'') + '</div>';
-    if (mp.zoekwoorden) { html += '<div class="tags">'; mp.zoekwoorden.forEach(function(t) { html += '<span class="tag">' + t + '</span>'; }); html += '</div>'; }
-    html += '</div>';
-  }
-  if (eb) {
-    html += '<div class="p-card"><div class="p-platform ebay">eBay</div>';
-    html += '<div style="display:flex;justify-content:space-between;margin-bottom:6px"><div>';
-    html += '<div style="display:flex;align-items:baseline;gap:4px"><span class="p-range">' + fmt(eb.laag) + ' - </span><span class="p-main">' + fmt(eb.gemiddeld) + '</span><span class="p-range"> - ' + fmt(eb.hoog) + '</span></div>';
-    html += '<div class="p-sub">&#8987; ' + (eb.verkooptijd||'-') + ' &#127757;</div></div>';
-    html += '<span class="badge ' + confCls(eb.vertrouwen) + '">' + confTxt(eb.vertrouwen) + '</span></div>';
-    html += '<div class="p-tip">&#128161; ' + (eb.tip||'') + '</div>';
-    if (eb.keywords) { html += '<div class="tags">'; eb.keywords.forEach(function(t) { html += '<span class="tag">' + t + '</span>'; }); html += '</div>'; }
-    html += '</div>';
-  }
-  html += '</div>';
-
-  html += '<div class="detail-grid">';
-  if (d.prijzen && d.prijzen.aandachtspunten) {
-    html += '<div class="detail-card"><div class="card-title">Let op</div><ul>';
-    d.prijzen.aandachtspunten.forEach(function(p) { html += '<li>' + p + '</li>'; });
-    html += '</ul></div>';
-  }
-  html += '<div class="detail-card"><div class="card-title">Snel overzicht</div><ul>';
-  if (d.kosten) html += '<li>Inkoopprijs: ' + fmt(d.kosten.totaal) + '</li>';
-  if (d.maxBod) html += '<li>Max rendabel bod: ' + fmt(d.maxBod) + '</li>';
-  if (mp) html += '<li>MP: ' + fmt(mp.laag) + ' - ' + fmt(mp.hoog) + '</li>';
-  if (d.prijzen && d.prijzen.nieuwprijs) html += '<li>Nieuwprijs: ' + fmt(d.prijzen.nieuwprijs) + '</li>';
-  html += '</ul></div></div>';
-  html += '<button class="btn-sm" onclick="switchTab(\'overzicht\')">&#128203; Naar overzicht</button>';
-
-  document.getElementById('analyse-result').innerHTML = html;
-  document.getElementById('analyse-result').style.display = 'block';
-  document.getElementById('analyse-result').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  var box = document.getElementById('analyse-result');
+  box.innerHTML = h;
+  setFase('resultaat');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  requestAnimationFrame(function() {
+    requestAnimationFrame(function() {
+      box.querySelectorAll('.meter > i').forEach(function(i) { i.style.width = i.getAttribute('data-w') + '%'; });
+    });
+  });
 }
 
-function setFilter(f, btn) {
-  actieveFilter = f;
-  document.querySelectorAll('.filter-btn').forEach(function(b) { b.classList.remove('active'); });
-  btn.classList.add('active');
-  renderOverzicht();
+// ── 6. Overzicht ────────────────────────────────────────────────────────────
+function setFilter(f) { actieveFilter = f; renderOverzicht(); }
+function setZoek(v) { zoekTerm = v.trim().toLowerCase(); renderOverzicht(); }
+function setSorteer(v) { sorteerOp = v; renderOverzicht(); }
+
+function adviesVolgorde(k) { return k.advies === 'kopen' ? 0 : k.advies === 'twijfel' ? 1 : k.advies === 'skip' ? 2 : 3; }
+function sorteerKavels(lijst) {
+  var l = lijst.slice();
+  if (sorteerOp === 'advies') l.sort(function(a, b) { return adviesVolgorde(a) - adviesVolgorde(b) || (b.toegevoegd || 0) - (a.toegevoegd || 0); });
+  else if (sorteerOp === 'marge') l.sort(function(a, b) {
+    var ma = a.kosten && a.kosten.marge != null ? a.kosten.marge : -Infinity;
+    var mb = b.kosten && b.kosten.marge != null ? b.kosten.marge : -Infinity;
+    return mb - ma;
+  });
+  else if (sorteerOp === 'prijs') l.sort(function(a, b) {
+    var pa = a.huidig_bod != null ? a.huidig_bod : Infinity;
+    var pb = b.huidig_bod != null ? b.huidig_bod : Infinity;
+    return pa - pb;
+  });
+  else l.sort(function(a, b) { return (b.toegevoegd || 0) - (a.toegevoegd || 0); });
+  return l;
+}
+
+function thumbHtml(k) {
+  if (k.thumb && /^data:image\//.test(k.thumb)) return '<img src="' + esc(k.thumb) + '" alt="">';
+  var v = veilingVan(k);
+  return esc(v === 'Onbekend' ? '?' : v.replace(/[^A-Za-z0-9]/g, '').slice(0, 2).toUpperCase());
+}
+
+function maakKavelKaart(k, i, opts) {
+  opts = opts || {};
+  var echteIdx = kavels.indexOf(k);
+  var a = adviesInfo(k.advies);
+  var mp = k.prijzen && k.prijzen.marktplaats;
+  var url = veiligeUrl(k.url);
+  var card = document.createElement('article');
+  card.className = 'kavel-row' + (!opts.gewonnen && geselecteerd.has(i) ? ' geselecteerd' : '');
+
+  var h = '<div class="kc-top">';
+  if (!opts.gewonnen) h += '<div class="selectie-col"><input type="checkbox" class="kavel-checkbox" aria-label="Selecteer kavel"' + (geselecteerd.has(i) ? ' checked' : '') + '></div>';
+  h += '<div class="kc-thumb">' + thumbHtml(k) + '</div><div class="kc-head"><div class="kc-title">' + esc(k.titel || 'Onbekend') + '</div>';
+  h += '<div class="kc-meta">' + esc(veilingVan(k)) + (k.kavelnummer ? ' &middot; Kavel ' + esc(k.kavelnummer) : '');
+  if (opts.gewonnen) h += ' &middot; Gewonnen op ' + (k.gewonnen_op ? new Date(k.gewonnen_op).toLocaleDateString('nl-NL') : '-');
+  if (url) h += ' &middot; <a href="' + esc(url) + '" target="_blank" rel="noopener" onclick="event.stopPropagation()">Bekijk kavel</a>';
+  h += '</div>';
+  if (k.eigen_bod) h += '<span class="kc-tag">Mijn bod</span>';
+  h += '</div>';
+  if (!opts.gewonnen) h += '<span class="pill pill-' + a.key + '">' + a.label + '</span>';
+  h += '</div>';
+
+  var f1l = opts.gewonnen ? 'Gewonnen voor' : (k.eigen_bod ? 'Mijn bod' : 'Huidig bod');
+  var f2l = opts.gewonnen ? 'Totaal betaald' : 'Totale kosten';
+  var f3l = opts.gewonnen ? 'Verwachte verkoop' : 'Marktwaarde';
+  h += '<div class="kc-figs">';
+  h += '<div><div class="fig-l">' + f1l + '</div><div class="fig-v">' + (k.huidig_bod ? fmt(k.huidig_bod) : '-') + '</div></div>';
+  h += '<div><div class="fig-l">' + f2l + '</div><div class="fig-v">' + (k.kosten ? fmt(k.kosten.totaal) : '-') + '</div></div>';
+  h += '<div><div class="fig-l">' + f3l + '</div><div class="fig-v">' + (k.mp_gemiddeld ? fmt(k.mp_gemiddeld) : '-') + '</div></div>';
+  h += '</div>';
+
+  if (k.kosten && k.kosten.marge != null) {
+    var pct = k.mp_gemiddeld ? Math.round(k.kosten.marge / k.mp_gemiddeld * 100) : null;
+    var c = mp ? vertrouwenInfo(mp.vertrouwen) : null;
+    h += '<div class="kc-result"><span class="marge ' + (k.kosten.marge > 0 ? 'pos' : k.kosten.marge < 0 ? 'neg' : '') + '">' + fmtS(k.kosten.marge) + ' marge' + (pct != null ? ' &middot; ' + pct + '%' : '') + '</span>';
+    if (c) h += '<span class="conf ' + c.cls + '"><i></i>Betrouwbaarheid ' + c.label.toLowerCase() + '</span>';
+    h += '</div>';
+  } else if (!opts.gewonnen && k.maxBod) {
+    h += '<div class="kc-result"><span class="kc-meta">Geen bod ingevuld &middot; max. rendabel bod <b>' + fmt(k.maxBod) + '</b></span></div>';
+  }
+  if (!opts.gewonnen && k.adviesReden) h += '<div class="kc-reden">' + esc(k.adviesReden) + '</div>';
+
+  h += '<div class="kc-actions"></div>';
+  card.innerHTML = h;
+
+  var acties = card.querySelector('.kc-actions');
+  function knop(cls, html, label, fn) {
+    var b = document.createElement('button');
+    b.className = cls; b.innerHTML = html;
+    if (label) b.setAttribute('aria-label', label);
+    b.onclick = function(e) { e.stopPropagation(); fn(); };
+    acties.appendChild(b);
+  }
+  knop('btn btn-secondary btn-sm', 'Details', null, function() { openDetail(echteIdx); });
+  if (opts.gewonnen) {
+    knop('btn btn-ghost btn-sm', ic('undo') + 'Herstel', 'Terug naar overzicht', function() { herstelUitGewonnen(echteIdx); });
+    knop('btn btn-ghost btn-sm btn-icon btn-del', ic('trash'), 'Verwijderen', function() {
+      bevestig('Kavel definitief verwijderen?', 'Dit verwijdert "' + (k.titel || 'dit kavel') + '" ook uit je gewonnen kavels.', 'Verwijderen', true, function() { verwijderKavel(echteIdx); });
+    });
+  } else {
+    knop('btn btn-ghost btn-sm', ic('trophy') + 'Gewonnen', null, function() { markeerGewonnen(echteIdx); });
+    knop('btn btn-ghost btn-sm', ic('refresh') + 'Opnieuw', 'Opnieuw analyseren', function() { heranalyseer(echteIdx); });
+    knop('btn btn-ghost btn-sm btn-icon btn-del', ic('trash'), 'Verwijderen', function() { verwijderKavel(echteIdx); });
+    card.onclick = function() { if (selectieModus) selecteerRij(i); };
+    var cb = card.querySelector('.kavel-checkbox');
+    cb.onclick = function(e) { e.stopPropagation(); };
+    cb.onchange = function() { selecteerRij(i); };
+  }
+  return card;
 }
 
 function renderOverzicht() {
   var leeg = document.getElementById('ov-leeg');
   var inhoud = document.getElementById('ov-inhoud');
-  if (kavels.length === 0) { leeg.style.display='block'; inhoud.style.display='none'; return; }
-  leeg.style.display='none'; inhoud.style.display='block';
+  document.getElementById('selecteer-btn').style.display = kavels.length === 0 ? 'none' : '';
+  if (kavels.length === 0) { leeg.style.display = 'block'; inhoud.style.display = 'none'; return; }
+  leeg.style.display = 'none'; inhoud.style.display = 'block';
 
   var actieveKavels = kavels.filter(function(k) { return k.status !== 'gewonnen'; });
+  var nWacht = actieveKavels.filter(function(k) { return !k.advies || k.status === 'wacht'; }).length;
+  var nKopen = actieveKavels.filter(function(k) { return k.advies === 'kopen'; }).length;
+  var nTwij = actieveKavels.filter(function(k) { return k.advies === 'twijfel'; }).length;
+  var nSkip = actieveKavels.filter(function(k) { return k.advies === 'skip'; }).length;
+  var nEigen = actieveKavels.filter(function(k) { return k.eigen_bod === true; }).length;
+  var nGew = kavels.length - actieveKavels.length;
+
   var gefilterd = actieveKavels.filter(function(k) {
     if (actieveFilter === 'alles') return true;
     if (actieveFilter === 'wacht') return !k.advies || k.status === 'wacht';
     if (actieveFilter === 'eigen') return k.eigen_bod === true;
     return k.advies === actieveFilter;
+  }).filter(function(k) {
+    return !zoekTerm || (k.titel || '').toLowerCase().indexOf(zoekTerm) !== -1;
   });
+  gefilterd = sorteerKavels(gefilterd);
   huidigGefilterd = gefilterd;
 
-  var nBied = actieveKavels.filter(function(k) { return k.advies==='kopen'; }).length;
-  var nTwij = actieveKavels.filter(function(k) { return k.advies==='twijfel'; }).length;
-  var nSkip = actieveKavels.filter(function(k) { return k.advies==='skip'; }).length;
-  var nEigen = actieveKavels.filter(function(k) { return k.eigen_bod===true; }).length;
+  // Selectie ongeldig als de lijst veranderd is
+  var sig = gefilterd.map(function(k) { return k.id; }).join(',');
+  if (sig !== vorigeLijstSig) { geselecteerd.clear(); vorigeLijstSig = sig; }
+  document.getElementById('sel-aantal').textContent = geselecteerd.size + ' geselecteerd';
 
   document.getElementById('stats-row').innerHTML =
-    '<div class="stat"><div class="stat-num">' + actieveKavels.length + '</div><div class="stat-lbl">Totaal</div></div>' +
-    '<div class="stat"><div class="stat-num" style="color:#1a6b35">' + nBied + '</div><div class="stat-lbl">Aanraders</div></div>' +
-    '<div class="stat"><div class="stat-num" style="color:#d97706">' + nTwij + '</div><div class="stat-lbl">Twijfel</div></div>' +
-    '<div class="stat"><div class="stat-num" style="color:#e63946">' + nSkip + '</div><div class="stat-lbl">Skip</div></div>' +
-    '<div class="stat"><div class="stat-num" style="color:#1565c0">' + nEigen + '</div><div class="stat-lbl">Mijn biedingen</div></div>';
+    '<div class="stat"><div class="stat-lbl">Totaal aantal kavels</div><div class="stat-num">' + actieveKavels.length + '</div></div>' +
+    '<div class="stat"><div class="stat-lbl">Nog te analyseren</div><div class="stat-num">' + nWacht + '</div></div>' +
+    '<div class="stat"><div class="stat-lbl">Aanraders</div><div class="stat-num pos">' + nKopen + '</div></div>' +
+    '<div class="stat"><div class="stat-lbl">Gewonnen kavels</div><div class="stat-num">' + nGew + '</div></div>';
+
+  var chipDefs = [['alles', 'Alles', actieveKavels.length], ['kopen', 'Aanraders', nKopen], ['twijfel', 'Twijfel', nTwij], ['skip', 'Skip', nSkip], ['wacht', 'Niet geanalyseerd', nWacht], ['eigen', 'Mijn kavels', nEigen]];
+  var chips = document.getElementById('chips');
+  chips.innerHTML = '';
+  chipDefs.forEach(function(c) {
+    var b = document.createElement('button');
+    b.className = 'chip' + (actieveFilter === c[0] ? ' active' : '');
+    b.innerHTML = c[1] + ' <span class="n">' + c[2] + '</span>';
+    b.onclick = function() { setFilter(c[0]); };
+    chips.appendChild(b);
+  });
 
   var list = document.getElementById('kavel-list');
   list.innerHTML = '';
   list.classList.toggle('selectie-modus', selectieModus);
 
   if (gefilterd.length === 0) {
-    list.innerHTML = '<div style="text-align:center;padding:24px;color:var(--muted);font-size:14px">Geen kavels in deze categorie</div>';
+    var msg = document.createElement('div');
+    msg.style.gridColumn = '1 / -1';
+    if (actieveKavels.length === 0) {
+      msg.innerHTML = '<div class="empty small"><div class="empty-ico">' + ic('trophy') + '</div><h3>Al je kavels staan bij Gewonnen</h3><p>Er zijn geen kavels meer om op te bieden. Voeg een nieuw kavel toe om verder te gaan.</p><div class="btns"><button class="btn btn-primary" onclick="nieuwKavel()">' + ic('plus') + 'Kavel toevoegen</button></div></div>';
+    } else {
+      msg.innerHTML = '<div class="empty small"><div class="empty-ico">' + ic('search') + '</div><h3>Geen kavels gevonden</h3><p>Er zijn geen kavels die bij deze filter of zoekopdracht passen.</p><div class="btns"><button class="btn btn-secondary" id="reset-filters">Filters wissen</button></div></div>';
+    }
+    list.appendChild(msg);
+    var rb = document.getElementById('reset-filters');
+    if (rb) rb.onclick = function() {
+      actieveFilter = 'alles'; zoekTerm = ''; document.getElementById('zoek').value = ''; renderOverzicht();
+    };
     return;
   }
 
-  gefilterd.forEach(function(k, i) {
-    var echteIdx = kavels.indexOf(k);
-    var div = document.createElement('div');
-    div.className = 'kavel-row' + (geselecteerd.has(i) ? ' geselecteerd' : '');
-    div.onclick = function() { if (selectieModus) selecteerRij(i); };
-
-    var selCol = document.createElement('div'); selCol.className = 'selectie-col';
-    var cb = document.createElement('input'); cb.type = 'checkbox'; cb.className = 'kavel-checkbox'; cb.checked = geselecteerd.has(i);
-    cb.onclick = function(e) { e.stopPropagation(); };
-    cb.onchange = function() { selecteerRij(i); };
-    selCol.appendChild(cb); div.appendChild(selCol);
-
-    var num = document.createElement('div'); num.className = 'kavel-num'; num.textContent = i + 1;
-    div.appendChild(num);
-
-    var main = document.createElement('div'); main.className = 'kavel-main';
-    var titel = document.createElement('div'); titel.className = 'kavel-titel'; titel.textContent = k.titel || 'Onbekend';
-    if (k.eigen_bod) {
-      var b = document.createElement('span');
-      b.style.cssText = 'font-size:11px;background:#e3f2fd;color:#1565c0;padding:2px 7px;border-radius:20px;font-weight:600;margin-left:6px;vertical-align:middle';
-      b.textContent = 'Mijn bod'; titel.appendChild(b);
-    }
-    main.appendChild(titel);
-
-    var meta = document.createElement('div'); meta.className = 'kavel-meta';
-    meta.innerHTML = (k.veiling || 'Onbekend') + (k.kavelnummer ? ' &middot; Kavel ' + k.kavelnummer : '') +
-      (k.url ? ' &middot; <a href="' + k.url + '" target="_blank" style="color:var(--brand);text-decoration:none">&#8599; Bekijk</a>' : '');
-    main.appendChild(meta);
-
-    var pills = document.createElement('div'); pills.className = 'kavel-pills';
-    var aBadge = document.createElement('span');
-    if (k.advies==='kopen') { aBadge.className='pill pill-status s-klaar'; aBadge.textContent='Bied!'; }
-    else if (k.advies==='twijfel') { aBadge.className='pill pill-status s-twijfel'; aBadge.textContent='Twijfel'; }
-    else if (k.advies==='skip') { aBadge.className='pill pill-status s-skip'; aBadge.textContent='Skip'; }
-    else { aBadge.className='pill pill-status s-wacht'; aBadge.textContent='Wacht'; }
-    pills.appendChild(aBadge);
-
-    if (k.huidig_bod) {
-      var p1 = document.createElement('span');
-      p1.className = 'pill ' + (k.eigen_bod ? 'pill-eigen-bod' : 'pill-bod');
-      p1.textContent = (k.eigen_bod ? 'Mijn bod' : 'Huidig bod') + ': ' + fmt(k.huidig_bod);
-      pills.appendChild(p1);
-    }
-    if (k.kosten) {
-      var p2 = document.createElement('span'); p2.className = 'pill pill-totaal';
-      p2.textContent = 'Incl. kosten: ' + fmt(k.kosten.totaal); pills.appendChild(p2);
-    }
-    if (k.kosten && k.kosten.marge != null) {
-      var p3 = document.createElement('span');
-      p3.className = 'pill ' + (k.kosten.marge > 0 ? 'pill-marge-pos' : 'pill-marge-neg');
-      p3.textContent = (k.kosten.marge > 0 ? '+' : '') + fmt(k.kosten.marge) + ' marge'; pills.appendChild(p3);
-    }
-    if (k.mp_gemiddeld) {
-      var p4 = document.createElement('span'); p4.className = 'pill pill-mp';
-      p4.textContent = 'MP ~' + fmt(k.mp_gemiddeld); pills.appendChild(p4);
-    }
-    main.appendChild(pills);
-
-    if (k.adviesReden) {
-      var r = document.createElement('div'); r.className = 'kavel-reden';
-      r.textContent = k.adviesReden.length > 100 ? k.adviesReden.slice(0,100) + '...' : k.adviesReden;
-      main.appendChild(r);
-    }
-    div.appendChild(main);
-
-    var acties = document.createElement('div'); acties.className = 'kavel-acties';
-    var btnD = document.createElement('button'); btnD.className = 'btn-sm'; btnD.textContent = 'Details';
-    btnD.onclick = function(e) { e.stopPropagation(); openDetail(echteIdx); };
-    var btnG = document.createElement('button'); btnG.className = 'btn-sm'; btnG.style.background = '#fff3e0'; btnG.style.color = '#e65100'; btnG.textContent = '\ud83c\udfc6 Gewonnen';
-    btnG.onclick = function(e) { e.stopPropagation(); markeerGewonnen(echteIdx); };
-    var btnH = document.createElement('button'); btnH.className = 'btn-sm'; btnH.textContent = 'Heranalyseer';
-    btnH.onclick = function(e) { e.stopPropagation(); heranalyseer(echteIdx); };
-    var btnX = document.createElement('button'); btnX.className = 'btn-danger'; btnX.textContent = 'X';
-    btnX.onclick = function(e) { e.stopPropagation(); verwijderKavel(echteIdx); };
-    acties.appendChild(btnD); acties.appendChild(btnG); acties.appendChild(btnH); acties.appendChild(btnX);
-    div.appendChild(acties);
-    list.appendChild(div);
-  });
+  gefilterd.forEach(function(k, i) { list.appendChild(maakKavelKaart(k, i)); });
 }
 
 function openDetail(idx) {
@@ -858,24 +1637,34 @@ function openDetail(idx) {
 function heranalyseer(idx) {
   var k = kavels[idx];
   switchTab('analyse');
+  resetFormulier();
   document.getElementById('kavel-url').value = k.url || '';
   if (k.huidig_bod) document.getElementById('huidig-bod').value = String(k.huidig_bod);
-  document.getElementById('analyse-result').style.display = 'none';
   var type = k.eigen_bod ? 'eigen' : 'ander';
   setBodType(type, document.getElementById('bod-' + type));
+  updateVeilingHint();
+  setFase('invoer');
 }
 
 function verwijderKavel(idx) {
+  var k = kavels[idx];
   kavels.splice(idx, 1);
-  slaKavelsOp(); updateBadge(); renderOverzicht();
+  slaKavelsOp(); updateBadge(); renderOverzicht(); renderGewonnen();
+  toast('Kavel verwijderd', { label: 'Ongedaan maken', fn: function() {
+    kavels.splice(Math.min(idx, kavels.length), 0, k);
+    slaKavelsOp(); updateBadge(); renderOverzicht(); renderGewonnen();
+  } });
 }
 
-function markeerGewonnen(idx) {
+function markeerGewonnen(idx, naKlaar) {
   var k = kavels[idx];
-  if (!confirm('Markeer "' + k.titel + '" als gewonnen?\n\nHij verdwijnt uit het overzicht en komt in de Gewonnen tab te staan.')) return;
-  k.status = 'gewonnen';
-  k.gewonnen_op = Date.now();
-  slaKavelsOp(); updateBadge(); renderOverzicht();
+  bevestig('Markeren als gewonnen?', '"' + (k.titel || 'Dit kavel') + '" verdwijnt uit het overzicht en staat daarna bij Gewonnen.', 'Markeer als gewonnen', false, function() {
+    k.status = 'gewonnen';
+    k.gewonnen_op = Date.now();
+    slaKavelsOp(); updateBadge(); renderOverzicht();
+    toast('Verplaatst naar Gewonnen');
+    if (naKlaar) naKlaar();
+  });
 }
 
 function herstelUitGewonnen(idx) {
@@ -885,6 +1674,7 @@ function herstelUitGewonnen(idx) {
   slaKavelsOp(); renderGewonnen();
 }
 
+// ── 7. Gewonnen ─────────────────────────────────────────────────────────────
 function renderGewonnen() {
   var gewonnenKavels = kavels.filter(function(k) { return k.status === 'gewonnen'; });
   var leeg = document.getElementById('gew-leeg');
@@ -897,126 +1687,88 @@ function renderGewonnen() {
 
   var list = document.getElementById('gewonnen-list');
   list.innerHTML = '';
-
-  gewonnenKavels.sort(function(a,b) { return (b.gewonnen_op||0) - (a.gewonnen_op||0); });
-
-  gewonnenKavels.forEach(function(k) {
-    var echteIdx = kavels.indexOf(k);
-    var div = document.createElement('div');
-    div.className = 'kavel-row';
-    div.style.gridTemplateColumns = 'auto 1fr auto';
-
-    var num = document.createElement('div'); num.innerHTML = '&#127942;'; num.style.fontSize = '20px';
-    div.appendChild(num);
-
-    var main = document.createElement('div');
-    var titel = document.createElement('div'); titel.className = 'kavel-titel'; titel.textContent = k.titel || 'Onbekend';
-    main.appendChild(titel);
-
-    var meta = document.createElement('div'); meta.className = 'kavel-meta';
-    var datum = k.gewonnen_op ? new Date(k.gewonnen_op).toLocaleDateString('nl-NL') : '';
-    meta.textContent = 'Gewonnen op ' + datum + (k.kavelnummer ? ' · Kavel ' + k.kavelnummer : '');
-    main.appendChild(meta);
-
-    var pills = document.createElement('div'); pills.className = 'kavel-pills';
-    if (k.huidig_bod) {
-      var p1 = document.createElement('span'); p1.className = 'pill pill-bod';
-      p1.textContent = 'Gewonnen voor: ' + fmt(k.huidig_bod); pills.appendChild(p1);
-    }
-    if (k.kosten) {
-      var p2 = document.createElement('span'); p2.className = 'pill pill-totaal';
-      p2.textContent = 'Totaal betaald: ' + fmt(k.kosten.totaal); pills.appendChild(p2);
-    }
-    if (k.mp_gemiddeld) {
-      var p3 = document.createElement('span'); p3.className = 'pill pill-mp';
-      p3.textContent = 'Verwachte verkoop: ' + fmt(k.mp_gemiddeld); pills.appendChild(p3);
-    }
-    main.appendChild(pills);
-    div.appendChild(main);
-
-    var acties = document.createElement('div'); acties.className = 'kavel-acties';
-    var btnD = document.createElement('button'); btnD.className = 'btn-sm'; btnD.textContent = 'Details';
-    btnD.onclick = function() { openDetail(echteIdx); };
-    var btnR = document.createElement('button'); btnR.className = 'btn-sm'; btnR.textContent = '\u21ba Herstel';
-    btnR.title = 'Terug naar overzicht';
-    btnR.onclick = function() { herstelUitGewonnen(echteIdx); };
-    var btnX = document.createElement('button'); btnX.className = 'btn-danger'; btnX.textContent = 'X';
-    btnX.onclick = function() { if(confirm('Definitief verwijderen?')) verwijderKavel(echteIdx); renderGewonnen(); };
-    acties.appendChild(btnD); acties.appendChild(btnR); acties.appendChild(btnX);
-    div.appendChild(acties);
-
-    list.appendChild(div);
-  });
+  gewonnenKavels.sort(function(a, b) { return (b.gewonnen_op || 0) - (a.gewonnen_op || 0); });
+  gewonnenKavels.forEach(function(k, i) { list.appendChild(maakKavelKaart(k, i, { gewonnen: true })); });
 }
 
+// ── 8. Selectie ─────────────────────────────────────────────────────────────
 function toggleSelectie() {
   selectieModus = !selectieModus;
   geselecteerd.clear();
   document.getElementById('sel-balk').style.display = selectieModus ? 'flex' : 'none';
-  document.getElementById('selecteer-btn').textContent = selectieModus ? 'X Annuleren' : 'Selecteren';
+  document.getElementById('selecteer-lbl').textContent = selectieModus ? 'Annuleren' : 'Selecteren';
+  document.getElementById('selecteer-btn').setAttribute('aria-pressed', selectieModus ? 'true' : 'false');
   renderOverzicht();
 }
+
 
 function selecteerRij(i) {
   if (geselecteerd.has(i)) geselecteerd.delete(i); else geselecteerd.add(i);
   document.getElementById('sel-aantal').textContent = geselecteerd.size + ' geselecteerd';
-  var rijen = document.querySelectorAll('.kavel-row');
+  var rijen = document.querySelectorAll('#kavel-list .kavel-row');
   if (rijen[i]) rijen[i].classList.toggle('geselecteerd', geselecteerd.has(i));
-  var cbs = document.querySelectorAll('.kavel-checkbox');
+  var cbs = document.querySelectorAll('#kavel-list .kavel-checkbox');
   if (cbs[i]) cbs[i].checked = geselecteerd.has(i);
 }
 
 function allesAanvinken() {
-  document.querySelectorAll('.kavel-row').forEach(function(r, i) { r.classList.add('geselecteerd'); geselecteerd.add(i); });
-  document.querySelectorAll('.kavel-checkbox').forEach(function(cb) { cb.checked = true; });
+  document.querySelectorAll('#kavel-list .kavel-row').forEach(function(r, i) { r.classList.add('geselecteerd'); geselecteerd.add(i); });
+  document.querySelectorAll('#kavel-list .kavel-checkbox').forEach(function(cb) { cb.checked = true; });
   document.getElementById('sel-aantal').textContent = geselecteerd.size + ' geselecteerd';
 }
 
 function allesUitvinken() {
   geselecteerd.clear();
-  document.querySelectorAll('.kavel-row').forEach(function(r) { r.classList.remove('geselecteerd'); });
-  document.querySelectorAll('.kavel-checkbox').forEach(function(cb) { cb.checked = false; });
+  document.querySelectorAll('#kavel-list .kavel-row').forEach(function(r) { r.classList.remove('geselecteerd'); });
+  document.querySelectorAll('#kavel-list .kavel-checkbox').forEach(function(cb) { cb.checked = false; });
   document.getElementById('sel-aantal').textContent = '0 geselecteerd';
 }
 
 function verwijderSelectie() {
-  if (geselecteerd.size === 0) { alert('Vink eerst kavels aan.'); return; }
-  if (!confirm(geselecteerd.size + ' kavel(s) verwijderen?')) return;
-  var teVerwijderen = new Set(Array.from(geselecteerd).map(function(i) { return huidigGefilterd[i]; }).filter(Boolean));
-  kavels = kavels.filter(function(k) { return !teVerwijderen.has(k); });
-  geselecteerd.clear();
-  selectieModus = false;
-  document.getElementById('sel-balk').style.display = 'none';
-  document.getElementById('selecteer-btn').textContent = 'Selecteren';
-  slaKavelsOp(); updateBadge(); renderOverzicht();
+  if (geselecteerd.size === 0) { toast('Vink eerst kavels aan om te verwijderen.', null, true); return; }
+  var n = geselecteerd.size;
+  bevestig(n + ' kavel(s) verwijderen?', 'Dit kan niet ongedaan worden gemaakt.', 'Verwijderen', true, function() {
+    var teVerwijderen = new Set(Array.from(geselecteerd).map(function(i) { return huidigGefilterd[i]; }).filter(Boolean));
+    kavels = kavels.filter(function(k) { return !teVerwijderen.has(k); });
+    geselecteerd.clear();
+    selectieModus = false;
+    document.getElementById('sel-balk').style.display = 'none';
+    document.getElementById('selecteer-lbl').textContent = 'Selecteren';
+    document.getElementById('selecteer-btn').setAttribute('aria-pressed', 'false');
+    slaKavelsOp(); updateBadge(); renderOverzicht();
+    toast(n + ' kavel(s) verwijderd');
+  });
 }
 
 function updateBadge() {
   var actief = kavels.filter(function(k) { return k.status !== 'gewonnen'; }).length;
   var gewonnen = kavels.filter(function(k) { return k.status === 'gewonnen'; }).length;
-  document.getElementById('badge').textContent = actief;
-  document.getElementById('badge-gewonnen').textContent = gewonnen;
-}
-function setBtn(id, txtId, disabled, html) {
-  document.getElementById(id).disabled = disabled;
-  document.getElementById(txtId).innerHTML = html;
-}
-function toonMsg(id, msg) {
-  var el = document.getElementById(id);
-  el.textContent = 'Fout: ' + msg;
-  el.style.display = 'block';
+  document.querySelectorAll('.js-badge').forEach(function(e) { e.textContent = actief; });
+  document.querySelectorAll('.js-badge-gewonnen').forEach(function(e) { e.textContent = gewonnen; });
 }
 
+// ── 9. Start ────────────────────────────────────────────────────────────────
+var zone = document.getElementById('upload-zone');
+document.getElementById('foto-input').addEventListener('change', function(e) { leesFiles(e.target.files); e.target.value = ''; });
+zone.addEventListener('dragover', function(e) { e.preventDefault(); zone.classList.add('drag'); });
+zone.addEventListener('dragleave', function() { zone.classList.remove('drag'); });
+zone.addEventListener('drop', function(e) { e.preventDefault(); zone.classList.remove('drag'); leesFiles(e.dataTransfer.files); });
+
+hydrateIcons();
+themaLabels();
 checkApiKey();
 laadKavels();
 updateBadge();
+setSyncStatus('ok');
+setStap(1);
+setFase('invoer');
 renderOverzicht();
 if (SHEETS_URL) { syncVanSheets(); }
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.getRegistrations().then(function(regs) {
     regs.forEach(function(r) { r.unregister(); });
-  });
+  }).catch(function() {});
 }
 </script>
 </body>
