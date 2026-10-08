@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="HNVI">
+<meta name="apple-mobile-web-app-title" content="Veiling Analyser">
 <meta name="theme-color" content="#1a472a">
-<title>HNVI Veiling Analyser</title>
+<title>Veiling Analyser</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{--brand:#1a472a;--brand-light:#e8f5e9;--accent:#f4a261;--bg:#f5f7f4;--surface:#fff;--border:#dde3d8;--text:#1c2b1e;--muted:#6b7c6e}
@@ -160,7 +160,7 @@ label:first-child{margin-top:0}
 <header>
   <div class="logo">&#128296;</div>
   <div>
-    <h1>HNVI Veiling Analyser</h1>
+    <h1>Veiling Analyser</h1>
     <p>Kavels analyseren &middot; Prijzen opzoeken &middot; Marge berekenen</p>
   </div>
   <div class="hdr-r">
@@ -215,14 +215,14 @@ label:first-child{margin-top:0}
   <div id="analyse-result" style="display:none"></div>
   <div class="card" id="analyse-form">
     <div class="card-title">&#128279; Kavel toevoegen</div>
-    <label>HNVI kavel URL</label>
-    <input type="text" id="kavel-url" placeholder="https://www.hnvi.nl/veiling-kavel/..." />
+    <label>Kavel URL</label>
+    <input type="text" id="kavel-url" placeholder="Plak de link van het kavel (HNVI, Troostwijk, BVA, Vavato...)" />
     <label style="margin-top:14px">&#128182; Bod (euro)</label>
     <div class="bod-row">
       <button class="bod-btn active" id="bod-ander" onclick="setBodType('ander',this)">&#128100; Huidig bod (iemand anders)</button>
       <button class="bod-btn" id="bod-eigen" onclick="setBodType('eigen',this)">&#128587; Mijn bod</button>
     </div>
-    <div class="hint" id="bod-hint">Huidig hoogste bod op HNVI</div>
+    <div class="hint" id="bod-hint">Huidig hoogste bod op de veiling</div>
     <div style="position:relative">
       <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);font-weight:700;color:var(--muted)">&#8364;</span>
       <input type="text" id="huidig-bod" placeholder="bijv. 250" style="padding-left:26px;font-size:16px;font-weight:700" />
@@ -266,7 +266,7 @@ label:first-child{margin-top:0}
     <div style="display:flex;flex-direction:column;gap:16px">
       <div style="display:flex;gap:12px;align-items:flex-start">
         <div style="width:28px;height:28px;background:var(--brand);color:white;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0;font-size:13px">1</div>
-        <div><strong>HNVI kavel URL plakken</strong><br><span style="font-size:13px;color:var(--muted)">Kopieer de link van het kavel op hnvi.nl en plak hem in de app.</span></div>
+        <div><strong>Kavel URL plakken</strong><br><span style="font-size:13px;color:var(--muted)">Kopieer de link van het kavel op de veilingsite en plak hem in de app. De app herkent HNVI, Troostwijk, BVA, Vavato en DTZ automatisch.</span></div>
       </div>
       <div style="display:flex;gap:12px;align-items:flex-start">
         <div style="width:28px;height:28px;background:var(--brand);color:white;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0;font-size:13px">2</div>
@@ -282,7 +282,7 @@ label:first-child{margin-top:0}
     <div class="card-title">Kostenberekening</div>
     <div style="font-size:14px;line-height:2;color:var(--muted)">
       Bod: <strong style="color:var(--text)">&#8364;1.000</strong><br>
-      x 0,17 (veilingkosten) = <strong style="color:var(--text)">&#8364;170</strong> (totaal: &#8364;1.170)<br>
+      x 0,17 (veilingkosten, voorbeeld HNVI; verschilt per veiling) = <strong style="color:var(--text)">&#8364;170</strong> (totaal: &#8364;1.170)<br>
       x 0,21 (BTW over totaal) = <strong style="color:var(--text)">&#8364;245,70</strong> (totaal: &#8364;1.415,70)<br>
       <span style="border-top:1px solid var(--border);display:block;margin:6px 0"></span>
       = Totale inkoopprijs: <strong style="color:var(--brand);font-size:16px">&#8364;1.415,70</strong>
@@ -413,7 +413,7 @@ function setBodType(type, btn) {
   btn.classList.add('active');
   document.getElementById('bod-hint').textContent = type === 'eigen'
     ? 'Jouw bod - gebruikt als inkoopprijs voor margeberekening'
-    : 'Huidig hoogste bod op HNVI';
+    : 'Huidig hoogste bod op de veiling';
 }
 
 function setStap(n) {
@@ -505,7 +505,7 @@ function callClaude(system, userText, maxTokens) {
 
 // ── Veiling site detectie ─────────────────────────────────────────────────────
 function detecteerVeiling(url) {
-  if (!url) return { naam: 'HNVI', opgeld: 0.17, btw: 0.21 };
+  if (!url) return { naam: 'Onbekend', opgeld: 0.17, btw: 0.21 };
   var u = url.toLowerCase();
 
   if (u.indexOf('hnvi.nl') !== -1) {
@@ -523,7 +523,7 @@ function detecteerVeiling(url) {
   if (u.indexOf('dtz') !== -1) {
     return { naam: 'DTZ', opgeld: 0.15, btw: 0.21 };
   }
-  // Onbekende site - gebruik HNVI als standaard
+  // Onbekende site - standaard 17% veilingkosten + 21% BTW (controleer zelf!)
   return { naam: 'Onbekend', opgeld: 0.17, btw: 0.21 };
 }
 
@@ -533,7 +533,7 @@ function analyseer() {
   var extra = document.getElementById('extra-txt').value.trim();
 
   if (!url && imgs.length === 0 && !extra) {
-    toonMsg('analyse-err', 'Voer een HNVI URL in of voeg een beschrijving toe.'); return;
+    toonMsg('analyse-err', 'Voer een kavel-URL in of voeg een beschrijving toe.'); return;
   }
 
   document.getElementById('analyse-err').style.display = 'none';
@@ -599,14 +599,14 @@ function analyseer() {
         ? 'Inkoopprijs ' + fmt(kosten.totaal) + ' vs MP ~' + fmt(mp.gemiddeld) + ' marge ' + fmt(m) + ' (' + pct + '% van verkoopprijs).'
         : 'Inkoopprijs ' + fmt(kosten.totaal) + ' ligt ' + fmt(Math.abs(m)) + ' boven MP prijs van ' + fmt(mp.gemiddeld) + ' (' + pct + '%).';
     } else {
-      var maxBodCalc = mp ? Math.round(mp.laag * 0.8 / (1.17 * 1.21)) : null;
+      var maxBodCalc = mp ? Math.round(mp.laag * 0.8 / ((1 + veilingInfo.opgeld) * (1 + veilingInfo.btw))) : null;
       adviesReden = maxBodCalc ? 'Maximaal rendabel bieden: ' + fmt(maxBodCalc) + '.' : 'Vul het bod in voor margeberekening.';
     }
 
-    var maxBod = mp ? Math.round(mp.laag * 0.8 / (1.17 * 1.21)) : null;
+    var maxBod = mp ? Math.round(mp.laag * 0.8 / ((1 + veilingInfo.opgeld) * (1 + veilingInfo.btw))) : null;
     var kavelData = {
       id: Date.now(), url: url, titel: prijzen.productnaam || product,
-      veiling: veilingInfo ? veilingInfo.naam : 'HNVI', kavelnummer: kavelnr, huidig_bod: bod,
+      veiling: veilingInfo ? veilingInfo.naam : 'Onbekend', kavelnummer: kavelnr, huidig_bod: bod,
       kosten: kosten, mp_gemiddeld: mp.gemiddeld, mp_laag: mp.laag, mp_hoog: mp.hoog,
       ebay_gemiddeld: prijzen.ebay ? prijzen.ebay.gemiddeld : null,
       nieuwprijs: prijzen.nieuwprijs, advies: advies, adviesReden: adviesReden,
@@ -644,8 +644,8 @@ function toonAnalyseResultaat(d) {
   html += '<div class="card" style="border-left:4px solid var(--brand)">';
   html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;margin-bottom:6px">';
   html += '<div><h2 style="font-size:17px;font-weight:700;margin-bottom:3px">' + (d.titel||'') + '</h2>';
-  html += '<div style="font-size:12px;color:var(--muted)">Kavel ' + (d.kavelnummer||'-') + ' &middot; HNVI';
-  if (d.url) html += ' &middot; <a href="' + d.url + '" target="_blank" style="color:var(--brand)">&#8599; Bekijk op HNVI</a>';
+  html += '<div style="font-size:12px;color:var(--muted)">Kavel ' + (d.kavelnummer||'-') + ' &middot; ' + ((d.veiling) || (d.kosten && d.kosten.site) || 'Onbekend');
+  if (d.url) html += ' &middot; <a href="' + d.url + '" target="_blank" style="color:var(--brand)">&#8599; Bekijk kavel</a>';
   html += '</div></div>';
   if (d.prijzen && d.prijzen.categorie) html += '<span style="background:var(--brand-light);color:var(--brand);font-size:12px;font-weight:600;padding:3px 10px;border-radius:20px">' + d.prijzen.categorie + '</span>';
   html += '</div></div>';
@@ -657,7 +657,7 @@ function toonAnalyseResultaat(d) {
   if (d.kosten) {
     html += '<div class="costs-box"><h4>&#128176; Kostenberekening &mdash; ' + (d.kosten && d.kosten.site ? '<span style="font-weight:600;color:var(--brand)">' + d.kosten.site + '</span> &middot; ' : '') + (d.eigen_bod?'&#128587; Mijn bod':'&#128100; Huidig bod') + (d.kosten && d.kosten.opgeld_pct ? ' &middot; ' + d.kosten.opgeld_pct + '% opgeld' : '') + '</h4>';
     html += '<div class="c-row"><span>Bod</span><span>' + fmt(d.kosten.bod) + '</span></div>';
-    html += '<div class="c-row"><span>Veilingkosten (17%)</span><span>' + fmt(d.kosten.vk) + '</span></div>';
+    html += '<div class="c-row"><span>Veilingkosten (' + (d.kosten.opgeld_pct || 17) + '%)</span><span>' + fmt(d.kosten.vk) + '</span></div>';
     html += '<div class="c-row"><span>BTW over totaal (21%)</span><span>' + fmt(d.kosten.btw) + '</span></div>';
     html += '<div class="c-row"><span>Totale inkoopprijs</span><span>' + fmt(d.kosten.totaal) + '</span></div>';
     if (d.kosten.marge != null) {
@@ -793,8 +793,8 @@ function renderOverzicht() {
     main.appendChild(titel);
 
     var meta = document.createElement('div'); meta.className = 'kavel-meta';
-    meta.innerHTML = 'HNVI' + (k.kavelnummer ? ' &middot; Kavel ' + k.kavelnummer : '') +
-      (k.url ? ' &middot; <a href="' + k.url + '" target="_blank" style="color:var(--brand);text-decoration:none">&#8599; HNVI</a>' : '');
+    meta.innerHTML = (k.veiling || 'Onbekend') + (k.kavelnummer ? ' &middot; Kavel ' + k.kavelnummer : '') +
+      (k.url ? ' &middot; <a href="' + k.url + '" target="_blank" style="color:var(--brand);text-decoration:none">&#8599; Bekijk</a>' : '');
     main.appendChild(meta);
 
     var pills = document.createElement('div'); pills.className = 'kavel-pills';

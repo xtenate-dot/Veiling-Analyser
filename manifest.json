@@ -1,8 +1,8 @@
 {
-  "name": "HNVI Veiling Analyser",
-  "short_name": "HNVI",
-  "description": "Analyseer HNVI kavels, bereken kosten en verkoopprijzen",
-  "start_url": "/HNVI-app/app.html",
+  "name": "Veiling Analyser",
+  "short_name": "Veilingen",
+  "description": "Analyseer veilingkavels, bereken kosten en verkoopprijzen",
+  "start_url": "/Veiling-Analyser/app.html",
   "display": "standalone",
   "background_color": "#f5f7f4",
   "theme_color": "#1a472a",
