@@ -203,5 +203,33 @@ const r3 = await api('POST', '/api/registreer', { email: 'kees@voorbeeld.nl', wa
 r = await api('POST', '/api/analyse', { url: 'https://www.testveiling.nl/kavel/77' }, r3.data.token);
 check('AI-dienst druk → 503 met begrijpelijke tekst, telt niet mee', r.status === 503 && /druk/.test(r.data.fout) && env.DB._db.prepare("SELECT COUNT(*) AS n FROM verbruik v JOIN gebruikers g ON g.id = v.gebruiker_id WHERE g.email = 'kees@voorbeeld.nl'").get().n === 0, r.data);
 
+// ── 9. Gratis opzet zonder betalen, met uitnodigingscode ──
+globalThis.fetch = (orig => async (url, opt) => {
+  if (String(url).startsWith('https://api.anthropic.com/')) {
+    const b = JSON.parse(opt.body);
+    return new Response(JSON.stringify(anthropicAntwoord(b)), { status: 200 });
+  }
+  return orig(url, opt);
+})(globalThis.fetch);
+anthropicAntwoord = (b) => b.system.startsWith('Je leest veilingkavels')
+  ? { content: [{ type: 'text', text: JSON.stringify(STAP1) }], stop_reason: 'end_turn', usage: { input_tokens: 8000, output_tokens: 400 } }
+  : { content: [{ type: 'text', text: JSON.stringify(STAP2) }], stop_reason: 'end_turn', usage: { input_tokens: 40000, output_tokens: 900 } };
+delete env.STRIPE_SECRET_KEY; env.UITNODIGINGSCODE = 'Veiling2026'; env.LIMIET_GRATIS = '1';
+r = await api('GET', '/api/gezondheid');
+check('Serverinfo: geen betalen, wel uitnodiging, limiet 1', r.data.betalen === false && r.data.uitnodiging === true && r.data.limiet_gratis === 1, r.data);
+r = await api('POST', '/api/registreer', { email: 'zonder@code.nl', wachtwoord: 'geheim123' });
+check('Zonder code geen account → 403', r.status === 403 && r.data.code === 'code');
+r = await api('POST', '/api/registreer', { email: 'zonder@code.nl', wachtwoord: 'geheim123', code: 'fout' });
+check('Verkeerde code → 403', r.status === 403);
+r = await api('POST', '/api/registreer', { email: 'met@code.nl', wachtwoord: 'geheim123', code: ' veiling2026 ' });
+check('Juiste code (hoofdletters en spaties maken niet uit) → 201', r.status === 201 && r.data.account.kan_betalen === false, r.status);
+const tk = r.data.token;
+r = await api('POST', '/api/analyse', { url: 'https://www.testveiling.nl/kavel/500' }, tk);
+check('Gratis analyse lukt', r.status === 200);
+r = await api('POST', '/api/analyse', { url: 'https://www.testveiling.nl/kavel/501' }, tk);
+check('Limiet zonder betalen: geen verwijzing naar abonnement', r.status === 402 && /gratis analyse/.test(r.data.fout) && !/abonnement/.test(r.data.fout), r.data.fout);
+r = await api('POST', '/api/afrekenen', { plan: 'basis' }, tk);
+check('Afrekenen zonder Stripe → 501', r.status === 501);
+
 console.log('\n' + (aantal - fouten) + ' van ' + aantal + ' controles OK' + (fouten ? ' — ' + fouten + ' FOUT(EN)' : ''));
 process.exit(fouten ? 1 : 0);

@@ -9,6 +9,36 @@ Zonder server werkt de app ook: dan vraagt hij elke gebruiker om een eigen Anthr
 
 ---
 
+## Snel starten: gratis, zonder betalen
+
+Je kunt de app eerst gratis aanbieden, zonder Stripe. Iedereen krijgt dan een account met een vast aantal gratis analyses per maand, en jij betaalt de AI-kosten. Je volgt alleen **stap 1, 2 en 3** hieronder en slaat stap 4 (Stripe) over.
+
+Stel in `server/wrangler.toml` in:
+
+- `LIMIET_GRATIS`: analyses per persoon per maand (standaard 10);
+- `DAGBUDGET_USD`: maximaal AI-kosten per 24 uur voor iedereen samen (standaard $20; voor een testfase is $2 tot $5 ruim).
+
+En zet eventueel een uitnodigingscode, zodat alleen mensen die jij de code geeft een account kunnen maken:
+
+```bash
+npx wrangler secret put UITNODIGINGSCODE
+```
+
+Wat het je kost, met de gemeten $0,015 per analyse:
+
+| Gebruikers | Analyses per persoon per maand | AI-kosten per maand |
+|---|---|---|
+| 20 | 10 (volle limiet) | ongeveer $3 |
+| 100 | 10 (volle limiet) | ongeveer $15 |
+
+Daarbij komt $5 per maand voor Cloudflare Workers Paid. In de praktijk gebruikt niet iedereen de volle limiet, en herhaalde producten komen uit de gratis cache.
+
+Zonder e-mailcontrole kan iemand meerdere accounts maken om meer gratis analyses te krijgen. Het dagbudget voorkomt dat dit je veel geld kost; de uitnodigingscode houdt onbekenden buiten.
+
+Wil je later toch laten betalen, dan volg je stap 4. De app laat abonnementen pas zien als Stripe is ingesteld.
+
+---
+
 ## Wat je nodig hebt
 
 | Dienst | Waarvoor | Kosten |
@@ -81,7 +111,7 @@ Zet in `config.js` het serveradres:
 api: 'https://veiling-analyser.jouwnaam.workers.dev',
 ```
 
-Vanaf dan vraagt de app om een account in plaats van een API-sleutel. Klanten krijgen elke maand `LIMIET_GRATIS` analyses gratis (standaard 5).
+Vanaf dan vraagt de app om een account in plaats van een API-sleutel. Iedereen krijgt elke maand `LIMIET_GRATIS` analyses gratis (standaard 10).
 
 ## Stap 4. Betalen met Stripe
 
@@ -124,7 +154,7 @@ Zonder deze stap krijgt een klant bij "Wachtwoord vergeten" de melding dat dit n
 ## Testen
 
 ```bash
-node server/test/server.test.mjs          # 49 controles van de server (Node 22 of nieuwer)
+node server/test/server.test.mjs          # 56 controles van de server (Node 22 of nieuwer)
 node server/test/lokaal.mjs               # server lokaal op poort 8787 met nep-AI, voor handmatig testen
 ```
 

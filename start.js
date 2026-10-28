@@ -25,6 +25,7 @@ var bh = document.getElementById('bladwijzer'); if (bh) bh.innerHTML = bladwijze
   var gedeeld = linkUitParameters();
   if (p.get('betaald') || p.get('herstel') || gedeeld) history.replaceState(null, '', location.pathname);
   if (serverModus()) {
+    await laadServerInfo();
     await laadAccount();
     if (account) await haalKavelsVanServer();
     if (p.get('betaald') === '1') { toast('Bedankt! Je abonnement is actief.'); setTimeout(laadAccount, 2500); }

@@ -2,6 +2,11 @@
 // Alleen actief als config.js een serveradres bevat (servermodus).
 
 var account = null;
+var serverInfo = null; // { betalen, uitnodiging, limiet_gratis } van /api/gezondheid
+async function laadServerInfo() {
+  try { serverInfo = await apiCall('/api/gezondheid'); } catch (e) { serverInfo = null; }
+  document.body.classList.toggle('betalen-aan', !!(serverInfo && serverInfo.betalen));
+}
 function sessieToken() { try { return localStorage.getItem('va_sessie') || ''; } catch (e) { return ''; } }
 function zetSessie(t) { try { if (t) localStorage.setItem('va_sessie', t); else localStorage.removeItem('va_sessie'); } catch (e) {} }
 
@@ -61,12 +66,15 @@ function vraagInloggen(modus) {
       '<button type="button" role="tab" class="' + (modus === 'inloggen' ? 'active' : '') + '" onclick="vraagInloggen(\'inloggen\')">Inloggen</button>' +
       '<button type="button" role="tab" class="' + (modus === 'registreren' ? 'active' : '') + '" onclick="vraagInloggen(\'registreren\')">Account maken</button></div>';
   }
-  if (modus === 'registreren') h += '<p class="help" style="margin:0 0 12px">Je krijgt elke maand een paar analyses gratis. Een abonnement kies je later, als je wilt.</p>';
+  if (modus === 'registreren') h += '<p class="help" style="margin:0 0 12px">Je krijgt elke maand ' + (serverInfo && serverInfo.limiet_gratis ? serverInfo.limiet_gratis + ' analyses' : 'een aantal analyses') + ' gratis.' + (serverInfo && serverInfo.betalen ? ' Een abonnement kies je later, als je wilt.' : '') + '</p>';
   if (modus === 'vergeten') h += '<p class="help" style="margin:0 0 12px">Vul je e-mailadres in. Je krijgt een link om een nieuw wachtwoord te kiezen.</p>';
   h += '<div class="form-rij"><label for="li-email">E-mailadres</label><input class="input" id="li-email" type="email" autocomplete="email" onkeydown="if(event.key===\'Enter\')inlogVerstuur(\'' + modus + '\')"></div>';
   if (modus !== 'vergeten') {
     h += '<div class="form-rij"><label for="li-ww">Wachtwoord' + (modus === 'registreren' ? ' <span class="opt">(minstens 8 tekens)</span>' : '') + '</label>' +
       '<input class="input" id="li-ww" type="password" autocomplete="' + (modus === 'registreren' ? 'new-password' : 'current-password') + '" onkeydown="if(event.key===\'Enter\')inlogVerstuur(\'' + modus + '\')"></div>';
+  }
+  if (modus === 'registreren' && serverInfo && serverInfo.uitnodiging) {
+    h += '<div class="form-rij"><label for="li-code">Uitnodigingscode</label><input class="input" id="li-code" type="text" autocomplete="off" onkeydown="if(event.key===\'Enter\')inlogVerstuur(\'registreren\')"></div>';
   }
   if (modus === 'inloggen') h += '<button type="button" class="linkje" onclick="vraagInloggen(\'vergeten\')">Wachtwoord vergeten?</button>';
   if (modus === 'vergeten') h += '<button type="button" class="linkje" onclick="vraagInloggen(\'inloggen\')">Terug naar inloggen</button>';
@@ -89,7 +97,8 @@ async function inlogVerstuur(modus) {
       toast('Als er een account bij dit adres hoort, is er een herstellink gestuurd.');
       return;
     }
-    var data = await apiCall(modus === 'registreren' ? '/api/registreer' : '/api/inloggen', { method: 'POST', body: { email: email, wachtwoord: wwEl.value } });
+    var codeEl = document.getElementById('li-code');
+    var data = await apiCall(modus === 'registreren' ? '/api/registreer' : '/api/inloggen', { method: 'POST', body: { email: email, wachtwoord: wwEl.value, code: codeEl ? codeEl.value : undefined } });
     zetSessie(data.token); account = data.account; werkAccountBij();
     closeModal();
     toast(modus === 'registreren' ? 'Welkom! Je account is klaar.' : 'Ingelogd als ' + account.email);
@@ -118,7 +127,7 @@ function toonAccount() {
   var prijzen = (window.VA_CONFIG && window.VA_CONFIG.prijzen) || {};
   var h = '<div class="acc-plan"><b>' + esc(a.plan_naam) + '</b><span class="kc-meta">' + esc(a.email) + '</span></div>';
   h += '<div class="acc-meter' + (vol ? ' vol' : '') + '"><i style="width:' + Math.min(100, Math.round(a.gebruikt / Math.max(1, a.limiet) * 100)) + '%"></i></div>';
-  h += '<div class="help" style="margin:0">' + a.gebruikt + ' van ' + a.limiet + ' analyses gebruikt deze maand.' +
+  h += '<div class="help" style="margin:0">' + a.gebruikt + ' van ' + a.limiet + ' analyses gebruikt deze maand.' + (vol && !a.kan_betalen ? ' Vanaf de 1e van volgende maand kun je weer verder.' : '') +
     (a.periode_einde && a.plan !== 'gratis' ? ' Je abonnement loopt tot ' + new Date(a.periode_einde).toLocaleDateString('nl-NL') + ' en wordt automatisch verlengd.' : '') + '</div>';
   if (a.abonnement_status === 'past_due') h += '<div class="note">' + ic('alert') + '<span>De laatste betaling is niet gelukt. Werk je betaalgegevens bij via Abonnement beheren.</span></div>';
   if (a.kan_betalen) {

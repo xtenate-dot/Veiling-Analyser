@@ -167,8 +167,9 @@ async function startBatch() {
   batchBezig = false;
   if (knop) {
     knop.disabled = false;
-    knop.textContent = limiet ? 'Abonnement kiezen' : 'Klaar';
-    knop.onclick = limiet ? function() { toonAccount(); } : function() { closeModal(); switchTab('overzicht'); };
+    var kopen = limiet && account && account.kan_betalen;
+    knop.textContent = kopen ? 'Abonnement kiezen' : 'Klaar';
+    knop.onclick = kopen ? function() { toonAccount(); } : function() { closeModal(); switchTab('overzicht'); };
   }
   toast(ok + (ok === 1 ? ' kavel' : ' kavels') + ' geanalyseerd' + (limiet ? '; gestopt omdat je maandlimiet is bereikt' : mis ? ', ' + mis + ' mislukt' : ''));
 }

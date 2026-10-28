@@ -11,7 +11,7 @@ const CACHE_DAGEN = 3;
 // ── Abonnementen ─────────────────────────────────────────────────────────────
 function plannen(env) {
   return {
-    gratis: { naam: 'Gratis', limiet: Number(env.LIMIET_GRATIS || 5) },
+    gratis: { naam: 'Gratis', limiet: Number(env.LIMIET_GRATIS || 10) },
     basis: { naam: 'Basis', limiet: Number(env.LIMIET_BASIS || 100), prijs: env.STRIPE_PRICE_BASIS },
     pro: { naam: 'Pro', limiet: Number(env.LIMIET_PRO || 500), prijs: env.STRIPE_PRICE_PRO }
   };
@@ -110,6 +110,10 @@ async function registreer(request, env) {
   const ww = String(b.wachtwoord || '');
   if (!geldigEmail(email)) throw new Fout(400, 'email', 'Vul een geldig e-mailadres in.');
   if (ww.length < 8 || ww.length > 200) throw new Fout(400, 'wachtwoord', 'Kies een wachtwoord van minstens 8 tekens.');
+  // Optioneel: alleen mensen met de uitnodigingscode kunnen een account maken
+  if (env.UITNODIGINGSCODE && !gelijk(String(b.code || '').trim().toLowerCase(), String(env.UITNODIGINGSCODE).trim().toLowerCase())) {
+    throw new Fout(403, 'code', 'Vul de juiste uitnodigingscode in. Die krijg je van de beheerder van de app.');
+  }
   const bestaat = await env.DB.prepare('SELECT id FROM gebruikers WHERE email = ?').bind(email).first();
   if (bestaat) throw new Fout(409, 'bestaat', 'Er is al een account met dit e-mailadres. Log in of herstel je wachtwoord.');
   const zout = willekeurig(16);
@@ -238,7 +242,11 @@ async function analyse(request, env) {
   const p = plannen(env);
   const plan = p[g.plan] ? g.plan : 'gratis';
   const gebruikt = await verbruikDezeMaand(env, g.id);
-  if (gebruikt >= p[plan].limiet) throw new Fout(402, 'limiet', 'Je hebt deze maand alle ' + p[plan].limiet + ' analyses van je abonnement gebruikt. Kies een groter abonnement of wacht tot volgende maand.');
+  if (gebruikt >= p[plan].limiet) {
+    throw new Fout(402, 'limiet', env.STRIPE_SECRET_KEY
+      ? 'Je hebt deze maand alle ' + p[plan].limiet + ' analyses van je abonnement gebruikt. Kies een groter abonnement of wacht tot volgende maand.'
+      : 'Je hebt deze maand ' + (p[plan].limiet === 1 ? 'je gratis analyse' : 'alle ' + p[plan].limiet + ' gratis analyses') + ' gebruikt. Vanaf de 1e van volgende maand kun je weer verder. Een ander bod doorrekenen kan wel gewoon.');
+  }
   const uur = await env.DB.prepare('SELECT COUNT(*) AS n FROM verbruik WHERE gebruiker_id = ? AND tijd > ?').bind(g.id, Date.now() - 3600000).first();
   if (uur && uur.n >= Number(env.MAX_PER_UUR || 40)) throw new Fout(429, 'te_snel', 'Je doet veel analyses kort na elkaar. Wacht een paar minuten.');
   const dag = await env.DB.prepare('SELECT COALESCE(SUM(usd), 0) AS usd FROM verbruik WHERE tijd > ?').bind(Date.now() - 864e5).first();
@@ -358,7 +366,8 @@ async function stripeWebhook(request, env) {
 
 // ── Router ───────────────────────────────────────────────────────────────────
 const ROUTES = {
-  'GET /api/gezondheid': async () => json({ ok: true }),
+  // Openbare informatie voor de app: is betalen ingesteld, is een uitnodigingscode nodig
+  'GET /api/gezondheid': async (req, env) => json({ ok: true, betalen: !!env.STRIPE_SECRET_KEY, uitnodiging: !!env.UITNODIGINGSCODE, limiet_gratis: plannen(env).gratis.limiet }),
   'POST /api/registreer': registreer,
   'POST /api/inloggen': inloggen,
   'POST /api/uitloggen': uitloggen,

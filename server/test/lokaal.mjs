@@ -20,6 +20,9 @@ function stmt(sql, args = []) {
 const env = { DB: { prepare: s => stmt(s), batch: async l => { for (const s of l) await s.run(); } },
   ANTHROPIC_API_KEY: 'sk-ant-lokaal', STRIPE_SECRET_KEY: 'sk_test_lokaal', STRIPE_PRICE_BASIS: 'price_b', STRIPE_PRICE_PRO: 'price_p', APP_URL: herkomst + '/app.html', APP_ORIGIN: herkomst, LIMIET_GRATIS: '3' };
 
+// Gratis opzet testen: ZONDER_BETALEN=1 en/of UITNODIGINGSCODE=... meegeven
+if (process.env.ZONDER_BETALEN) { delete env.STRIPE_SECRET_KEY; delete env.STRIPE_PRICE_BASIS; delete env.STRIPE_PRICE_PRO; }
+if (process.env.UITNODIGINGSCODE) env.UITNODIGINGSCODE = process.env.UITNODIGINGSCODE;
 const echteFetch = globalThis.fetch;
 globalThis.fetch = async (url, opt = {}) => {
   url = String(url);

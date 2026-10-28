@@ -70,6 +70,7 @@ function check(naam, ok, extra) { console.log((ok ? 'OK   ' : 'FOUT ') + naam + 
 
   // Gewonnen en verkocht
   await page.evaluate(() => { kavels[0].status = 'gewonnen'; kavels[0].gewonnen_op = Date.now(); switchTab('gewonnen'); legVerkoopVast(0); });
+  await page.waitForTimeout(150); // venster zet eerst de cursor in het eerste veld
   await page.fill('#vv-voor', '85');
   await page.fill('#vv-kosten', '6,95');
   await page.click('#modal-actions .btn-primary');

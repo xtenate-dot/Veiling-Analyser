@@ -518,3 +518,4 @@ button.plan-k:hover{border-color:var(--accent)}
 /* Onderdelen die alleen in één modus zichtbaar zijn */
 body.modus-server .alleen-eigen{display:none !important}
 body:not(.modus-server) .alleen-server{display:none !important}
+body:not(.betalen-aan) .alleen-betalen{display:none !important}

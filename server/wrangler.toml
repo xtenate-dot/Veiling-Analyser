@@ -15,7 +15,7 @@ APP_URL = "https://xtenate-dot.github.io/Veiling-Analyser/app.html"
 # Welke websites de server mogen aanroepen (komma-gescheiden)
 APP_ORIGIN = "https://xtenate-dot.github.io"
 # Analyses per kalendermaand per abonnement
-LIMIET_GRATIS = "5"
+LIMIET_GRATIS = "10"
 LIMIET_BASIS = "100"
 LIMIET_PRO = "500"
 # Veiligheidsplafond: maximaal AI-kosten (in dollar) per 24 uur voor alle klanten samen
@@ -35,4 +35,5 @@ ZOEKOPDRACHTEN = "1"
 #   STRIPE_PRICE_BASIS     (prijs-ID van het Basis-abonnement, begint met price_)
 #   STRIPE_PRICE_PRO       (prijs-ID van het Pro-abonnement)
 #   RESEND_API_KEY         (optioneel, voor wachtwoord vergeten)
+#   UITNODIGINGSCODE       (optioneel: alleen wie deze code invult kan een account maken)
 #   EMAIL_VAN              (optioneel, bijv. "Veiling Analyser <noreply@jouwdomein.nl>")
