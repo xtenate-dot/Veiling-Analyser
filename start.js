@@ -16,6 +16,7 @@ setSyncStatus('ok');
 setStap(1);
 setFase('invoer');
 renderOverzicht();
+renderHome();
 vulVeilingKeuze(); syncVeilingVelden();
 if (!serverModus() && SHEETS_URL) { syncVanSheets(); }
 werkAccountBij();
@@ -41,8 +42,7 @@ var bh = document.getElementById('bladwijzer'); if (bh) bh.innerHTML = bladwijze
 })();
 setTimeout(function() { controleerTarieven(false); }, 600);
 
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.getRegistrations().then(function(regs) {
-    regs.forEach(function(r) { r.unregister(); });
-  }).catch(function() {});
+// Service worker: app opent ook zonder internet en is installeerbaar
+if ('serviceWorker' in navigator && location.protocol === 'https:') {
+  navigator.serviceWorker.register('sw.js').catch(function(e) { console.warn('Service worker niet geregistreerd', e); });
 }

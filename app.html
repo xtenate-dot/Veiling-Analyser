@@ -28,8 +28,9 @@
       <span class="brand-name">Veiling Analyser</span>
     </div>
     <nav class="nav">
-      <button class="nav-item active" data-tab="overzicht" onclick="switchTab('overzicht')"><i class="ico" data-i="grid"></i><span>Overzicht</span><span class="nav-count js-badge">0</span></button>
-      <button class="nav-item" data-tab="analyse" onclick="switchTab('analyse')"><i class="ico" data-i="search"></i><span>Kavel analyseren</span></button>
+      <button class="nav-item active" data-tab="home" onclick="switchTab('home')"><i class="ico" data-i="home"></i><span>Home</span></button>
+      <button class="nav-item" data-tab="analyse" onclick="nieuwKavel()"><i class="ico" data-i="plus"></i><span>Kavel analyseren</span></button>
+      <button class="nav-item" data-tab="overzicht" onclick="switchTab('overzicht')"><i class="ico" data-i="grid"></i><span>Mijn kavels</span><span class="nav-count js-badge">0</span></button>
       <button class="nav-item" data-tab="gewonnen" onclick="switchTab('gewonnen')"><i class="ico" data-i="trophy"></i><span>Gewonnen</span><span class="nav-count js-badge-gewonnen">0</span></button>
       <button class="nav-item" data-tab="handleiding" onclick="switchTab('handleiding')"><i class="ico" data-i="book"></i><span>Handleiding</span></button>
     </nav>
@@ -64,12 +65,22 @@
         </div>
       </div>
 
-      <!-- ── Overzicht ── -->
-      <section id="tab-overzicht" class="panel active">
+      <div id="bevestig-bar" class="banner" role="region" aria-label="E-mailadres bevestigen" style="display:none">
+        <div class="b-text"><strong>Bevestig je e-mailadres</strong>Vul de code in die we je hebben gemaild. Daarna kun je analyseren.</div>
+        <div class="b-form"><button class="btn btn-primary" onclick="vraagCode()">Code invullen</button></div>
+      </div>
+
+      <!-- ── Home ── -->
+      <section id="tab-home" class="panel active" aria-labelledby="home-titel">
+        <div id="home"></div>
+      </section>
+
+      <!-- ── Mijn kavels ── -->
+      <section id="tab-overzicht" class="panel">
         <div class="ph">
           <div>
-            <h1>Overzicht</h1>
-            <p>Bekijk je veilingen en ontdek welke kavels interessant zijn.</p>
+            <h1>Mijn kavels</h1>
+            <p>Alle kavels die je hebt geanalyseerd en waar je nog op kunt bieden.</p>
           </div>
           <div class="ph-actions">
             <button class="btn btn-secondary" id="selecteer-btn" onclick="toggleSelectie()" aria-pressed="false"><i class="ico" data-i="select"></i><span id="selecteer-lbl">Selecteren</span></button>
@@ -80,15 +91,10 @@
 
         <div id="ov-leeg" style="display:none">
           <div class="empty">
-            <i class="welkom-hamer" data-i="gavel"></i>
-            <h2>Weet tot hoeveel je kunt bieden</h2>
-            <p>Plak de link van een kavel. De app leest de veilingpagina, zoekt wat het product tweedehands en nieuw kost, en rekent opgeld en btw voor je door.</p>
-            <div class="welcome-steps">
-              <div><b>Plak de link</b>Van elke veilingsite, of deel hem vanuit je browser.</div>
-              <div><b>Zie de prijzen</b>Vergelijkbare advertenties en de nieuwprijs, met links.</div>
-              <div><b>Bied tot het kaartje</b>Het maximale bod waarbij je je marge haalt.</div>
-            </div>
-            <div class="btns" id="welkom-knoppen"><button class="btn btn-primary btn-lg" onclick="nieuwKavel()"><i class="ico" data-i="plus"></i>Eerste kavel analyseren</button></div>
+            <div class="empty-ico"><i class="ico" data-i="tag"></i></div>
+            <h2>Nog geen kavels</h2>
+            <p>Analyseer je eerste kavel; hij komt daarna hier te staan.</p>
+            <div class="btns"><button class="btn btn-primary btn-lg" onclick="nieuwKavel()"><i class="ico" data-i="plus"></i>Kavel analyseren</button></div>
           </div>
         </div>
 
@@ -216,7 +222,7 @@
             <div class="empty-ico"><i class="ico" data-i="trophy"></i></div>
             <h2>Nog geen gewonnen kavels</h2>
             <p>Gewonnen kavels komen hier te staan zodra je ze markeert. Zo blijft je overzicht beperkt tot kavels waar je nog op kunt bieden.</p>
-            <div class="btns"><button class="btn btn-secondary" onclick="switchTab('overzicht')">Naar overzicht</button></div>
+            <div class="btns"><button class="btn btn-secondary" onclick="switchTab('overzicht')">Naar mijn kavels</button></div>
           </div>
         </div>
         <div id="gew-inhoud" style="display:none">
@@ -301,7 +307,7 @@
             <p>Bij &ldquo;quitte&rdquo; staat het bod waarbij je precies niets verdient. Het is een rekenhulp, geen garantie.</p></div>
         </details>
         <details class="faq">
-          <summary>Hoe betrouwbaar zijn de marktprijzen?</summary>
+          <summary>Waar komen de prijzen vandaan?</summary>
           <div class="fb">
             <p>De app zoekt bij elke analyse live naar vergelijkbare advertenties en verkochte items, en toont die met links. Links die niet letterlijk in de opgehaalde resultaten voorkwamen krijgen het label &ldquo;niet bevestigd&rdquo;. De app vergelijkt de verwachte verkoopprijs ook zelf met de mediaan van de gevonden advertenties en waarschuwt bij grote verschillen.</p>
             <p>Betrouwbaarheid is &ldquo;Hoog&rdquo; bij vijf of meer goed vergelijkbare advertenties, &ldquo;Gemiddeld&rdquo; bij twee tot vier en anders &ldquo;Laag&rdquo;. Sommige sites laten zich niet automatisch lezen; dan zoekt de app via een zoekmachine. Is live zoeken niet beschikbaar voor je API-sleutel, dan valt de app terug op een schatting van het model en zegt dat erbij. Controleer bij een serieuze kandidaat altijd zelf een paar advertenties.</p>
@@ -360,10 +366,11 @@
   </div>
 
   <nav class="tabbar" aria-label="Navigatie">
-    <button class="tab-item active" data-tab="overzicht" onclick="switchTab('overzicht')"><i class="ico" data-i="grid"></i><span>Overzicht</span></button>
-    <button class="tab-item" data-tab="analyse" onclick="switchTab('analyse')"><i class="ico" data-i="search"></i><span>Analyseren</span></button>
+    <button class="tab-item active" data-tab="home" onclick="switchTab('home')"><i class="ico" data-i="home"></i><span>Home</span></button>
+    <button class="tab-item" data-tab="overzicht" onclick="switchTab('overzicht')"><i class="ico" data-i="grid"></i><span>Kavels</span></button>
+    <button class="tab-item tab-plus" data-tab="analyse" onclick="nieuwKavel()" aria-label="Kavel analyseren"><span class="plus-rond"><i class="ico" data-i="plus"></i></span></button>
     <button class="tab-item" data-tab="gewonnen" onclick="switchTab('gewonnen')"><i class="ico" data-i="trophy"></i><span>Gewonnen</span></button>
-    <button class="tab-item" data-tab="handleiding" onclick="switchTab('handleiding')"><i class="ico" data-i="book"></i><span>Handleiding</span></button>
+    <button class="tab-item" data-tab="handleiding" onclick="switchTab('handleiding')"><i class="ico" data-i="book"></i><span>Hulp</span></button>
   </nav>
 </div>
 
@@ -381,6 +388,7 @@
 <script src="app.js"></script>
 <script src="account.js"></script>
 <script src="functies.js"></script>
+<script src="home.js"></script>
 <script src="start.js"></script>
 </body>
 </html>

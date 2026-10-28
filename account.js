@@ -33,7 +33,10 @@ async function apiCall(pad, opt) {
 }
 
 function werkAccountBij() {
-  var tekst = !account ? 'Niet ingelogd' : account.plan_naam + ': ' + account.gebruikt + ' van ' + account.limiet + ' deze maand';
+  var tekst = !account ? 'Niet ingelogd' : !account.email_geverifieerd ? 'E-mailadres nog bevestigen' : account.plan_naam + ': ' + account.gebruikt + ' van ' + account.limiet + ' deze maand';
+  var balk = document.getElementById('bevestig-bar');
+  if (balk) balk.style.display = account && !account.email_geverifieerd ? 'flex' : 'none';
+  if (typeof renderHome === 'function') renderHome();
   document.querySelectorAll('.js-acc-sub').forEach(function(e) {
     e.textContent = tekst;
     e.className = 'sub js-acc-sub' + (account ? (account.gebruikt >= account.limiet ? ' err' : ' ok') : '');
@@ -73,6 +76,7 @@ function vraagInloggen(modus) {
     h += '<div class="form-rij"><label for="li-ww">Wachtwoord' + (modus === 'registreren' ? ' <span class="opt">(minstens 8 tekens)</span>' : '') + '</label>' +
       '<input class="input" id="li-ww" type="password" autocomplete="' + (modus === 'registreren' ? 'new-password' : 'current-password') + '" onkeydown="if(event.key===\'Enter\')inlogVerstuur(\'' + modus + '\')"></div>';
   }
+  if (modus === 'registreren' && serverInfo && serverInfo.turnstile_sitekey) h += '<div id="ts-widget" style="margin:4px 0 10px;min-height:65px"></div>';
   if (modus === 'registreren' && serverInfo && serverInfo.uitnodiging) {
     h += '<div class="form-rij"><label for="li-code">Uitnodigingscode</label><input class="input" id="li-code" type="text" autocomplete="off" onkeydown="if(event.key===\'Enter\')inlogVerstuur(\'registreren\')"></div>';
   }
@@ -84,6 +88,57 @@ function vraagInloggen(modus) {
     { label: 'Annuleren', cls: 'btn-secondary' },
     { label: modus === 'inloggen' ? 'Inloggen' : modus === 'registreren' ? 'Account maken' : 'Stuur herstellink', cls: 'btn-primary', keepOpen: true, fn: function() { inlogVerstuur(modus); } }
   ]);
+  if (modus === 'registreren' && serverInfo && serverInfo.turnstile_sitekey) toonTurnstile();
+}
+
+// ── Cloudflare Turnstile: onzichtbare controle of er een mens aanmeldt ──
+var tsToken = null, tsWidget = null;
+function toonTurnstile() {
+  tsToken = null;
+  function render() {
+    var el = document.getElementById('ts-widget'); if (!el || !window.turnstile) return;
+    tsWidget = window.turnstile.render(el, {
+      sitekey: serverInfo.turnstile_sitekey, language: 'nl', theme: themaActief() === 'dark' ? 'dark' : 'light',
+      callback: function(t) { tsToken = t; }, 'expired-callback': function() { tsToken = null; }, 'error-callback': function() { tsToken = null; }
+    });
+  }
+  if (window.turnstile) { render(); return; }
+  if (!document.getElementById('ts-script')) {
+    var sc = document.createElement('script');
+    sc.id = 'ts-script'; sc.async = true;
+    sc.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+    sc.onload = render;
+    document.head.appendChild(sc);
+  }
+}
+
+// ── E-mailadres bevestigen met de code van 6 cijfers ──
+function vraagCode(melding) {
+  if (!account) return;
+  var h = '<p style="margin:0 0 14px">We hebben een code van 6 cijfers gestuurd naar <strong>' + esc(account.email) + '</strong>. Vul hem hieronder in. Zie je niets? Kijk ook bij ongewenste e-mail.</p>' +
+    '<input class="input code-veld" id="code-in" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" aria-label="Code van 6 cijfers" oninput="this.value=this.value.replace(/\\D/g,\'\');if(this.value.length===6)codeVerstuur()">' +
+    '<div class="msg err" id="code-err" role="alert"></div>';
+  openModal('Bevestig je e-mailadres', h, [
+    { label: 'Nieuwe code sturen', cls: 'btn-ghost', keepOpen: true, fn: codeOpnieuwVragen },
+    { label: 'Bevestigen', cls: 'btn-primary', keepOpen: true, fn: codeVerstuur }
+  ]);
+  if (melding) toonMsg('code-err', melding);
+}
+var codeBezig = false;
+async function codeVerstuur() {
+  var v = (document.getElementById('code-in') || {}).value || '';
+  if (v.length !== 6) { toonMsg('code-err', 'Vul de 6 cijfers uit de e-mail in.'); return; }
+  if (codeBezig) return; codeBezig = true;
+  try {
+    var d = await apiCall('/api/verifieer', { method: 'POST', body: { code: v } });
+    account = d.account; werkAccountBij(); closeModal();
+    toast('E-mailadres bevestigd. Je kunt nu analyseren.');
+  } catch (e) { toonMsg('code-err', e.message); var el = document.getElementById('code-in'); if (el) el.select(); }
+  finally { codeBezig = false; }
+}
+async function codeOpnieuwVragen() {
+  try { await apiCall('/api/verifieer-opnieuw', { method: 'POST' }); toast('Nieuwe code verstuurd naar ' + account.email); }
+  catch (e) { toonMsg('code-err', e.message); }
 }
 async function inlogVerstuur(modus) {
   var email = document.getElementById('li-email').value.trim();
@@ -98,13 +153,15 @@ async function inlogVerstuur(modus) {
       return;
     }
     var codeEl = document.getElementById('li-code');
-    var data = await apiCall(modus === 'registreren' ? '/api/registreer' : '/api/inloggen', { method: 'POST', body: { email: email, wachtwoord: wwEl.value, code: codeEl ? codeEl.value : undefined } });
+    var data = await apiCall(modus === 'registreren' ? '/api/registreer' : '/api/inloggen', { method: 'POST', body: { email: email, wachtwoord: wwEl.value, code: codeEl ? codeEl.value : undefined, turnstile: tsToken || undefined } });
     zetSessie(data.token); account = data.account; werkAccountBij();
     closeModal();
-    toast(modus === 'registreren' ? 'Welkom! Je account is klaar.' : 'Ingelogd als ' + account.email);
     await haalKavelsVanServer();
+    if (!account.email_geverifieerd) vraagCode(data.mail_fout);
+    else toast(modus === 'registreren' ? 'Welkom! Je account is klaar.' : 'Ingelogd als ' + account.email);
   } catch (e) {
     toonMsg('li-err', e.message);
+    if (e.code === 'bot' && window.turnstile && tsWidget != null) { try { window.turnstile.reset(tsWidget); } catch (x) {} tsToken = null; }
   } finally { if (knop) knop.disabled = false; }
 }
 function vraagNieuwWachtwoord(token) {

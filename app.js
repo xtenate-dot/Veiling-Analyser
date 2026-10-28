@@ -21,7 +21,7 @@ var selectieModus = false;
 var geselecteerd = new Set();
 var huidigGefilterd = [];
 var vorigeLijstSig = '';
-var huidigeTab = 'overzicht';
+var huidigeTab = 'home';
 var faseNu = 'invoer';
 
 // ── 2. UI-helpers ───────────────────────────────────────────────────────────
@@ -33,6 +33,8 @@ var ICONS = {
   download: '<path d="M12 4v11M7 10.5l5 5 5-5M5 20h14"/>',
   calendar: '<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/>',
   share: '<circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8.2 10.8l7.6-3.6M8.2 13.2l7.6 3.6"/>',
+  home: '<path d="M4 10.5L12 4l8 6.5V19a1 1 0 0 1-1 1h-4.5v-5.5h-5V20H5a1 1 0 0 1-1-1z"/>',
+  clipboard: '<rect x="6" y="4.5" width="12" height="16" rx="2"/><path d="M9.5 4.5V3.8a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v.7M9 11h6M9 15h4"/>',
   euro: '<path d="M17.5 6.5A7 7 0 1 0 17.5 17.5M4 10h9M4 14h9"/>',
   grid: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
@@ -154,13 +156,23 @@ function vriendelijkeFout(e) {
 
 // Navigatie
 function switchTab(name) {
-  huidigeTab = name;
-  document.querySelectorAll('.nav-item, .tab-item').forEach(function(t) { t.classList.toggle('active', t.getAttribute('data-tab') === name); });
-  document.querySelectorAll('.panel').forEach(function(p) { p.classList.remove('active'); });
-  document.getElementById('tab-' + name).classList.add('active');
-  if (name === 'overzicht') renderOverzicht();
-  if (name === 'gewonnen') renderGewonnen();
-  window.scrollTo(0, 0);
+  var wissel = function() {
+    huidigeTab = name;
+    document.querySelectorAll('.nav-item, .tab-item').forEach(function(t) { t.classList.toggle('active', t.getAttribute('data-tab') === name); });
+    document.querySelectorAll('.panel').forEach(function(p) { p.classList.remove('active'); });
+    document.getElementById('tab-' + name).classList.add('active');
+    if (name === 'home') renderHome();
+    if (name === 'overzicht') renderOverzicht();
+    if (name === 'gewonnen') renderGewonnen();
+    window.scrollTo(0, 0);
+  };
+  // Vloeiende overgang tussen schermen waar de browser dat ondersteunt
+  var rustig = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (document.startViewTransition && !rustig && name !== huidigeTab) {
+    var t = document.startViewTransition(wissel);
+    // Snel na elkaar wisselen breekt de vorige overgang af; dat is geen fout
+    [t.ready, t.finished, t.updateCallbackDone].forEach(function(p) { if (p && p.catch) p.catch(function() {}); });
+  } else wissel();
 }
 function nieuwKavel() {
   var wasResultaat = faseNu === 'resultaat';
@@ -953,19 +965,6 @@ function controleerTarieven(altijd) {
 // ── Claude API ──
 // Fout doordat web_search / web_fetch niet beschikbaar is (bijvoorbeeld uitgezet voor je organisatie)
 // Stuurt één beurt naar Claude, inclusief vervolgverzoeken bij pause_turn.
-// Geeft de tekst terug plus alle URL's die echt in zoek- of ophaalresultaten voorkwamen.
-
-
-// Stap 1: kavelpagina lezen (product, staat, huidig bod, sluitingstijd en veilingkosten)
-
-// Stap 2: tweedehands- en nieuwprijzen opzoeken
-
-// Reserve als zoeken niet beschikbaar is: alleen een schatting op basis van kennis van het model
-
-// Controleert en ordent het prijsantwoord. Getallen worden nagelopen; links worden gemarkeerd als bevestigd
-// als ze echt in de zoek- of ophaalresultaten voorkwamen.
-
-
 // ── Analyse uitvoeren: via de server (abonnement) of rechtstreeks met een eigen API-sleutel ──
 function serverModus() { return !!(window.VA_CONFIG && window.VA_CONFIG.api); }
 async function anthropicDirect(body) {
@@ -1087,6 +1086,7 @@ async function analyseer() {
     setFase('invoer');
     toonMsg('analyse-err', vriendelijkeFout(e));
     if (e.status === 402) setTimeout(toonAccount, 400);
+    if (e.code === 'niet_geverifieerd') setTimeout(function() { vraagCode(); }, 300);
   } finally {
     setBtn('analyse-btn', 'analyse-btn-txt', false, 'Analyseer kavel');
   }
@@ -1094,8 +1094,8 @@ async function analyseer() {
 
 // ── 5. Resultaat ────────────────────────────────────────────────────────────
 function adviesInfo(a) {
-  if (a === 'kopen') return { key: 'kopen', label: 'Aanrader', tekst: 'Dit kavel lijkt interessant: de geschatte marktwaarde ligt ruim boven de totale kosten.' };
-  if (a === 'skip') return { key: 'skip', label: 'Skip', tekst: 'Op basis van de geschatte marktwaarde en de totale kosten lijkt dit kavel geen winst op te leveren.' };
+  if (a === 'kopen') return { key: 'kopen', label: 'Aanrader', tekst: 'Dit kavel is interessant: wat het tweedehands opbrengt ligt ruim boven je totale kosten.' };
+  if (a === 'skip') return { key: 'skip', label: 'Skip', tekst: 'Na alle kosten blijft er bij de huidige prijzen geen winst over.' };
   if (a === 'twijfel') return { key: 'twijfel', label: 'Twijfel', tekst: 'Dit kavel is een grensgeval. Controleer de marktprijs zelf voordat je biedt.' };
   return { key: 'wacht', label: 'Niet geanalyseerd', tekst: '' };
 }
@@ -1153,7 +1153,7 @@ function adviesRedenen(d) {
     ((d.prijzen && d.prijzen.controles) || []).forEach(function(c) { r.push(['warn', c]); });
   }
   if (!d.controle) {
-    if (d.prijzen && d.prijzen.live) r.push(['info', 'Prijzen zijn live opgezocht op ' + new Date(d.prijzen.opgehaald_op).toLocaleDateString('nl-NL') + '. Open een paar van de advertenties hieronder voordat je biedt.']);
+    if (d.prijzen && d.prijzen.live) r.push(['ok', 'De prijzen komen van echte advertenties en verkochte items, opgezocht op ' + new Date(d.prijzen.opgehaald_op).toLocaleDateString('nl-NL') + '. De links staan hieronder bij Prijzen van vandaag.']);
     else r.push(['info', 'Prijzen zijn een schatting van het AI-model en niet live opgehaald. Controleer vergelijkbare advertenties voordat je biedt.']);
   }
   return r;
@@ -1241,7 +1241,7 @@ function controleKaart(d, idx) {
   var val = function(v) { return v ? esc(String(v)) : ''; };
   var h = '<div class="card" id="controle-kaart"><div class="card-h"><h2>Prijzen controleren</h2>' +
     (c ? '<span class="conf pos"><i></i>Gecontroleerd op ' + new Date(c.op).toLocaleDateString('nl-NL') + '</span>' : '<span class="conf warn"><i></i>Nog niet gecontroleerd</span>') + '</div>';
-  h += '<p class="card-sub">' + (d.prijzen && d.prijzen.live ? 'De prijzen zijn live opgezocht, maar advertenties kunnen afwijken van dit kavel.' : 'De prijzen in deze analyse zijn schattingen van het AI-model.') + ' Wil je zeker zijn, zoek dan zelf vergelijkbare advertenties op en vul het gemiddelde in. Marge en advies worden dan opnieuw berekend.</p>';
+  h += '<p class="card-sub">' + (d.prijzen && d.prijzen.live ? 'Heb je zelf betere vergelijkingen, bijvoorbeeld voor een afwijkende staat of uitvoering?' : 'De prijzen in deze analyse zijn een schatting, omdat live zoeken niet lukte.') + ' Wil je zeker zijn, zoek dan zelf vergelijkbare advertenties op en vul het gemiddelde in. Marge en advies worden dan opnieuw berekend.</p>';
   var kort = korteZoekterm(d.titel || '');
   h += '<div class="field"><label for="ctl-zoek">Zoekterm</label><input class="input" id="ctl-zoek" type="text" value="' + esc(kort) + '"><div class="help">' +
     (kort !== (d.titel || '').trim() ? 'De titel is ingekort, want lange titels vinden op Marktplaats vaak niets. Pas de zoekterm aan als dat nodig is. ' : '') +
@@ -1271,6 +1271,11 @@ function controleKaart(d, idx) {
   h += '<div class="msg err" id="ctl-err" role="alert"></div>';
   h += '<div class="ctl-actions"><button class="btn btn-primary" onclick="bewaarControle(' + idx + ')">' + ic('check') + 'Opslaan en herberekenen</button>' +
     (c ? '<button class="btn btn-secondary" onclick="herstelAiSchatting(' + idx + ')">' + ic('undo') + 'Terug naar AI-schatting</button>' : '') + '</div></div>';
+  // Bij echte prijzen hoeft niemand eerst te controleren: ingeklapt als optie
+  var kop = '<div class="card" id="controle-kaart"><div class="card-h"><h2>Prijzen controleren</h2><span class="conf warn"><i></i>Nog niet gecontroleerd</span></div>';
+  if (d.prijzen && d.prijzen.live && !c && h.indexOf(kop) === 0 && h.slice(-6) === '</div>') {
+    h = '<details class="card ctl-inklap" id="controle-kaart"><summary><span><b>Prijzen zelf aanpassen</b><span class="kc-meta">Alleen nodig als je betere vergelijkingen hebt</span></span></summary>' + h.slice(kop.length, -6) + '</details>';
+  }
   return h;
 }
 function pasControleToe(k, gem, laag, nieuw, partij) {
@@ -1362,7 +1367,7 @@ function toonAnalyseResultaat(d, behoudScroll) {
   var gem = verkoopprijsVan(d);
   var pg = d.pagina || {};
 
-  var h = '<div class="res-bar"><button class="btn btn-ghost btn-sm" onclick="switchTab(\'overzicht\')">' + ic('back') + 'Overzicht</button><div class="grp">';
+  var h = '<div class="res-bar"><button class="btn btn-ghost btn-sm" onclick="switchTab(\'overzicht\')">' + ic('back') + 'Mijn kavels</button><div class="grp">';
   if (idx >= 0) h += '<button class="btn btn-secondary btn-sm" onclick="wijzigBod(' + idx + ')">' + ic('tag') + 'Bod wijzigen</button>';
   if (idx >= 0) h += '<button class="btn btn-secondary btn-sm" onclick="heranalyseer(' + idx + ')">' + ic('refresh') + 'Opnieuw analyseren</button>';
   if (idx >= 0 && d.status !== 'gewonnen') h += '<button class="btn btn-secondary btn-sm" onclick="markeerGewonnen(' + idx + ',function(){switchTab(\'overzicht\')})">' + ic('trophy') + 'Markeer als gewonnen</button>';
@@ -1377,7 +1382,7 @@ function toonAnalyseResultaat(d, behoudScroll) {
   h += '<div class="card hero v-' + a.key + '"><div class="verdict"><div>';
   h += '<div class="hero-top"><span class="pill pill-lg pill-' + a.key + '">' + a.label + '</span>';
   if (d.controle) h += '<span class="conf pos"><i></i>Prijzen gecontroleerd</span>';
-  else if (d.prijzen && d.prijzen.live) h += '<span class="conf pos"><i></i>Live opgezocht</span>';
+  else if (d.prijzen && d.prijzen.live) h += '<span class="conf pos"><i></i>Echte prijzen van ' + new Date(d.prijzen.opgehaald_op).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long' }) + '</span>';
   else if (d.prijzen) h += '<span class="conf warn"><i></i>Schatting zonder internet</span>';
   h += '</div>';
   h += '<h2>' + esc(d.titel || 'Onbekend product') + '</h2>';
@@ -1395,7 +1400,7 @@ function toonAnalyseResultaat(d, behoudScroll) {
   h += '<div class="kpi"><div class="kpi-l">Handelspotentieel</div><div class="kpi-v">' + (ond ? '-' : (d.roi || 0) + '<span style="font-size:13px;font-weight:500;color:var(--ink-3)"> / 100</span>') + '</div>' + (ond ? '<div class="kpi-s">Pas beschikbaar na controle van de prijs</div>' : '<div class="meter"><i data-w="' + (d.roi || 0) + '"></i></div>') + '</div>';
   var aantalAdv = d.prijzen && d.prijzen.tweedehands ? d.prijzen.tweedehands.length : 0;
   h += '<div class="kpi"><div class="kpi-l">Betrouwbaarheid prijzen</div><div class="kpi-v"><span class="conf ' + (d.controle ? 'pos' : ond ? 'warn' : conf.cls) + '" style="font-size:20px;font-weight:700;color:var(--ink)"><i></i>' + (d.controle ? 'Gecontroleerd' : ond ? 'Niet bruikbaar' : conf.label) + '</span></div><div class="kpi-s">' +
-    (d.controle ? 'Marktprijs door jou nagekeken' : ond ? 'Prijs geldt voor één stuk' : d.prijzen && d.prijzen.live ? aantalAdv + ' vergelijkbare advertenties gevonden' : 'Schatting van het AI-model, geen live data') + '</div></div>';
+    (d.controle ? 'Marktprijs door jou nagekeken' : ond ? 'Prijs geldt voor één stuk' : d.prijzen && d.prijzen.live ? aantalAdv + (aantalAdv === 1 ? ' echte advertentie' : ' echte advertenties') + ' van vandaag' : 'Schatting van het AI-model, geen live data') + '</div></div>';
   h += '</div>';
   if (idx >= 0) {
     h += '<div class="kc-actions" style="margin-top:16px">';
@@ -1424,16 +1429,16 @@ function toonAnalyseResultaat(d, behoudScroll) {
     var k = d.kosten, pct = Math.round(k.marge / gem * 100);
     var margeCls = k.marge > 0 ? 'pos' : k.marge < 0 ? 'neg' : '';
     h += '<div class="metrics">';
-    h += '<div class="metric"><div class="metric-l">Verwachte verkoop</div><div class="metric-v">' + fmt(gem) + '</div><div class="metric-s">' + (d.controle && d.controle.partij ? d.controle.partij.aantal + ' × ' + fmt(d.controle.partij.per_stuk) + (d.controle.partij.verkocht_pct ? ' × ' + d.controle.partij.verkocht_pct + '%' : '') : d.controle ? 'Door jou gecontroleerd' : 'Tweedehands NL/BE') + '</div></div>';
+    h += '<div class="metric"><div class="metric-l">Verwachte verkoop</div><div class="metric-v">' + fmt(gem) + '</div><div class="metric-s">' + (d.controle && d.controle.partij ? d.controle.partij.aantal + ' × ' + fmt(d.controle.partij.per_stuk) + (d.controle.partij.verkocht_pct ? ' × ' + d.controle.partij.verkocht_pct + '%' : '') : d.controle ? 'Door jou gecontroleerd' : d.prijzen && d.prijzen.live ? 'Op basis van echte advertenties' : 'Schatting') + '</div></div>';
     h += '<div class="metric"><div class="metric-l">Totale kosten</div><div class="metric-v">' + fmt(k.totaal) + '</div><div class="metric-s">Incl. veilingkosten en btw</div></div>';
-    h += '<div class="metric"><div class="metric-l">Geschatte marge</div><div class="metric-v ' + margeCls + '">' + fmtS(k.marge) + '</div><div class="metric-s">' + (vkst ? 'Na ' + fmt(vkst) + ' verkoopkosten' : 'Verkoop min kosten') + '</div></div>';
+    h += '<div class="metric"><div class="metric-l">Verwachte winst</div><div class="metric-v ' + margeCls + '">' + fmtS(k.marge) + '</div><div class="metric-s">' + (vkst ? 'Na ' + fmt(vkst) + ' verkoopkosten' : 'Verkoop min kosten') + '</div></div>';
     h += '<div class="metric"><div class="metric-l">Marge</div><div class="metric-v ' + margeCls + '">' + pct + '%</div><div class="metric-s">Van de verkoopprijs (doel ' + pctTxt(doelPct()) + '%)</div></div>';
     h += '</div>';
     h += kostenBalk(k, gem);
     h += '<table class="ctable"><tbody>' + kostenRijen(k);
     h += '<tr class="sub"><td>Verwachte verkoopprijs</td><td>' + fmtC(gem) + '</td></tr>';
     if (vkst) h += '<tr class="sub"><td>&minus; Verkoopkosten<small>Verzending, platform- of andere kosten bij doorverkoop</small></td><td>' + fmtC(vkst) + '</td></tr>';
-    h += '<tr class="res"><td>Geschatte marge</td><td class="' + margeCls + '">' + fmtSC(k.marge) + '</td></tr>';
+    h += '<tr class="res"><td>Verwachte winst</td><td class="' + margeCls + '">' + fmtSC(k.marge) + '</td></tr>';
     h += '</tbody></table>';
   } else if (d.kosten) {
     h += '<table class="ctable"><tbody>' + kostenRijen(d.kosten) + '</tbody></table>';
@@ -1453,7 +1458,9 @@ function toonAnalyseResultaat(d, behoudScroll) {
     var icn = r[0] === 'ok' ? 'check' : r[0] === 'bad' ? 'x' : r[0] === 'warn' ? 'alert' : 'info';
     h += '<li class="' + r[0] + '"><span class="wi">' + ic(icn) + '</span><span>' + esc(r[1]) + '</span></li>';
   });
-  h += '</ul><div class="note">' + ic('info') + '<span>Dit advies is een berekende inschatting en geen garantie. De uitkomst hangt af van de gevonden marktprijzen en de werkelijke staat van het product.</span></div></div>';
+  h += '</ul><div class="note">' + ic('info') + '<span>' + (d.prijzen && d.prijzen.live
+    ? 'Het advies rekent met echte advertenties en verkochte items van vandaag. Wat je kavel uiteindelijk opbrengt, hangt nog af van de staat en het moment van verkoop.'
+    : 'Het advies rekent met een schatting, omdat live zoeken niet lukte. Controleer de prijs zelf voordat je biedt.') + '</span></div></div>';
 
   // Marktprijzen
   if (d.prijzen) {
@@ -1461,7 +1468,7 @@ function toonAnalyseResultaat(d, behoudScroll) {
     var meta = [];
     if (pr.live) meta.push((pr.hergebruikt ? 'Hergebruikt van ' : 'Opgezocht op ') + new Date(pr.opgehaald_op).toLocaleString('nl-NL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }));
     if (typeof d.api_usd === 'number') meta.push('analyse kostte ~' + usdTxt(d.api_usd));
-    h += '<div class="card"><div class="card-h"><h2>Marktprijzen</h2>' + (meta.length ? '<span class="kc-meta">' + meta.join(' &middot; ') + '</span>' : '') + '</div>';
+    h += '<div class="card"><div class="card-h"><h2>' + (pr.live ? 'Prijzen van vandaag' : 'Geschatte prijzen') + '</h2>' + (meta.length ? '<span class="kc-meta">' + meta.join(' &middot; ') + '</span>' : '') + '</div>';
     if (pr.hergebruikt) h += '<div class="note" style="margin:0 0 14px">' + ic('info') + '<span>Dit product is kort geleden al opgezocht; die prijzen zijn hergebruikt om kosten te besparen. Kies Opnieuw analyseren en zet hergebruiken uit voor verse prijzen.</span></div>';
     if (ond) h += '<div class="note" style="margin:0 0 14px">' + ic('alert') + '<span>Deze prijzen gelden voor één stuk, niet voor de hele partij.</span></div>';
     h += '<div class="prices-strip">';

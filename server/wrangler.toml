@@ -27,6 +27,9 @@ MODEL_PAGINA = "claude-haiku-5-5"
 MODEL_PRIJZEN = "claude-haiku-5-5"
 # Zoekopdrachten per analyse ($0,01 per stuk). 1 = beter bij weinig aanbod, 0 = altijd goedkoper
 ZOEKOPDRACHTEN = "1"
+# Openbare sitekey van Cloudflare Turnstile (botcontrole bij aanmelden); leeg = uit
+TURNSTILE_SITEKEY = ""
+# E-mailcontrole met een code staat aan zodra RESEND_API_KEY en EMAIL_VAN zijn ingesteld
 
 # Geheimen zet je met: npx wrangler secret put NAAM
 #   ANTHROPIC_API_KEY      (verplicht)
@@ -36,4 +39,5 @@ ZOEKOPDRACHTEN = "1"
 #   STRIPE_PRICE_PRO       (prijs-ID van het Pro-abonnement)
 #   RESEND_API_KEY         (optioneel, voor wachtwoord vergeten)
 #   UITNODIGINGSCODE       (optioneel: alleen wie deze code invult kan een account maken)
+#   TURNSTILE_SECRET       (aanbevolen: geheime sleutel van Cloudflare Turnstile tegen nep-aanmeldingen)
 #   EMAIL_VAN              (optioneel, bijv. "Veiling Analyser <noreply@jouwdomein.nl>")

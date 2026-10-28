@@ -92,6 +92,80 @@ async function verbruikDezeMaand(env, gebruikerId) {
   const r = await env.DB.prepare('SELECT COUNT(*) AS n FROM verbruik WHERE gebruiker_id = ? AND tijd >= ?').bind(gebruikerId, maandBegin()).first();
   return r ? r.n : 0;
 }
+// ── E-mailcontrole ───────────────────────────────────────────────────────────
+// Actief zodra de server e-mail kan versturen (Resend), tenzij EMAILCONTROLE = "uit".
+function emailControle(env) { return !!(env.RESEND_API_KEY && env.EMAIL_VAN) && env.EMAILCONTROLE !== 'uit'; }
+// Bekende wegwerpdiensten: daarmee kan iemand eindeloos nieuwe accounts maken
+const WEGWERP = new Set(['mailinator.com', 'guerrillamail.com', 'guerrillamail.net', 'sharklasers.com', 'grr.la', '10minutemail.com', '10minutemail.net',
+  'temp-mail.org', 'tempmail.com', 'tempmail.net', 'tempmailo.com', 'yopmail.com', 'yopmail.fr', 'trashmail.com', 'trashmail.de', 'getnada.com', 'nada.email',
+  'maildrop.cc', 'dispostable.com', 'throwawaymail.com', 'fakeinbox.com', 'mohmal.com', 'emailondeck.com', 'mintemail.com', 'mailnesia.com', 'spamgourmet.com',
+  'tempail.com', 'tempr.email', 'discard.email', 'mailcatch.com', 'burnermail.io', 'inboxkitten.com', 'mail.tm', 'moakt.com', 'emailfake.com', 'byom.de', 'wegwerfmail.de']);
+function emailKanon(email) {
+  let [lokaal, domein] = email.toLowerCase().split('@');
+  lokaal = lokaal.split('+')[0];
+  if (domein === 'gmail.com' || domein === 'googlemail.com') { lokaal = lokaal.replace(/\./g, ''); domein = 'gmail.com'; }
+  return lokaal + '@' + domein;
+}
+async function stuurCode(env, g) {
+  if (!emailControle(env)) return;
+  const nu = Date.now(), dag = new Date(nu).toISOString().slice(0, 10);
+  const oud = await env.DB.prepare('SELECT * FROM verificatie WHERE gebruiker_id = ?').bind(g.id).first();
+  if (oud && nu - oud.verstuurd < 60000) throw new Fout(429, 'wacht', 'Er is net een code verstuurd. Wacht een minuut voordat je een nieuwe vraagt.');
+  const aantal = oud && oud.dag === dag ? oud.aantal_dag + 1 : 1;
+  if (aantal > 5) throw new Fout(429, 'te_vaak', 'Je hebt vandaag al vijf codes gevraagd. Probeer het morgen opnieuw.');
+  const buf = new Uint32Array(1); crypto.getRandomValues(buf);
+  const code = String(buf[0] % 1000000).padStart(6, '0');
+  await env.DB.prepare('INSERT OR REPLACE INTO verificatie (gebruiker_id, code_hash, verloopt, pogingen, verstuurd, dag, aantal_dag) VALUES (?, ?, ?, 0, ?, ?, ?)')
+    .bind(g.id, await sha256(g.id + ':' + code), nu + 30 * 60000, nu, dag, aantal).run();
+  const r = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer ' + env.RESEND_API_KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      from: env.EMAIL_VAN, to: [g.email], subject: code + ' is je code voor Veiling Analyser',
+      text: 'Je code is ' + code + '. Vul hem in de app in om je e-mailadres te bevestigen. De code werkt 30 minuten.\n\nHeb je geen account gemaakt? Dan kun je deze e-mail negeren.',
+      html: '<p>Je code voor Veiling Analyser:</p><p style="font-size:28px;font-weight:700;letter-spacing:6px">' + code + '</p><p>Vul hem in de app in om je e-mailadres te bevestigen. De code werkt 30 minuten.</p><p style="color:#666">Heb je geen account gemaakt? Dan kun je deze e-mail negeren.</p>'
+    })
+  });
+  if (!r.ok) { console.error('Resend fout', r.status, await r.text()); throw new Fout(502, 'mail', 'De e-mail kon niet worden verstuurd. Probeer het zo opnieuw.'); }
+}
+async function verifieer(request, env) {
+  const g = await huidigeGebruiker(request, env);
+  const b = await leesJson(request);
+  if (!g.email_geverifieerd) {
+    const v = await env.DB.prepare('SELECT * FROM verificatie WHERE gebruiker_id = ?').bind(g.id).first();
+    if (!v || v.verloopt < Date.now()) throw new Fout(400, 'verlopen', 'Deze code is verlopen. Vraag een nieuwe code aan.');
+    if (v.pogingen >= 5) throw new Fout(400, 'te_vaak', 'Te vaak een verkeerde code ingevuld. Vraag een nieuwe code aan.');
+    const code = String(b.code || '').replace(/\D/g, '');
+    if (!gelijk(await sha256(g.id + ':' + code), v.code_hash)) {
+      await env.DB.prepare('UPDATE verificatie SET pogingen = pogingen + 1 WHERE gebruiker_id = ?').bind(g.id).run();
+      throw new Fout(400, 'onjuist', 'Deze code klopt niet. Controleer de e-mail en probeer het opnieuw.');
+    }
+    await env.DB.batch([
+      env.DB.prepare('UPDATE gebruikers SET email_geverifieerd = 1 WHERE id = ?').bind(g.id),
+      env.DB.prepare('DELETE FROM verificatie WHERE gebruiker_id = ?').bind(g.id)
+    ]);
+    g.email_geverifieerd = 1;
+  }
+  return json({ account: await accountInfo(env, g) });
+}
+async function codeOpnieuw(request, env) {
+  const g = await huidigeGebruiker(request, env);
+  if (g.email_geverifieerd || !emailControle(env)) return json({ ok: true, al_bevestigd: true });
+  await stuurCode(env, g);
+  return json({ ok: true });
+}
+// Cloudflare Turnstile: onzichtbare controle of er een mens aanmeldt
+async function controleerTurnstile(env, token, ip) {
+  if (!env.TURNSTILE_SECRET) return;
+  if (!token) throw new Fout(403, 'bot', 'De controle of je een mens bent is niet gelukt. Ververs de pagina en probeer het opnieuw.');
+  const r = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ secret: env.TURNSTILE_SECRET, response: String(token), remoteip: ip || undefined })
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!d.success) throw new Fout(403, 'bot', 'De controle of je een mens bent is niet gelukt. Ververs de pagina en probeer het opnieuw.');
+}
+
 async function accountInfo(env, g) {
   const p = plannen(env);
   const plan = p[g.plan] ? g.plan : 'gratis';
@@ -100,6 +174,7 @@ async function accountInfo(env, g) {
     gebruikt: await verbruikDezeMaand(env, g.id), limiet: p[plan].limiet,
     abonnement_status: g.abonnement_status || null, periode_einde: g.periode_einde || null,
     kan_betalen: !!env.STRIPE_SECRET_KEY,
+    email_geverifieerd: !!g.email_geverifieerd || !emailControle(env),
     plannen: Object.keys(p).map(k => ({ id: k, naam: p[k].naam, limiet: p[k].limiet, te_koop: !!p[k].prijs }))
   };
 }
@@ -109,19 +184,24 @@ async function registreer(request, env) {
   const email = String(b.email || '').trim().toLowerCase();
   const ww = String(b.wachtwoord || '');
   if (!geldigEmail(email)) throw new Fout(400, 'email', 'Vul een geldig e-mailadres in.');
+  if (WEGWERP.has(email.split('@')[1])) throw new Fout(400, 'wegwerp', 'Gebruik je gewone e-mailadres; tijdelijke adressen worden niet geaccepteerd.');
   if (ww.length < 8 || ww.length > 200) throw new Fout(400, 'wachtwoord', 'Kies een wachtwoord van minstens 8 tekens.');
+  await controleerTurnstile(env, b.turnstile, request.headers.get('CF-Connecting-IP'));
   // Optioneel: alleen mensen met de uitnodigingscode kunnen een account maken
   if (env.UITNODIGINGSCODE && !gelijk(String(b.code || '').trim().toLowerCase(), String(env.UITNODIGINGSCODE).trim().toLowerCase())) {
     throw new Fout(403, 'code', 'Vul de juiste uitnodigingscode in. Die krijg je van de beheerder van de app.');
   }
-  const bestaat = await env.DB.prepare('SELECT id FROM gebruikers WHERE email = ?').bind(email).first();
+  const kanon = emailKanon(email);
+  const bestaat = await env.DB.prepare('SELECT id FROM gebruikers WHERE email = ? OR email_kanon = ?').bind(email, kanon).first();
   if (bestaat) throw new Fout(409, 'bestaat', 'Er is al een account met dit e-mailadres. Log in of herstel je wachtwoord.');
   const zout = willekeurig(16);
-  const res = await env.DB.prepare('INSERT INTO gebruikers (email, wachtwoord_hash, zout, plan, aangemaakt) VALUES (?, ?, ?, ?, ?)')
-    .bind(email, await hashWachtwoord(ww, zout), zout, 'gratis', Date.now()).run();
+  const res = await env.DB.prepare('INSERT INTO gebruikers (email, email_kanon, wachtwoord_hash, zout, plan, aangemaakt) VALUES (?, ?, ?, ?, ?, ?)')
+    .bind(email, kanon, await hashWachtwoord(ww, zout), zout, 'gratis', Date.now()).run();
   const id = res.meta.last_row_id;
   const g = await env.DB.prepare('SELECT * FROM gebruikers WHERE id = ?').bind(id).first();
-  return json({ token: await maakSessie(env, id), account: await accountInfo(env, g) }, 201);
+  let mailFout = null;
+  try { await stuurCode(env, g); } catch (e) { mailFout = e.message; }
+  return json({ token: await maakSessie(env, id), account: await accountInfo(env, g), mail_fout: mailFout }, 201);
 }
 async function inloggen(request, env) {
   const b = await leesJson(request);
@@ -175,7 +255,7 @@ async function wachtwoordHerstellen(request, env) {
   if (!r) throw new Fout(400, 'verlopen', 'Deze herstellink is verlopen of al gebruikt. Vraag een nieuwe aan.');
   const zout = willekeurig(16);
   await env.DB.batch([
-    env.DB.prepare('UPDATE gebruikers SET wachtwoord_hash = ?, zout = ? WHERE id = ?').bind(await hashWachtwoord(ww, zout), zout, r.gebruiker_id),
+    env.DB.prepare('UPDATE gebruikers SET wachtwoord_hash = ?, zout = ?, email_geverifieerd = 1 WHERE id = ?').bind(await hashWachtwoord(ww, zout), zout, r.gebruiker_id),
     env.DB.prepare('DELETE FROM herstel WHERE gebruiker_id = ?').bind(r.gebruiker_id),
     env.DB.prepare('DELETE FROM sessies WHERE gebruiker_id = ?').bind(r.gebruiker_id)
   ]);
@@ -239,6 +319,7 @@ async function analyse(request, env) {
   if (!url && !extra) throw new Fout(400, 'leeg', 'Plak de link naar het kavel of vul een productnaam in.');
   if (url && (!veiligAdres(url) || url.length > 1000)) throw new Fout(400, 'link', 'Deze link kan niet worden gelezen. Gebruik de gewone https-link van het kavel.');
 
+  if (emailControle(env) && !g.email_geverifieerd) throw new Fout(403, 'niet_geverifieerd', 'Bevestig eerst je e-mailadres met de code die we je hebben gestuurd.');
   const p = plannen(env);
   const plan = p[g.plan] ? g.plan : 'gratis';
   const gebruikt = await verbruikDezeMaand(env, g.id);
@@ -367,11 +448,14 @@ async function stripeWebhook(request, env) {
 // ── Router ───────────────────────────────────────────────────────────────────
 const ROUTES = {
   // Openbare informatie voor de app: is betalen ingesteld, is een uitnodigingscode nodig
-  'GET /api/gezondheid': async (req, env) => json({ ok: true, betalen: !!env.STRIPE_SECRET_KEY, uitnodiging: !!env.UITNODIGINGSCODE, limiet_gratis: plannen(env).gratis.limiet }),
+  'GET /api/gezondheid': async (req, env) => json({ ok: true, betalen: !!env.STRIPE_SECRET_KEY, uitnodiging: !!env.UITNODIGINGSCODE, limiet_gratis: plannen(env).gratis.limiet,
+    emailcontrole: emailControle(env), turnstile_sitekey: env.TURNSTILE_SECRET && env.TURNSTILE_SITEKEY ? env.TURNSTILE_SITEKEY : null }),
   'POST /api/registreer': registreer,
   'POST /api/inloggen': inloggen,
   'POST /api/uitloggen': uitloggen,
   'POST /api/wachtwoord-vergeten': wachtwoordVergeten,
+  'POST /api/verifieer': verifieer,
+  'POST /api/verifieer-opnieuw': codeOpnieuw,
   'POST /api/wachtwoord-herstellen': wachtwoordHerstellen,
   'GET /api/account': async (req, env) => json(await accountInfo(env, await huidigeGebruiker(req, env))),
   'POST /api/analyse': analyse,

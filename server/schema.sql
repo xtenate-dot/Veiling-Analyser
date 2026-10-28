@@ -11,8 +11,12 @@ CREATE TABLE IF NOT EXISTS gebruikers (
   stripe_abonnement TEXT,
   abonnement_status TEXT,
   periode_einde INTEGER,
-  aangemaakt INTEGER NOT NULL
+  aangemaakt INTEGER NOT NULL,
+  -- Genormaliseerd adres (zonder +toevoeging, zonder punten bij Gmail) tegen dubbele accounts
+  email_kanon TEXT,
+  email_geverifieerd INTEGER NOT NULL DEFAULT 0
 );
+CREATE UNIQUE INDEX IF NOT EXISTS idx_gebruikers_kanon ON gebruikers(email_kanon);
 CREATE INDEX IF NOT EXISTS idx_gebruikers_stripe ON gebruikers(stripe_klant);
 
 CREATE TABLE IF NOT EXISTS sessies (
@@ -51,6 +55,17 @@ CREATE TABLE IF NOT EXISTS herstel (
   token_hash TEXT PRIMARY KEY,
   gebruiker_id INTEGER NOT NULL,
   verloopt INTEGER NOT NULL
+);
+
+-- Code van 6 cijfers om het e-mailadres te bevestigen
+CREATE TABLE IF NOT EXISTS verificatie (
+  gebruiker_id INTEGER PRIMARY KEY,
+  code_hash TEXT NOT NULL,
+  verloopt INTEGER NOT NULL,
+  pogingen INTEGER NOT NULL DEFAULT 0,
+  verstuurd INTEGER NOT NULL,
+  dag TEXT NOT NULL,
+  aantal_dag INTEGER NOT NULL DEFAULT 1
 );
 
 -- Mislukte inlogpogingen, tegen het raden van wachtwoorden

@@ -11,7 +11,7 @@ Zonder server werkt de app ook: dan vraagt hij elke gebruiker om een eigen Anthr
 
 ## Snel starten: gratis, zonder betalen
 
-Je kunt de app eerst gratis aanbieden, zonder Stripe. Iedereen krijgt dan een account met een vast aantal gratis analyses per maand, en jij betaalt de AI-kosten. Je volgt alleen **stap 1, 2 en 3** hieronder en slaat stap 4 (Stripe) over.
+Je kunt de app eerst gratis aanbieden, zonder Stripe. Iedereen krijgt dan een account met een vast aantal gratis analyses per maand, en jij betaalt de AI-kosten. Je volgt **stap 1, 2, 3, 5 en 6** hieronder en slaat stap 4 (Stripe) over.
 
 Stel in `server/wrangler.toml` in:
 
@@ -33,7 +33,7 @@ Wat het je kost, met de gemeten $0,015 per analyse:
 
 Daarbij komt $5 per maand voor Cloudflare Workers Paid. In de praktijk gebruikt niet iedereen de volle limiet, en herhaalde producten komen uit de gratis cache.
 
-Zonder e-mailcontrole kan iemand meerdere accounts maken om meer gratis analyses te krijgen. Het dagbudget voorkomt dat dit je veel geld kost; de uitnodigingscode houdt onbekenden buiten.
+Zet voor je live gaat de e-mailcontrole aan (stap 5): dan moet iedereen een echt e-mailadres bevestigen voordat hij kan analyseren. Het dagbudget en eventueel de uitnodigingscode beschermen je daarnaast.
 
 Wil je later toch laten betalen, dan volg je stap 4. De app laat abonnementen pas zien als Stripe is ingesteld.
 
@@ -45,8 +45,9 @@ Wil je later toch laten betalen, dan volg je stap 4. De app laat abonnementen pa
 |---|---|---|
 | [Cloudflare](https://dash.cloudflare.com/sign-up) | Server en database | Workers Paid: $5 per maand. Het gratis plan geeft maar 10 ms rekentijd per verzoek; dat is te weinig voor veilig inloggen. |
 | [Anthropic Console](https://console.anthropic.com) | De AI die pagina's leest en prijzen zoekt | Per gebruik, zie onder |
-| [Stripe](https://dashboard.stripe.com/register) | Abonnementen en betalingen | Per betaling een klein percentage, zie [stripe.com/nl/pricing](https://stripe.com/nl/pricing) |
-| [Resend](https://resend.com) (optioneel) | E-mail voor "wachtwoord vergeten" | Gratis tot een beperkt aantal e-mails; vereist een eigen domein |
+| [Stripe](https://dashboard.stripe.com/register) | Abonnementen en betalingen (alleen als je wilt laten betalen) | Per betaling een klein percentage, zie [stripe.com/nl/pricing](https://stripe.com/nl/pricing) |
+| [Resend](https://resend.com) | E-mail: bevestigingscode bij aanmelden en "wachtwoord vergeten" | Gratis tot 3.000 e-mails per maand (100 per dag); je hebt een eigen domeinnaam nodig |
+| Cloudflare Turnstile | Botcontrole bij aanmelden | Gratis |
 
 Je hebt ook [Node.js](https://nodejs.org) nodig op je computer, voor het commando `npx wrangler`.
 
@@ -137,9 +138,11 @@ npx wrangler secret put STRIPE_PRICE_PRO         # price_...
 
 Werkt alles, herhaal stap 1 tot en met 4 in de live-modus van Stripe (nieuwe prijs-ID's, nieuwe webhook, `sk_live_` sleutel).
 
-## Stap 5 (optioneel). Wachtwoord vergeten
+## Stap 5. E-mail: bevestigingscode en wachtwoord vergeten
 
-1. Maak een account bij [Resend](https://resend.com) en verifieer je domein.
+**Nodig om live te gaan.** Zodra de server e-mail kan versturen, moet iedereen na het aanmelden zijn e-mailadres bevestigen met een code van 6 cijfers. Pas daarna kan hij analyseren. Zo kan niemand met verzonnen adressen eindeloos gratis accounts maken. Dezelfde koppeling verstuurt de link voor "wachtwoord vergeten".
+
+1. Maak een account bij [Resend](https://resend.com) (gratis tot 3.000 e-mails per maand en 100 per dag) en verifieer je eigen domein. Daarvoor heb je een domeinnaam nodig, bijvoorbeeld `veilinganalyser.nl`.
 2. Zet de geheimen:
 
 ```bash
@@ -147,14 +150,34 @@ npx wrangler secret put RESEND_API_KEY
 npx wrangler secret put EMAIL_VAN        # bijv. Veiling Analyser <noreply@jouwdomein.nl>
 ```
 
-Zonder deze stap krijgt een klant bij "Wachtwoord vergeten" de melding dat dit nog niet is ingesteld.
+Wat de server nog meer doet tegen misbruik:
+
+- tijdelijke wegwerpadressen (zoals mailinator.com) worden geweigerd;
+- `jan+1@gmail.com` en `j.a.n@gmail.com` tellen als hetzelfde adres als `jan@gmail.com`;
+- na 5 foute codes moet er een nieuwe code komen, en er gaan hooguit 5 codes per dag naar één account.
+
+Zonder Resend staat de e-mailcontrole uit. Dat is handig om te testen, maar zet hem aan voordat je live gaat.
+
+## Stap 6 (aanbevolen). Botcontrole met Cloudflare Turnstile
+
+Turnstile is de gratis, meestal onzichtbare controle van Cloudflare of er een mens aanmeldt.
+
+1. Ga in het Cloudflare-dashboard naar Turnstile en voeg een widget toe voor het domein van je app (bijvoorbeeld `xtenate-dot.github.io`).
+2. Zet de openbare sitekey in `server/wrangler.toml` bij `TURNSTILE_SITEKEY`, en de geheime sleutel als geheim:
+
+```bash
+npx wrangler secret put TURNSTILE_SECRET
+npx wrangler deploy
+```
+
+De app laat de controle dan vanzelf zien bij Account maken.
 
 ---
 
 ## Testen
 
 ```bash
-node server/test/server.test.mjs          # 56 controles van de server (Node 22 of nieuwer)
+node server/test/server.test.mjs          # 70 controles van de server (Node 22 of nieuwer)
 node server/test/lokaal.mjs               # server lokaal op poort 8787 met nep-AI, voor handmatig testen
 ```
 

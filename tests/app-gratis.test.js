@@ -19,6 +19,16 @@ function check(naam, ok, extra) { console.log((ok ? 'OK   ' : 'FOUT ') + naam + 
   await page.fill('#li-code', 'TEST123');
   await page.click('#modal-actions .btn-primary');
   await page.waitForFunction(() => window.account);
+  // E-mail bevestigen met de code
+  await page.waitForSelector('#code-in', { timeout: 5000 });
+  check('Na aanmelden vraagt de app om de code', await page.isVisible('text=Bevestig je e-mailadres'));
+  await page.fill('#code-in', '000000'); await page.waitForTimeout(400);
+  const code = (await (await fetch('http://localhost:8787/__test/laatste-code')).json()).code;
+  if (code === '000000') throw new Error('toevallig 000000');
+  check('Verkeerde code: melding, venster blijft open', /klopt niet/.test(await page.textContent('#code-err')));
+  await page.fill('#code-in', code);   // 6 cijfers: wordt vanzelf verstuurd
+  await page.waitForFunction(() => account.email_geverifieerd, null, { timeout: 5000 });
+  check('Juiste code: bevestigd zonder op een knop te drukken', !(await page.isVisible('#code-in')) && !(await page.isVisible('#bevestig-bar')));
   await page.evaluate(() => openBatch());
   await page.fill('#batch-links', [1, 2, 3, 4].map(i => 'https://www.testveiling.nl/kavel/' + (700 + i)).join('\n'));
   await page.click('#modal-actions .btn-primary');
@@ -32,7 +42,9 @@ function check(naam, ok, extra) { console.log((ok ? 'OK   ' : 'FOUT ') + naam + 
   check('Geen knop Abonnement beheren', !(await page.isVisible('text=Abonnement beheren')));
   await page.evaluate(() => { closeModal(); switchTab('handleiding'); });
   check('Handleiding: geen Stripe-tekst', !(await page.isVisible('text=via Stripe')));
-  await page.screenshot({ path: process.argv[2] + '/gratis-account.png' });
+  await page.screenshot({ path: process.argv[2] + '/gratis-hulp.png' });
+  await page.evaluate(() => switchTab('home')); await page.waitForTimeout(300);
+  await page.screenshot({ path: process.argv[2] + '/home-mobiel.png', fullPage: true });
   check('Geen JavaScript-fouten', jsFouten.length === 0, jsFouten);
   await b.close();
   console.log(fouten ? '\n' + fouten + ' FOUT(EN)' : '\nALLES OK'); process.exit(fouten ? 1 : 0);

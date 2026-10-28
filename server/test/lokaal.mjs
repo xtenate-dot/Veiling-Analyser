@@ -23,6 +23,9 @@ const env = { DB: { prepare: s => stmt(s), batch: async l => { for (const s of l
 // Gratis opzet testen: ZONDER_BETALEN=1 en/of UITNODIGINGSCODE=... meegeven
 if (process.env.ZONDER_BETALEN) { delete env.STRIPE_SECRET_KEY; delete env.STRIPE_PRICE_BASIS; delete env.STRIPE_PRICE_PRO; }
 if (process.env.UITNODIGINGSCODE) env.UITNODIGINGSCODE = process.env.UITNODIGINGSCODE;
+// MET_EMAIL=1: e-mailcontrole aan; de laatst verstuurde code is op te vragen via /__test/laatste-code
+let laatsteCode = null;
+if (process.env.MET_EMAIL) { env.RESEND_API_KEY = 're_test'; env.EMAIL_VAN = 'Test <noreply@test.nl>'; }
 const echteFetch = globalThis.fetch;
 globalThis.fetch = async (url, opt = {}) => {
   url = String(url);
@@ -33,6 +36,7 @@ globalThis.fetch = async (url, opt = {}) => {
       : { productnaam: 'Bosch GSB 18V-21', nieuwprijs: 129, tweedehands: [{ platform: 'Marktplaats', titel: 'Bosch GSB 18V', prijs: 85, soort: 'vraagprijs', url: null }], marktplaats: { laag: 65, gemiddeld: 80, hoog: 95, vertrouwen: 'middel' }, toelichting: 'test' };
     return new Response(JSON.stringify({ content: [{ type: 'text', text: JSON.stringify(tekst) }], stop_reason: 'end_turn', usage: { input_tokens: 9000, output_tokens: 500 } }), { status: 200 });
   }
+  if (url.startsWith('https://api.resend.com/')) { laatsteCode = (JSON.parse(opt.body).subject.match(/^(\d{6})/) || [])[1] || null; return new Response('{"id":"e"}', { status: 200 }); }
   if (url.startsWith('https://www.testveiling.nl/')) return new Response('<html><title>Kavel 88</title><body>' + '<p>Bosch boormachine GSB 18V, gebruikt, met accu. </p>'.repeat(20) + '</body></html>', { status: 200, headers: { 'content-type': 'text/html' } });
   return echteFetch(url, opt);
 };
@@ -41,6 +45,7 @@ http.createServer(async (req, res) => {
   const delen = [];
   for await (const d of req) delen.push(d);
   const body = Buffer.concat(delen);
+  if (req.url === '/__test/laatste-code') { res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }); res.end(JSON.stringify({ code: laatsteCode })); return; }
   const r = await verwerk(new Request('http://localhost:' + poort + req.url, { method: req.method, headers: req.headers, body: body.length ? body : undefined }), env);
   res.writeHead(r.status, Object.fromEntries(r.headers));
   res.end(Buffer.from(await r.arrayBuffer()));

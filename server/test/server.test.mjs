@@ -57,6 +57,13 @@ async function api(methode, pad, body, token, kop = {}) {
   return { status: r.status, data, headers: r.headers };
 }
 
+// Haalt de bevestigingscode uit de laatste nagebootste e-mail aan dit adres en vult hem in
+function codeVoor(email) {
+  const m = aanroepen.filter(a => a.url.includes('resend') && JSON.parse(a.opt.body).to[0] === email).pop();
+  return m ? JSON.parse(m.opt.body).subject.match(/^(\d{6})/)[1] : null;
+}
+async function bevestig(tk, email) { return api('POST', '/api/verifieer', { code: codeVoor(email) }, tk); }
+
 const STAP1 = { gevonden: true, titel: 'Apple iPhone 13 128GB', veilinghuis: 'Testveiling', kavelnummer: '4711', product: { zoekterm: 'iPhone 13 128GB' }, staat: 'gebruikt',
   aantal_stuks: 1, huidig_bod: 300, aantal_biedingen: 7, sluit: 'do 30 okt 20:00', sluit_iso: '2026-10-30T20:00:00+01:00',
   kosten: { opgeld_pct: 18, vaste_kosten: 2.5, btw_pct: 21, btw_regeling: 'volledig', bron: 'Opgeld 18%' }, opmerkingen: [] };
@@ -97,6 +104,46 @@ check('Preflight → 204', r.status === 204 && r.headers.get('access-control-all
 r = await verwerk(new Request('https://server.test/api/account', { headers: { Origin: 'https://kwaadaardig.test' } }), env);
 check('Geen CORS voor onbekende herkomst', !r.headers.get('access-control-allow-origin'));
 
+// ── 1b. E-mailcontrole ──
+check('Na aanmelden: e-mail nog niet bevestigd, code gemaild', (await api('GET', '/api/account', null, token)).data.email_geverifieerd === false && /^\d{6}$/.test(codeVoor('jan@voorbeeld.nl')));
+r = await api('POST', '/api/analyse', { url: 'https://www.testveiling.nl/kavel/4711' }, token);
+check('Analyseren voor bevestiging → 403 met uitleg', r.status === 403 && r.data.code === 'niet_geverifieerd');
+r = await api('POST', '/api/verifieer', { code: '000000' === codeVoor('jan@voorbeeld.nl') ? '111111' : '000000' }, token);
+check('Verkeerde code → 400', r.status === 400 && r.data.code === 'onjuist');
+r = await api('POST', '/api/verifieer-opnieuw', null, token);
+check('Direct een nieuwe code vragen → 429 (wacht een minuut)', r.status === 429);
+r = await bevestig(token, 'jan@voorbeeld.nl');
+check('Juiste code → bevestigd', r.status === 200 && r.data.account.email_geverifieerd === true);
+const rv = await api('POST', '/api/registreer', { email: 'raden@voorbeeld.nl', wachtwoord: 'geheim123' });
+for (let i = 0; i < 5; i++) await api('POST', '/api/verifieer', { code: String(900000 + i) }, rv.data.token);
+r = await api('POST', '/api/verifieer', { code: codeVoor('raden@voorbeeld.nl') }, rv.data.token);
+check('Na 5 foute pogingen werkt ook de juiste code niet meer (nieuwe code nodig)', r.status === 400 && r.data.code === 'te_vaak');
+r = await api('POST', '/api/registreer', { email: 'iemand@mailinator.com', wachtwoord: 'geheim123' });
+check('Wegwerpadres geweigerd', r.status === 400 && r.data.code === 'wegwerp');
+r = await api('POST', '/api/registreer', { email: 'jandevries@gmail.com', wachtwoord: 'geheim123' });
+const rg = await api('POST', '/api/registreer', { email: 'Jan.De.Vries+gratis@gmail.com', wachtwoord: 'geheim123' });
+check('Zelfde Gmail met punten of +toevoeging → 409', r.status === 201 && rg.status === 409);
+const rplus = await api('POST', '/api/registreer', { email: 'jan+2@voorbeeld.nl', wachtwoord: 'geheim123' });
+check('+toevoeging bij ander domein → 409', rplus.status === 409);
+r = await api('GET', '/api/gezondheid');
+check('Serverinfo meldt e-mailcontrole aan', r.data.emailcontrole === true && r.data.turnstile_sitekey === null);
+
+// Botcontrole (Turnstile)
+env.TURNSTILE_SECRET = 'ts_geheim'; env.TURNSTILE_SITEKEY = 'ts_site';
+let tsVerzoek = null;
+globalThis.fetch = (orig => async (url, opt) => {
+  if (String(url).startsWith('https://challenges.cloudflare.com/')) { tsVerzoek = JSON.parse(opt.body); return new Response(JSON.stringify({ success: tsVerzoek.response === 'goed' }), { status: 200 }); }
+  return orig(url, opt);
+})(globalThis.fetch);
+r = await api('POST', '/api/registreer', { email: 'bot@voorbeeld.nl', wachtwoord: 'geheim123' });
+check('Turnstile: zonder token → 403', r.status === 403 && r.data.code === 'bot');
+r = await api('POST', '/api/registreer', { email: 'bot@voorbeeld.nl', wachtwoord: 'geheim123', turnstile: 'nep' });
+check('Turnstile: ongeldig token → 403', r.status === 403 && tsVerzoek.secret === 'ts_geheim');
+r = await api('POST', '/api/registreer', { email: 'mens@voorbeeld.nl', wachtwoord: 'geheim123', turnstile: 'goed' });
+check('Turnstile: geldig token → 201', r.status === 201);
+check('Serverinfo geeft openbare sitekey', (await api('GET', '/api/gezondheid')).data.turnstile_sitekey === 'ts_site');
+delete env.TURNSTILE_SECRET; delete env.TURNSTILE_SITEKEY;
+
 // ── 2. Analyse ──
 r = await api('POST', '/api/analyse', { url: 'https://www.testveiling.nl/kavel/4711', extra: '' }, token);
 check('Analyse → 200', r.status === 200, r.data && r.data.fout);
@@ -125,6 +172,7 @@ check('Interne adressen geweigerd', r.status === 400 || r.status === 402);
 
 // ── 3. Dagbudget ──
 const r2 = await api('POST', '/api/registreer', { email: 'piet@voorbeeld.nl', wachtwoord: 'geheim123' });
+await bevestig(r2.data.token, 'piet@voorbeeld.nl');
 env.DB._db.prepare('INSERT INTO verbruik (gebruiker_id, tijd, usd) VALUES (99, ?, 25)').run(Date.now());
 r = await api('POST', '/api/analyse', { url: 'https://www.testveiling.nl/kavel/1' }, r2.data.token);
 check('Dagbudget overschreden → 503', r.status === 503 && r.data.code === 'budget');
@@ -177,8 +225,9 @@ r = await api('POST', '/api/wachtwoord-vergeten', { email: 'jan@voorbeeld.nl' })
 const mail = aanroepen.filter(a => a.url.includes('resend')).pop();
 const link = JSON.parse(mail.opt.body).html.match(/herstel=([0-9a-f]+)/);
 check('Herstelmail verstuurd met link', r.status === 200 && !!link);
+const mailsVoor = aanroepen.filter(a => a.url.includes('resend')).length;
 r = await api('POST', '/api/wachtwoord-vergeten', { email: 'onbekend@voorbeeld.nl' });
-check('Onbekend adres: zelfde antwoord, geen mail', r.status === 200 && aanroepen.filter(a => a.url.includes('resend')).length === 1);
+check('Onbekend adres: zelfde antwoord, geen mail', r.status === 200 && aanroepen.filter(a => a.url.includes('resend')).length === mailsVoor);
 r = await api('POST', '/api/wachtwoord-herstellen', { token: link[1], wachtwoord: 'nieuwgeheim1' });
 check('Nieuw wachtwoord ingesteld', r.status === 200 && !!r.data.token);
 r = await api('GET', '/api/account', null, token);
@@ -200,6 +249,7 @@ globalThis.fetch = (orig => async (url, opt) => {
   return orig(url, opt);
 })(globalThis.fetch);
 const r3 = await api('POST', '/api/registreer', { email: 'kees@voorbeeld.nl', wachtwoord: 'geheim123' });
+await bevestig(r3.data.token, 'kees@voorbeeld.nl');
 r = await api('POST', '/api/analyse', { url: 'https://www.testveiling.nl/kavel/77' }, r3.data.token);
 check('AI-dienst druk → 503 met begrijpelijke tekst, telt niet mee', r.status === 503 && /druk/.test(r.data.fout) && env.DB._db.prepare("SELECT COUNT(*) AS n FROM verbruik v JOIN gebruikers g ON g.id = v.gebruiker_id WHERE g.email = 'kees@voorbeeld.nl'").get().n === 0, r.data);
 
@@ -224,6 +274,7 @@ check('Verkeerde code → 403', r.status === 403);
 r = await api('POST', '/api/registreer', { email: 'met@code.nl', wachtwoord: 'geheim123', code: ' veiling2026 ' });
 check('Juiste code (hoofdletters en spaties maken niet uit) → 201', r.status === 201 && r.data.account.kan_betalen === false, r.status);
 const tk = r.data.token;
+await bevestig(tk, 'met@code.nl');
 r = await api('POST', '/api/analyse', { url: 'https://www.testveiling.nl/kavel/500' }, tk);
 check('Gratis analyse lukt', r.status === 200);
 r = await api('POST', '/api/analyse', { url: 'https://www.testveiling.nl/kavel/501' }, tk);
