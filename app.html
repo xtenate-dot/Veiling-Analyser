@@ -25,7 +25,7 @@
   --pos:#127A4E; --pos-soft:#E3F4EB; --pos-line:#B4DFC8;
   --warn:#955700; --warn-soft:#FFF1D6; --warn-line:#F1D08E;
   --neg:#BE3434; --neg-soft:#FCE9E9; --neg-line:#EDBABA;
-  --seg-bod:#4B5262; --seg-vk:#8D95A6; --seg-btw:#C3C8D3;
+  --seg-bod:#4B5262; --seg-vk:#8D95A6; --seg-btw:#C3C8D3; --seg-vkst:#D9A441;
   --shadow:0 1px 2px rgba(20,23,31,.06),0 6px 18px rgba(20,23,31,.06);
   --overlay:rgba(20,23,31,.45);
   --r-sm:8px; --r:12px; --r-lg:16px;
@@ -40,7 +40,7 @@
   --pos:#4FCB96; --pos-soft:#12291F; --pos-line:#1F5A41;
   --warn:#F0B35E; --warn-soft:#2B2112; --warn-line:#5C4318;
   --neg:#F28383; --neg-soft:#2E1818; --neg-line:#6A2D2D;
-  --seg-bod:#A9B1C0; --seg-vk:#6E778A; --seg-btw:#444B5A;
+  --seg-bod:#A9B1C0; --seg-vk:#6E778A; --seg-btw:#444B5A; --seg-vkst:#B8862E;
   --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.35);
   --overlay:rgba(0,0,0,.6);
   color-scheme:dark;
@@ -53,7 +53,7 @@
     --pos:#4FCB96; --pos-soft:#12291F; --pos-line:#1F5A41;
     --warn:#F0B35E; --warn-soft:#2B2112; --warn-line:#5C4318;
     --neg:#F28383; --neg-soft:#2E1818; --neg-line:#6A2D2D;
-    --seg-bod:#A9B1C0; --seg-vk:#6E778A; --seg-btw:#444B5A;
+    --seg-bod:#A9B1C0; --seg-vk:#6E778A; --seg-btw:#444B5A; --seg-vkst:#B8862E;
     --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.35);
     --overlay:rgba(0,0,0,.6);
     color-scheme:dark;
@@ -340,6 +340,7 @@ h1,h2,h3,h4{letter-spacing:-.01em}
 .fbar-track .s-bod{background:var(--seg-bod)}
 .fbar-track .s-vk{background:var(--seg-vk)}
 .fbar-track .s-btw{background:var(--seg-btw)}
+.fbar-track .s-vkst{background:var(--seg-vkst)}
 .fbar-track .s-winst{background:var(--pos)}
 .fbar-track .s-verlies{position:absolute;top:0;bottom:0;background:repeating-linear-gradient(135deg,var(--neg) 0 5px,transparent 5px 10px);opacity:.85;z-index:1}
 .legend{display:flex;gap:6px 16px;flex-wrap:wrap;margin:12px 0 22px;font-size:13px;color:var(--ink-2)}
@@ -383,6 +384,9 @@ h1,h2,h3,h4{letter-spacing:-.01em}
 .range span{font-size:13.5px;color:var(--ink-3)}
 .tip{margin-top:12px;padding:10px 12px;background:var(--surface-2);border-radius:var(--r-sm);font-size:13.5px;line-height:1.5;color:var(--ink-2)}
 .tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.tag-warn{display:inline-block;padding:0 7px;border-radius:999px;background:var(--warn-soft);color:var(--warn);font-size:11.5px;font-weight:600;vertical-align:1px}
+.ctable.adv td{vertical-align:top}
+.ctable.adv td:first-child{padding-right:12px;overflow-wrap:anywhere}
 .tag{padding:2px 10px;border-radius:999px;background:var(--surface-2);font-size:12.5px;color:var(--ink-2)}
 .attn{list-style:none}
 .attn li{display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--line);font-size:14px;line-height:1.45}
@@ -477,11 +481,11 @@ details.faq .fb ul{padding-left:20px}
       <button class="nav-item" data-tab="handleiding" onclick="switchTab('handleiding')"><i class="ico" data-i="book"></i><span>Handleiding</span></button>
     </nav>
     <div class="side-foot">
-      <button class="foot-item" onclick="beheerVeilingen()"><i class="ico" data-i="percent"></i><span class="lbl">Veilinghuizen<span class="sub">Percentages beheren</span></span></button>
+      <button class="foot-item" onclick="beheerVeilingen()"><i class="ico" data-i="percent"></i><span class="lbl">Veilinghuizen<span class="sub">Kosten, marge en model</span></span></button>
       <button class="foot-item" onclick="setSheetsUrl()"><i class="ico" data-i="cloud"></i><span class="lbl">Synchronisatie<span class="sub js-sync-sub">Niet gekoppeld</span></span></button>
       <button class="foot-item" onclick="resetApiKey()"><i class="ico" data-i="key"></i><span class="lbl">API-sleutel<span class="sub js-key-sub">Ontbreekt</span></span></button>
       <button class="foot-item" onclick="toggleTheme()"><i class="ico" data-i="moon"></i><span class="lbl js-theme-lbl">Donkere weergave</span></button>
-      <div class="ver">Versie 8 okt 2026 &middot; veilinghuizen</div>
+      <div class="ver">Versie 28 okt 2026 &middot; live prijzen</div>
     </div>
   </aside>
 
@@ -585,10 +589,14 @@ details.faq .fb ul{padding-left:20px}
             <label for="veiling-kies">Veilinghuis en kosten</label>
             <select class="input select" id="veiling-kies" onchange="kiesVeiling()"></select>
             <div class="vk-grid">
-              <div><label class="ctl-l" for="vk-opgeld">Veilingkosten</label><div class="money pct"><input class="input" type="text" id="vk-opgeld" inputmode="decimal" oninput="vkHandmatig()" aria-label="Veilingkosten in procenten" /><span>%</span></div></div>
+              <div><label class="ctl-l" for="vk-opgeld">Veilingkosten (opgeld)</label><div class="money pct"><input class="input" type="text" id="vk-opgeld" inputmode="decimal" oninput="vkHandmatig()" aria-label="Veilingkosten in procenten" /><span>%</span></div></div>
               <div><label class="ctl-l" for="vk-btw">Btw</label><div class="money pct"><input class="input" type="text" id="vk-btw" inputmode="decimal" oninput="vkHandmatig()" aria-label="Btw in procenten" /><span>%</span></div></div>
+              <div><label class="ctl-l" for="vk-vast">Vaste kosten per kavel</label><div class="money"><span>&euro;</span><input class="input" type="text" id="vk-vast" inputmode="decimal" oninput="vkHandmatig()" aria-label="Vaste kosten per kavel in euro" /></div></div>
+              <div><label class="ctl-l" for="vk-regeling">Btw-regeling</label><select class="input select" id="vk-regeling" onchange="vkHandmatig()"></select></div>
             </div>
             <div class="veiling-hint" id="veiling-hint"></div>
+            <label class="ctl-check" style="margin-top:12px"><input type="checkbox" id="vk-lees" checked> Kosten van de kavelpagina lezen <span class="opt">(aanbevolen)</span></label>
+            <div class="help">De app leest opgeld, vaste kosten en btw-regeling van de veilingpagina zelf, omdat die per veiling verschillen. Bovenstaande waarden worden gebruikt als de pagina ze niet vermeldt, of als je ze zelf aanpast.</div>
             <button type="button" class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="beheerVeilingen()"><i class="ico" data-i="percent"></i>Veilinghuizen en percentages beheren</button>
           </div>
 
@@ -599,7 +607,7 @@ details.faq .fb ul{padding-left:20px}
               <button type="button" class="bod-btn" id="bod-eigen" onclick="setBodType('eigen',this)">Mijn bod</button>
             </div>
             <div class="money"><span>&euro;</span><input class="input" type="text" inputmode="decimal" id="huidig-bod" placeholder="bijv. 250" aria-label="Bedrag in euro" /></div>
-            <div class="help" id="bod-hint">Huidig hoogste bod op de veiling</div>
+            <div class="help" id="bod-hint">Huidig hoogste bod op de veiling. Laat leeg om het van de kavelpagina te lezen.</div>
           </div>
 
           <div class="field">
@@ -616,7 +624,7 @@ details.faq .fb ul{padding-left:20px}
           <div class="field">
             <label for="extra-txt">Productnaam of opmerkingen <span class="opt">(optioneel)</span></label>
             <textarea class="textarea" id="extra-txt" placeholder="Bijv. Apple MacBook Pro 14 inch M3, 512 GB"></textarea>
-            <div class="help">Let op: wat je hier invult gebruikt de analyse als productnaam. Laat het leeg om de naam uit de link te halen.</div>
+            <div class="help">Wat je hier invult weegt zwaarder dan de kavelpagina, bijvoorbeeld als de omschrijving onvolledig is. Laat leeg om alles van de pagina te halen.</div>
           </div>
 
           <button class="btn btn-primary btn-lg btn-block" id="analyse-btn" onclick="analyseer()"><span id="analyse-btn-txt">Analyseer kavel</span></button>
@@ -670,9 +678,9 @@ details.faq .fb ul{padding-left:20px}
         <div class="card">
           <div class="card-h"><h2>Hoe werkt Veiling Analyser?</h2></div>
           <ol class="howto">
-            <li><span class="hn">1</span><div><b>Voeg een kavel toe</b><span>Plak de link van het kavel. De app herkent HNVI, Troostwijk, BVA, Vavato en DTZ en gebruikt hun veilingkosten. Je kunt het veilinghuis en de percentages zelf kiezen of aanpassen.</span></div></li>
-            <li><span class="hn">2</span><div><b>Vul je bod in</b><span>Kies &ldquo;Huidig bod&rdquo; voor het hoogste bod nu, of &ldquo;Mijn bod&rdquo; voor het bedrag dat jij wilt bieden of hebt geboden.</span></div></li>
-            <li><span class="hn">3</span><div><b>Laat de analyse uitvoeren</b><span>De app bepaalt het product, schat de marktprijzen en rekent de kosten door.</span></div></li>
+            <li><span class="hn">1</span><div><b>Plak de link van het kavel</b><span>Dat werkt voor elke veilingsite. De app leest de kavelpagina: product, staat, huidig bod, sluitingstijd en de veilingkosten van die veiling.</span></div></li>
+            <li><span class="hn">2</span><div><b>Vul eventueel je bod in</b><span>Laat het leeg om het huidige bod van de pagina te gebruiken, of kies &ldquo;Mijn bod&rdquo; voor het bedrag dat jij wilt bieden.</span></div></li>
+            <li><span class="hn">3</span><div><b>Laat de analyse uitvoeren</b><span>De app zoekt live naar vergelijkbare advertenties op Marktplaats, 2dehands en eBay (ook verkochte items) en naar de nieuwprijs bij Nederlandse winkels, en rekent alles door.</span></div></li>
             <li><span class="hn">4</span><div><b>Bekijk marktwaarde en totale kosten</b><span>Zie in &eacute;&eacute;n blik wat je kwijt bent en wat je er naar verwachting voor terugkrijgt.</span></div></li>
             <li><span class="hn">5</span><div><b>Volg het advies</b><span>Gebruik het als startpunt en controleer de marktprijs zelf voordat je biedt.</span></div></li>
           </ol>
@@ -682,44 +690,56 @@ details.faq .fb ul{padding-left:20px}
         <details class="faq" open>
           <summary>Hoe wordt het advies berekend?</summary>
           <div class="fb">
-            <p>Het advies vergelijkt je totale kosten met de geschatte gemiddelde Marktplaats-prijs. Het verschil is de verwachte marge.</p>
-            <p>Een eventuele eBay-prijs wordt getoond ter vergelijking, maar telt niet mee in het advies.</p>
+            <p>Het advies vergelijkt je totale kosten (plus eventuele verkoopkosten) met de verwachte tweedehands verkoopprijs in Nederland en België. Het verschil is de verwachte marge.</p>
+            <p>De verwachte verkoopprijs is wat het product realistisch opbrengt, niet de gemiddelde vraagprijs: op Marktplaats wordt meestal onder de vraagprijs verkocht. De eBay-prijs en de nieuwprijs worden getoond ter vergelijking, maar tellen niet mee in het advies. Alle bedragen rekent de app zelf uit; het AI-model levert alleen de gevonden prijzen en kosten.</p>
           </div>
         </details>
         <details class="faq">
           <summary>Hoe worden de kosten berekend?</summary>
           <div class="fb">
-            <p>Veilingkosten gaan over het bod. De btw gaat over het bod plus de veilingkosten.</p>
+            <p>Veilingkosten (opgeld) zijn een percentage van het bod, soms met vaste kosten per kavel erbij. Bij een gewone btw-kavel gaat de btw over het bod plus de veilingkosten:</p>
             <div class="calc">
               Bod: <strong>&euro;1.000</strong><br>
               &times; 0,19 (veilingkosten, voorbeeld HNVI; verschilt per veiling) = <strong>&euro;190</strong> (totaal: &euro;1.190)<br>
               &times; 0,21 (btw over het totaal) = <strong>&euro;249,90</strong> (totaal: &euro;1.439,90)<br>
               Totale kosten: <strong>&euro;1.439,90</strong>
             </div>
-            <p>Alleen het percentage van HNVI (19% + 21% btw) is bevestigd. De percentages voor andere veilingen zijn aannames; controleer ze bij de veiling zelf. Je kunt alle percentages aanpassen, nieuwe veilinghuizen toevoegen of per kavel afwijken via <strong>Veilinghuizen</strong> in het menu.</p>
+            <p>Bij de margeregeling (gebruikte goederen) komt er geen btw over het bod, alleen over het opgeld:</p>
+            <div class="calc">
+              Bod: <strong>&euro;1.000</strong> + 18% opgeld = <strong>&euro;180</strong><br>
+              + 21% btw over het opgeld = <strong>&euro;37,80</strong><br>
+              Totale kosten: <strong>&euro;1.217,80</strong>
+            </div>
+            <p>Het opgeld verschilt per veilinghuis en vaak per veiling (gemeten over 29 veilinghuizen: 4% tot 25%, mediaan 18%). Daarom leest de app de kosten van de kavelpagina. Staan ze er niet op, dan rekent de app met jouw instelling voor dat veilinghuis of met de standaardwaarde, en zegt dat erbij. Alleen het percentage van HNVI (19% + 21% btw) is door jou bevestigd. Per kavel pas je de kosten aan met <strong>Kosten aanpassen</strong>; standaardwaarden beheer je via <strong>Veilinghuizen</strong> in het menu.</p>
           </div>
         </details>
         <details class="faq">
           <summary>Wat betekent Aanrader?</summary>
-          <div class="fb">De verwachte marge is positief en bedraagt minstens 20% van de geschatte verkoopprijs. Er is dan ruimte voor tegenvallers.</div>
+          <div class="fb">De verwachte marge is minstens je gewenste marge (standaard 20%) van de verwachte verkoopprijs. Er is dan ruimte voor tegenvallers. De gewenste marge stel je in via <strong>Veilinghuizen</strong> in het menu.</div>
         </details>
         <details class="faq">
           <summary>Wat betekent Twijfel?</summary>
-          <div class="fb">De marge is positief maar onder de 20%, of je zit rond break-even (een verlies tot &euro;50 en niet meer dan 10% van de verkoopprijs). Zonder ingevuld bod staat het advies ook op Twijfel, omdat de marge dan niet te berekenen is.</div>
+          <div class="fb">De marge is positief maar onder je gewenste marge, of je zit rond break-even (een verlies tot &euro;50 en niet meer dan 10% van de verkoopprijs). Zonder bod staat het advies ook op Twijfel, omdat de marge dan niet te berekenen is; het maximale bod staat er dan wel bij.</div>
         </details>
         <details class="faq">
           <summary>Wat betekent Skip?</summary>
-          <div class="fb">De totale kosten liggen meer dan &euro;50 boven de geschatte marktwaarde, of het verwachte verlies is groter dan 10% van de verkoopprijs.</div>
+          <div class="fb">De totale kosten (plus verkoopkosten) liggen meer dan &euro;50 boven de verwachte verkoopprijs, of het verwachte verlies is groter dan 10% van de verkoopprijs.</div>
         </details>
         <details class="faq">
           <summary>Wat is het maximaal rendabele bod?</summary>
-          <div class="fb">Het bod waarbij de totale kosten (inclusief veilingkosten en btw) op 80% van de laagste verwachte Marktplaats-prijs uitkomen. Het is een rekenhulp, geen garantie.</div>
+          <div class="fb">
+            <p>Het hoogste bod waarbij je na alle kosten nog je gewenste marge overhoudt. Voorbeeld met HNVI (19% opgeld, 21% btw), een verwachte verkoopprijs van &euro;1.000 en 20% gewenste marge:</p>
+            <div class="calc">
+              Maximaal kwijt: &euro;1.000 &minus; 20% = <strong>&euro;800</strong><br>
+              Maximaal bod: &euro;800 &divide; 1,19 &divide; 1,21 = <strong>&euro;555</strong> (afgerond naar beneden)
+            </div>
+            <p>Bij &ldquo;quitte&rdquo; staat het bod waarbij je precies niets verdient. Het is een rekenhulp, geen garantie.</p></div>
         </details>
         <details class="faq">
           <summary>Hoe betrouwbaar zijn de marktprijzen?</summary>
           <div class="fb">
-            <p>De prijzen zijn een schatting van het AI-model en worden niet live opgehaald. Ze kunnen afwijken van wat er nu op Marktplaats of eBay staat.</p>
-            <p>De indicator Betrouwbaarheid laat zien hoe zeker het model zelf is van de prijs. Controleer bij een serieuze kandidaat altijd een paar vergelijkbare advertenties (zie hieronder).</p>
+            <p>De app zoekt bij elke analyse live naar vergelijkbare advertenties en verkochte items, en toont die met links. Links die niet letterlijk in de opgehaalde resultaten voorkwamen krijgen het label &ldquo;niet bevestigd&rdquo;. De app vergelijkt de verwachte verkoopprijs ook zelf met de mediaan van de gevonden advertenties en waarschuwt bij grote verschillen.</p>
+            <p>Betrouwbaarheid is &ldquo;Hoog&rdquo; bij vijf of meer goed vergelijkbare advertenties, &ldquo;Gemiddeld&rdquo; bij twee tot vier en anders &ldquo;Laag&rdquo;. Sommige sites laten zich niet automatisch lezen; dan zoekt de app via een zoekmachine. Is live zoeken niet beschikbaar voor je API-sleutel, dan valt de app terug op een schatting van het model en zegt dat erbij. Controleer bij een serieuze kandidaat altijd zelf een paar advertenties.</p>
           </div>
         </details>
         <details class="faq">
@@ -732,17 +752,24 @@ details.faq .fb ul{padding-left:20px}
         <details class="faq">
           <summary>Wat doe ik met een partij van meerdere stuks?</summary>
           <div class="fb">
-            <p>De AI-analyse gaat uit van &eacute;&eacute;n product. Bij een partij, bijvoorbeeld &ldquo;280 stuks kleding&rdquo;, is de schatting dus niet bruikbaar. De app herkent dit aan woorden als &ldquo;stuks&rdquo;, &ldquo;partij&rdquo; of &ldquo;pallet&rdquo; in de titel en toont dan &ldquo;Controle nodig&rdquo; in plaats van een advies.</p>
+            <p>De prijsanalyse gaat uit van &eacute;&eacute;n stuk. Bij een partij, bijvoorbeeld &ldquo;280 stuks kleding&rdquo;, is die prijs dus niet direct bruikbaar. De app herkent een partij aan de kavelpagina of aan woorden als &ldquo;stuks&rdquo;, &ldquo;partij&rdquo; of &ldquo;pallet&rdquo; in de titel en toont dan &ldquo;Controle nodig&rdquo; in plaats van een advies. Waar mogelijk stelt de analyse al een opbrengst per stuk voor.</p>
             <p>Zet bij Prijzen controleren het vinkje &ldquo;meerdere stuks&rdquo; aan en vul het aantal stuks, de opbrengst per stuk en het deel dat je verwacht te verkopen in. De marktwaarde van de partij is aantal &times; opbrengst per stuk &times; verwacht verkocht. Het advies volgt daarna uit dezelfde berekening als bij een los product. Bij een partij komt de herkenning uit de titel; staat er geen aantal of woord in, dan zet je het vinkje zelf aan.</p>
           </div>
         </details>
         <details class="faq">
           <summary>Waar worden mijn gegevens bewaard?</summary>
-          <div class="fb">Je kavels staan in de browser van dit apparaat. Als je synchronisatie met Google Sheets aanzet, worden ze ook in jouw eigen sheet bewaard, zodat je ze op telefoon en laptop ziet. Voor een analyse stuurt de app de productnaam naar Anthropic met jouw API-sleutel.</div>
+          <div class="fb">Je kavels staan in de browser van dit apparaat. Als je synchronisatie met Google Sheets aanzet, worden ze ook in jouw eigen sheet bewaard, zodat je ze op telefoon en laptop ziet. Voor een analyse stuurt de app de link, het product en je opmerking naar Anthropic met jouw API-sleutel; Claude opent daarmee de kavelpagina en zoekt op internet.</div>
+        </details>
+        <details class="faq">
+          <summary>Wat kost een analyse?</summary>
+          <div class="fb">
+            <p>Een analyse gebruikt tegoed van je eigen Anthropic-account. Per analyse doet de app hooguit 9 zoekopdrachten ($10 per 1.000, dus maximaal $0,09) en leest hij hooguit 10 pagina&rsquo;s, die als tekst meetellen. Met Claude Sonnet 5.5 ($2 per miljoen tokens invoer, $10 per miljoen uitvoer) komt een analyse meestal uit op enkele tientallen centen; lange pagina&rsquo;s maken het duurder.</p>
+            <p>Claude Haiku 5.5 is goedkoper en sneller, Claude Opus 5.5 grondiger en duurder. Je kiest het model via <strong>Veilinghuizen</strong> in het menu.</p>
+          </div>
         </details>
       </section>
 
-      <p class="ver ver-main">Versie 8 okt 2026 &middot; veilinghuizen</p>
+      <p class="ver ver-main">Versie 28 okt 2026 &middot; live prijzen</p>
     </main>
   </div>
 
@@ -1004,7 +1031,7 @@ function setBodType(type, btn) {
   (btn || document.getElementById('bod-' + type)).classList.add('active');
   document.getElementById('bod-hint').textContent = type === 'eigen'
     ? 'Jouw bod. Dit wordt gebruikt als inkoopprijs voor de margeberekening.'
-    : 'Huidig hoogste bod op de veiling';
+    : 'Huidig hoogste bod op de veiling. Laat leeg om het van de kavelpagina te lezen.';
 }
 
 // Voortgang tijdens analyse
@@ -1021,6 +1048,8 @@ function setStap(n) {
 }
 function verbergStappen() { /* voortgang wordt via setFase() verborgen */ }
 
+function fmtC(n) { return (n != null && isFinite(n)) ? '\u20ac' + n.toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'; }
+function fmtSC(n) { return n > 0 ? '+' + fmtC(n) : n < 0 ? '\u2212' + fmtC(-n) : fmtC(0); }
 function fmt(n) { return (n != null && isFinite(n)) ? '\u20ac' + Math.round(n).toLocaleString('nl-NL') : '-'; }
 function setBtn(id, txtId, disabled, html) {
   document.getElementById(id).disabled = disabled;
@@ -1133,86 +1162,180 @@ function slaKavelsOp() {
 }
 
 // ── 4. Analyse ──────────────────────────────────────────────────────────────
-function naamUitUrl(u) {
+
+// ── Instellingen voor de berekening ──
+var MODELLEN = [
+  { id: 'claude-sonnet-5-5', label: 'Claude Sonnet 5.5 (aanbevolen)' },
+  { id: 'claude-haiku-5-5', label: 'Claude Haiku 5.5 (sneller en goedkoper)' },
+  { id: 'claude-opus-5-5', label: 'Claude Opus 5.5 (grondiger, duurder)' }
+];
+var INST_STD = { doelmarge: 0.20, verkoopkosten: 0, model: 'claude-sonnet-5-5' };
+var instCache = null;
+function getInst() {
+  if (instCache) return instCache;
+  var i = kopie(INST_STD);
   try {
-    var deel = (u.split('/veiling-kavel/')[1] || '').split('?')[0];
-    var slug = deel.replace(/\/\d+$/, '').replace(/-/g, ' ').trim();
-    return slug.charAt(0).toUpperCase() + slug.slice(1);
-  } catch(e) { return ''; }
+    var raw = JSON.parse(localStorage.getItem('va_instellingen') || 'null');
+    if (raw) {
+      if (typeof raw.doelmarge === 'number' && raw.doelmarge >= 0 && raw.doelmarge <= 0.8) i.doelmarge = raw.doelmarge;
+      if (typeof raw.verkoopkosten === 'number' && raw.verkoopkosten >= 0 && raw.verkoopkosten <= 10000) i.verkoopkosten = raw.verkoopkosten;
+      if (MODELLEN.some(function(m) { return m.id === raw.model; })) i.model = raw.model;
+    }
+  } catch (e) {}
+  instCache = i;
+  return i;
 }
-function parseJSON(txt) {
-  // Verwijder markdown code block markers (```json ... ```)
-  var clean = txt.replace(/```json/gi, '').replace(/```/g, '').trim();
-  try { return JSON.parse(clean); } catch(e) {}
-  
-  // Fallback: zoek het eerste { tot laatste }
-  var start = clean.indexOf('{');
-  var end = clean.lastIndexOf('}');
-  if (start !== -1 && end !== -1 && end > start) {
-    try { return JSON.parse(clean.slice(start, end + 1)); } catch(e) {}
-  }
-  
-  // Laatste fallback: probeer op originele tekst
-  var start2 = txt.indexOf('{');
-  var end2 = txt.lastIndexOf('}');
-  if (start2 !== -1 && end2 !== -1 && end2 > start2) {
-    try { return JSON.parse(txt.slice(start2, end2 + 1)); } catch(e) {}
-  }
-  return null;
+function bewaarInst(i) {
+  try { localStorage.setItem('va_instellingen', JSON.stringify(i)); } catch (e) { return false; }
+  instCache = i;
+  return true;
 }
-function callClaude(system, userText, maxTokens) {
-  var key = getApiKey();
-  console.log('API key aanwezig:', key ? 'JA (lengte ' + key.length + ')' : 'NEE');
-  if (!key) return Promise.reject(new Error('Voer eerst een API key in.'));
-  return fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': key,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true'
-    },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-6',
-      max_tokens: maxTokens || 600,
-      system: system,
-      messages: [{ role: 'user', content: userText }]
-    })
-  }).then(function(resp) {
-    console.log('HTTP status:', resp.status);
-    return resp.json();
-  }).then(function(data) {
-    console.log('API data volledig:', JSON.stringify(data));
-    console.log('stop_reason:', data.stop_reason);
-    if (data.error) throw new Error(data.error.type + ': ' + data.error.message);
-    if (!data.content) throw new Error('Onverwachte API response: ' + JSON.stringify(data).substring(0,200));
-    return data.content.map(function(b) { return b.text || ''; }).join('');
-  }).catch(function(err) {
-    console.error('callClaude fout:', err);
-    throw err;
-  });
+function doelPct() { return Math.round(getInst().doelmarge * 1000) / 10; }
+
+// ── Kostenmodel ──
+// Totale kosten = bod + opgeld + vaste kosten + btw.
+// De btw-regeling bepaalt waarover btw wordt berekend:
+//   volledig: over bod, opgeld en vaste kosten (normale btw-kavel)
+//   opgeld:   alleen over opgeld en vaste kosten (margeregeling, opgeld exclusief btw)
+//   geen:     geen btw (opgeld is al inclusief btw, of btw verlegd / 0%)
+var REGELINGEN = {
+  volledig: 'Btw over bod en opgeld',
+  opgeld: 'Margeregeling: btw alleen over opgeld',
+  geen: 'Geen btw (opgeld incl. btw of verlegd)'
+};
+function regelingOpties() {
+  var h = '';
+  Object.keys(REGELINGEN).forEach(function(k) { h += '<option value="' + k + '">' + REGELINGEN[k] + '</option>'; });
+  return h;
+}
+function normTarief(t) {
+  t = t || {};
+  return {
+    opgeld: typeof t.opgeld === 'number' && isFinite(t.opgeld) && t.opgeld >= 0 ? t.opgeld : 0.18,
+    btw: typeof t.btw === 'number' && isFinite(t.btw) && t.btw >= 0 ? t.btw : 0.21,
+    vast: typeof t.vast === 'number' && isFinite(t.vast) && t.vast > 0 ? t.vast : 0,
+    regeling: REGELINGEN[t.regeling] ? t.regeling : 'volledig'
+  };
+}
+// Totaal is lineair in het bod: totaal = bod × A + B
+function kostenFactoren(t) {
+  t = normTarief(t);
+  var b = t.regeling === 'geen' ? 0 : t.btw;
+  var btwOverBod = t.regeling === 'volledig' ? 1 : 0;
+  return { A: 1 + t.opgeld + b * (btwOverBod + t.opgeld), B: t.vast * (1 + b) };
+}
+function berekenKosten(bod, t) {
+  t = normTarief(t);
+  var b = t.regeling === 'geen' ? 0 : t.btw;
+  var vk = bod * t.opgeld;
+  var btwBasis = (t.regeling === 'volledig' ? bod : 0) + vk + t.vast;
+  var btw = btwBasis * b;
+  return { bod: bod, vk: vk, vast: t.vast, btw: btw, totaal: bod + vk + t.vast + btw };
+}
+// Hoogste bod waarbij de totale kosten niet boven 'totaal' uitkomen (nooit negatief)
+function bodVoorTotaal(totaal, t) {
+  var f = kostenFactoren(t);
+  var bod = (totaal - f.B) / f.A;
+  return bod > 0 ? bod : 0;
+}
+function verkoopkostenVan(k) {
+  return (typeof k.verkoopkosten === 'number' && isFinite(k.verkoopkosten) && k.verkoopkosten >= 0) ? k.verkoopkosten : getInst().verkoopkosten;
+}
+function verkoopprijsVan(k) {
+  var mp = k.prijzen && k.prijzen.marktplaats ? k.prijzen.marktplaats : null;
+  var g = k.controle ? k.controle.mp_gem : (mp ? mp.gemiddeld : k.mp_gemiddeld);
+  return (typeof g === 'number' && isFinite(g) && g > 0) ? g : null;
 }
 
-// ── Veilinghuizen en percentages ──────────────────────────────
+// Rekent kosten, maximaal bod en advies door. Alle bedragen komen hier vandaan, niet van het AI-model.
+function herberekenKosten(k) {
+  var t = tariefVan(k);
+  var doel = getInst().doelmarge;
+  var vkst = verkoopkostenVan(k);
+  var gem = verkoopprijsVan(k);
+  k.maxBod = gem ? Math.floor(bodVoorTotaal(gem * (1 - doel) - vkst, t)) : null;
+  k.breakEvenBod = gem ? Math.floor(bodVoorTotaal(gem - vkst, t)) : null;
+
+  var bod = k.huidig_bod > 0 ? k.huidig_bod : (k.kosten && k.kosten.bod > 0 ? k.kosten.bod : null);
+  if (!bod) {
+    k.kosten = null; k.advies = 'twijfel'; k.roi = 50;
+    k.adviesReden = k.maxBod == null ? 'Vul het bod in voor de margeberekening.'
+      : k.maxBod > 0 ? 'Bied maximaal ' + fmt(k.maxBod) + ' voor ' + pctTxt(doel * 100) + '% marge (break-even bij ' + fmt(k.breakEvenBod) + ').'
+      : 'Zelfs bij een heel laag bod blijft er na kosten te weinig marge over.';
+    return;
+  }
+  var kk = berekenKosten(bod, t);
+  kk.site = veilingVan(k);
+  kk.opgeld_pct = Math.round(t.opgeld * 1000) / 10;
+  kk.btw_pct = Math.round(t.btw * 1000) / 10;
+  kk.regeling = t.regeling;
+  kk.verkoopkosten = vkst;
+  kk.marge = gem ? gem - kk.totaal - vkst : null;
+  k.kosten = kk;
+  if (kk.marge == null) {
+    k.advies = 'twijfel'; k.roi = 50;
+    k.adviesReden = 'Totale kosten ' + fmt(kk.totaal) + '. Er is geen marktwaarde bekend, dus de marge is niet te berekenen.';
+    return;
+  }
+  var m = kk.marge, pctExact = m / gem * 100, pct = Math.round(pctExact), advies = 'twijfel', roi;
+  if (m > 0 && pctExact >= doel * 100 - 1e-9) { advies = 'kopen'; roi = Math.min(93, 55 + pct); }
+  else if (m < -50 || pctExact < -10) { advies = 'skip'; roi = Math.max(8, 50 + pct / 2); }
+  else { roi = Math.max(25, Math.min(68, 50 + pct / 2)); }
+  k.advies = advies; k.roi = Math.round(roi);
+  k.adviesReden = (m > 0
+    ? 'Kosten ' + fmt(kk.totaal) + (vkst ? ' + ' + fmt(vkst) + ' verkoopkosten' : '') + ' tegenover verwachte verkoop ~' + fmt(gem) + ': marge ' + fmt(m) + ' (' + pct + '%).'
+    : 'Kosten ' + fmt(kk.totaal) + (vkst ? ' + ' + fmt(vkst) + ' verkoopkosten' : '') + ' liggen ' + fmt(Math.abs(m)) + ' boven de verwachte verkoop van ' + fmt(gem) + ' (' + pct + '%).') +
+    (k.maxBod != null ? ' Max. bod ' + fmt(k.maxBod) + '.' : '');
+}
+
+// ── Veilinghuizen en percentages ──
+// Let op: veilingkosten verschillen per veilinghuis én per veiling. Alleen HNVI is door de gebruiker bevestigd;
+// de rest zijn startwaarden. Bij een analyse leest de app de kosten bij voorkeur van de kavelpagina zelf.
 var VEILING_STD = [
-  { naam: 'HNVI', match: 'hnvi.nl', opgeld: 0.19, btw: 0.21 },
-  { naam: 'Troostwijk', match: 'troostwijk', opgeld: 0.18, btw: 0.21 },
-  { naam: 'BVA Auctions', match: 'bva-auctions, bva.nl', opgeld: 0.17, btw: 0.21 },
-  { naam: 'Vavato', match: 'vavato', opgeld: 0.18, btw: 0.21 },
-  { naam: 'DTZ', match: 'dtz', opgeld: 0.15, btw: 0.21 }
+  { naam: 'HNVI', match: 'hnvi.nl', opgeld: 0.19, btw: 0.21, vast: 0, regeling: 'volledig' },
+  { naam: 'Troostwijk', match: 'troostwijk', opgeld: 0.18, btw: 0.21, vast: 0, regeling: 'volledig' },
+  { naam: 'BVA Auctions', match: 'bva-auctions, bva.nl', opgeld: 0.17, btw: 0.21, vast: 0, regeling: 'volledig' },
+  { naam: 'Vavato', match: 'vavato', opgeld: 0.18, btw: 0.21, vast: 0, regeling: 'volledig' },
+  { naam: 'DTZ', match: 'dtz', opgeld: 0.15, btw: 0.21, vast: 0, regeling: 'volledig' }
 ];
-var VEILING_ONBEKEND_STD = { opgeld: 0.17, btw: 0.21 };
+// Mediaan van 29 gemeten veilinghuizen (geveild.com, oktober 2026): 18%. Bandbreedte 4% tot 25%.
+var VEILING_ONBEKEND_STD = { opgeld: 0.18, btw: 0.21, vast: 0, regeling: 'volledig' };
+// Alleen voor herkenning van de naam; de kosten komen van de kavelpagina of de standaardwaarde.
+var VEILING_HERKENNING = [
+  { naam: 'Onlineveilingmeester', match: 'onlineveilingmeester' },
+  { naam: 'Catawiki', match: 'catawiki' },
+  { naam: 'Klaz', match: 'klaz.' },
+  { naam: 'Surplex', match: 'surplex' },
+  { naam: 'Venduehuis', match: 'venduehuis' },
+  { naam: 'XL Auctions', match: 'xlauctions' },
+  { naam: 'Nedveiling', match: 'nedveiling' },
+  { naam: 'Openbare Verkopen', match: 'openbareverkopen' },
+  { naam: 'Dome Auctions', match: 'domeauctions' },
+  { naam: 'Auctelia', match: 'auctelia' },
+  { naam: 'Industrial Auctions', match: 'industrial-auctions' },
+  { naam: 'Euro Auctions', match: 'euroauctions' },
+  { naam: 'Lot-tissimo', match: 'lot-tissimo' },
+  { naam: 'Dorotheum', match: 'dorotheum' },
+  { naam: 'eBay', match: 'ebay.' }
+];
 var veilingCfg = null;
 var vkHandmatigFlag = false;
 
 function pctTxt(x) { return String(Math.round(x * 10) / 10).replace('.', ','); }
+function bedragTxt(x) { return x ? String(Math.round(x * 100) / 100).replace('.', ',') : '0'; }
 function leesPct(txt) {
   var s = String(txt == null ? '' : txt).replace(/[%\s]/g, '');
   if (!s) return null;
   if (!/^\d{1,3}([.,]\d{1,2})?$/.test(s)) return NaN;
   return parseFloat(s.replace(',', '.'));
 }
+function leesEuro(txt) {
+  var s = String(txt == null ? '' : txt).trim();
+  if (!s) return 0;
+  return /^[\d.,\s€]+$/.test(s) ? parseBedrag(s) : NaN;
+}
 function geldigTarief(o, b) { return typeof o === 'number' && typeof b === 'number' && isFinite(o) && isFinite(b) && o >= 0 && o <= 0.5 && b >= 0 && b <= 0.3; }
+function geldigVast(v) { return typeof v === 'number' && isFinite(v) && v >= 0 && v <= 5000; }
 
 function getVeilingCfg() {
   if (veilingCfg) return veilingCfg;
@@ -1223,11 +1346,15 @@ function getVeilingCfg() {
       var lijst = [];
       raw.huizen.forEach(function(h) {
         if (h && typeof h.naam === 'string' && h.naam.trim() && geldigTarief(h.opgeld, h.btw)) {
-          lijst.push({ naam: h.naam.trim(), match: typeof h.match === 'string' ? h.match : h.naam.toLowerCase(), opgeld: h.opgeld, btw: h.btw });
+          lijst.push({ naam: h.naam.trim(), match: typeof h.match === 'string' ? h.match : h.naam.toLowerCase(), opgeld: h.opgeld, btw: h.btw,
+            vast: geldigVast(h.vast) ? h.vast : 0, regeling: REGELINGEN[h.regeling] ? h.regeling : 'volledig' });
         }
       });
       cfg.huizen = lijst;
-      if (raw.standaard && geldigTarief(raw.standaard.opgeld, raw.standaard.btw)) cfg.standaard = { opgeld: raw.standaard.opgeld, btw: raw.standaard.btw };
+      if (raw.standaard && geldigTarief(raw.standaard.opgeld, raw.standaard.btw)) {
+        cfg.standaard = { opgeld: raw.standaard.opgeld, btw: raw.standaard.btw,
+          vast: geldigVast(raw.standaard.vast) ? raw.standaard.vast : 0, regeling: REGELINGEN[raw.standaard.regeling] ? raw.standaard.regeling : 'volledig' };
+      }
     }
   } catch (e) {}
   veilingCfg = cfg;
@@ -1243,74 +1370,55 @@ function huisOpNaam(naam) {
   for (var i = 0; i < l.length; i++) { if (l[i].naam === naam) return l[i]; }
   return null;
 }
+function hostVan(url) {
+  try { return new URL(url).hostname.toLowerCase(); } catch (e) { return String(url || '').toLowerCase(); }
+}
+function tariefKopie(h, naam, bron) {
+  return { naam: naam || h.naam, opgeld: h.opgeld, btw: h.btw, vast: h.vast || 0, regeling: h.regeling || 'volledig', bron: bron };
+}
 function detecteerVeiling(url) {
   var cfg = getVeilingCfg();
-  var u = String(url || '').toLowerCase();
-  if (u) {
+  var host = hostVan(url);
+  if (host) {
     for (var i = 0; i < cfg.huizen.length; i++) {
       var keys = String(cfg.huizen[i].match || '').toLowerCase().split(',');
       for (var j = 0; j < keys.length; j++) {
         var key = keys[j].trim();
-        if (key && u.indexOf(key) !== -1) return { naam: cfg.huizen[i].naam, opgeld: cfg.huizen[i].opgeld, btw: cfg.huizen[i].btw };
+        if (key && host.indexOf(key) !== -1) return tariefKopie(cfg.huizen[i], null, 'huis');
       }
     }
+    for (var n = 0; n < VEILING_HERKENNING.length; n++) {
+      if (host.indexOf(VEILING_HERKENNING[n].match) !== -1) return tariefKopie(cfg.standaard, VEILING_HERKENNING[n].naam, 'standaard');
+    }
   }
-  return { naam: 'Onbekend', opgeld: cfg.standaard.opgeld, btw: cfg.standaard.btw };
+  return tariefKopie(cfg.standaard, 'Onbekend', 'standaard');
 }
 function bronLabel(h) {
   for (var i = 0; i < VEILING_STD.length; i++) {
     var s = VEILING_STD[i];
     if (s.naam === h.naam) {
-      if (Math.abs(s.opgeld - h.opgeld) < 1e-9 && Math.abs(s.btw - h.btw) < 1e-9) return s.naam === 'HNVI' ? 'bevestigd' : 'niet geverifieerd';
+      var gelijk = Math.abs(s.opgeld - h.opgeld) < 1e-9 && Math.abs(s.btw - h.btw) < 1e-9 && (h.vast || 0) === s.vast && (h.regeling || 'volledig') === s.regeling;
+      if (gelijk) return s.naam === 'HNVI' ? 'bevestigd' : 'niet geverifieerd';
       return 'door jou ingesteld';
     }
   }
   return 'door jou ingesteld';
 }
 
-// Tarief van een opgeslagen kavel: eigen tarief, anders het tarief waarmee het is doorgerekend, anders de huidige instelling
+// Tarief van een opgeslagen kavel: eigen tarief, anders afgeleid van de opgeslagen kosten, anders de huidige instelling
 function tariefVan(k) {
-  if (k.veiling_tarief && geldigTarief(k.veiling_tarief.opgeld, k.veiling_tarief.btw)) return { opgeld: k.veiling_tarief.opgeld, btw: k.veiling_tarief.btw };
+  if (k.veiling_tarief && geldigTarief(k.veiling_tarief.opgeld, k.veiling_tarief.btw)) return normTarief(k.veiling_tarief);
   if (k.kosten && k.kosten.opgeld_pct != null && isFinite(k.kosten.opgeld_pct)) {
     var btw = 0.21;
     if (k.kosten.bod != null && (k.kosten.bod + k.kosten.vk) > 0) {
       var b = k.kosten.btw / (k.kosten.bod + k.kosten.vk);
       if (isFinite(b) && b >= 0 && b <= 0.3) btw = Math.round(b * 1000) / 1000;
     }
-    return { opgeld: k.kosten.opgeld_pct / 100, btw: btw };
+    return normTarief({ opgeld: k.kosten.opgeld_pct / 100, btw: btw });
   }
   var d = detecteerVeiling(k.url);
-  if (d.naam === 'Onbekend' && k.veiling && huisOpNaam(k.veiling)) d = huisOpNaam(k.veiling);
-  return { opgeld: d.opgeld, btw: d.btw };
-}
-
-// Rekent kosten, maximaal bod en advies opnieuw door met het tarief van dit kavel
-function herberekenKosten(k) {
-  var t = tariefVan(k);
-  var mp = k.prijzen && k.prijzen.marktplaats ? k.prijzen.marktplaats : null;
-  var c = k.controle;
-  var gem = c ? c.mp_gem : (mp ? mp.gemiddeld : k.mp_gemiddeld);
-  var basis = c ? (c.mp_laag != null ? c.mp_laag : c.mp_gem) : (mp && mp.laag != null ? mp.laag : k.mp_laag);
-  var delers = (1 + t.opgeld) * (1 + t.btw);
-  if (basis != null && isFinite(basis)) k.maxBod = Math.round(basis * 0.8 / delers);
-  if (k.kosten && k.kosten.bod && gem > 0) {
-    var kk = k.kosten;
-    kk.vk = kk.bod * t.opgeld;
-    kk.totaal = kk.bod * delers;
-    kk.btw = kk.totaal - kk.bod - kk.vk;
-    kk.marge = gem - kk.totaal;
-    kk.opgeld_pct = Math.round(t.opgeld * 1000) / 10;
-    var m = kk.marge, pct = Math.round((m / gem) * 100), advies = 'twijfel', roi = 50;
-    if (m > 0 && pct >= 20) { advies = 'kopen'; roi = Math.min(93, 55 + pct); }
-    else if (m < -50 || pct < -10) { advies = 'skip'; roi = Math.max(8, 50 + pct / 2); }
-    else { roi = Math.max(25, Math.min(68, 50 + pct / 2)); }
-    k.advies = advies; k.roi = Math.round(roi);
-    k.adviesReden = m > 0
-      ? 'Inkoopprijs ' + fmt(kk.totaal) + ' vs MP ~' + fmt(gem) + ' marge ' + fmt(m) + ' (' + pct + '% van verkoopprijs).'
-      : 'Inkoopprijs ' + fmt(kk.totaal) + ' ligt ' + fmt(Math.abs(m)) + ' boven MP prijs van ' + fmt(gem) + ' (' + pct + '%).';
-  } else if (!k.kosten && k.maxBod && String(k.adviesReden || '').indexOf('Maximaal rendabel bieden') === 0) {
-    k.adviesReden = 'Maximaal rendabel bieden: ' + fmt(k.maxBod) + '.';
-  }
+  if (d.naam === 'Onbekend' && k.veiling && huisOpNaam(k.veiling)) d = tariefKopie(huisOpNaam(k.veiling), null, 'huis');
+  return normTarief(d);
 }
 
 // ── Formulier: keuze veilinghuis ──
@@ -1325,13 +1433,15 @@ function vulVeilingKeuze() {
   sel.innerHTML = h;
   var ok = cur === 'auto' || cur === 'anders' || !!huisOpNaam(cur);
   sel.value = ok ? cur : 'auto';
+  var reg = document.getElementById('vk-regeling');
+  if (!reg.options.length) reg.innerHTML = regelingOpties();
 }
 function basisVeiling(url) {
   var keuze = document.getElementById('veiling-kies').value;
   if (keuze === 'auto') return detecteerVeiling(url);
-  if (keuze === 'anders') { var s = getVeilingCfg().standaard; return { naam: 'Onbekend', opgeld: s.opgeld, btw: s.btw }; }
+  if (keuze === 'anders') return tariefKopie(getVeilingCfg().standaard, 'Onbekend', 'standaard');
   var h = huisOpNaam(keuze);
-  return h ? { naam: h.naam, opgeld: h.opgeld, btw: h.btw } : detecteerVeiling(url);
+  return h ? tariefKopie(h, null, 'huis') : detecteerVeiling(url);
 }
 function kiesVeiling() { vkHandmatigFlag = false; syncVeilingVelden(); }
 function vkHandmatig() { vkHandmatigFlag = true; updateVeilingHint(); }
@@ -1340,6 +1450,8 @@ function syncVeilingVelden() {
   if (!vkHandmatigFlag) {
     document.getElementById('vk-opgeld').value = pctTxt(v.opgeld * 100);
     document.getElementById('vk-btw').value = pctTxt(v.btw * 100);
+    document.getElementById('vk-vast').value = v.vast ? bedragTxt(v.vast) : '';
+    document.getElementById('vk-regeling').value = v.regeling || 'volledig';
   }
   updateVeilingHint();
   return v;
@@ -1347,10 +1459,13 @@ function syncVeilingVelden() {
 function formTarief(url) {
   var o = leesPct(document.getElementById('vk-opgeld').value);
   var b = leesPct(document.getElementById('vk-btw').value);
+  var vast = leesEuro(document.getElementById('vk-vast').value);
   var base = basisVeiling(url);
   if (o === null || !isFinite(o) || o > 50) return { fout: 'Vul bij veilingkosten een percentage tussen 0 en 50 in, bijvoorbeeld 19.' };
   if (b === null || !isFinite(b) || b > 30) return { fout: 'Vul bij btw een percentage tussen 0 en 30 in, bijvoorbeeld 21.' };
-  return { naam: base.naam, opgeld: o / 100, btw: b / 100, handmatig: vkHandmatigFlag };
+  if (!geldigVast(vast)) return { fout: 'Vul bij vaste kosten een bedrag in euro in, of laat het veld leeg.' };
+  return { naam: base.naam, opgeld: o / 100, btw: b / 100, vast: vast, regeling: document.getElementById('vk-regeling').value || 'volledig',
+    handmatig: vkHandmatigFlag, bron: vkHandmatigFlag ? 'handmatig' : base.bron };
 }
 function updateVeilingHint() {
   var url = document.getElementById('kavel-url').value.trim();
@@ -1363,13 +1478,13 @@ function updateVeilingHint() {
   var tekst, waarschuw = false;
   var huis = huisOpNaam(v.naam);
   if (keuze === 'auto' && v.naam === 'Onbekend') {
-    tekst = 'Veiling niet herkend. Kies hierboven het veilinghuis of pas het percentage aan.'; waarschuw = true;
+    tekst = 'Veilinghuis niet herkend. De kosten worden van de kavelpagina gelezen; lukt dat niet, dan rekent de app met de standaardwaarde hieronder.'; waarschuw = true;
   } else {
     tekst = (keuze === 'auto' ? 'Herkend: ' : 'Gekozen: ') + '<strong>' + esc(v.naam) + '</strong>';
-    if (o != null && b != null && isFinite(o) && isFinite(b)) tekst += ' &middot; ' + pctTxt(o) + '% veilingkosten + ' + pctTxt(b) + '% btw';
-    if (vkHandmatigFlag) tekst += ' (aangepast voor dit kavel)';
-    else if (huis && bronLabel(huis) === 'niet geverifieerd') { tekst += ' &middot; percentage niet geverifieerd, controleer het bij de veiling'; waarschuw = true; }
-    else if (v.naam === 'Onbekend') { tekst += ' &middot; standaardpercentage, controleer het bij de veiling'; waarschuw = true; }
+    if (o != null && b != null && isFinite(o) && isFinite(b)) tekst += ' &middot; reserve: ' + pctTxt(o) + '% opgeld + ' + pctTxt(b) + '% btw';
+    if (vkHandmatigFlag) tekst += ' (door jou aangepast, gaat voor de kavelpagina)';
+    else if (huis && bronLabel(huis) === 'niet geverifieerd') { tekst += ' &middot; startwaarde niet geverifieerd'; waarschuw = true; }
+    else if (!huis) { tekst += ' &middot; standaardwaarde'; waarschuw = true; }
   }
   box.className = 'veiling-hint on' + (waarschuw ? ' unknown' : '');
   box.innerHTML = ic(waarschuw ? 'alert' : 'check') + '<span>' + tekst + '</span>';
@@ -1381,148 +1496,216 @@ function zetTariefFormulier(k) {
   var sel = document.getElementById('veiling-kies');
   if (det.naam !== 'Onbekend' && naam === det.naam) sel.value = 'auto';
   else if (huisOpNaam(naam)) sel.value = naam;
-  else sel.value = (det.naam === 'Onbekend' && !k.url) ? 'auto' : (det.naam === 'Onbekend' ? 'auto' : 'anders');
+  else sel.value = 'auto';
   vkHandmatigFlag = false;
   syncVeilingVelden();
   if (k.tarief_handmatig) {
     var t = tariefVan(k);
     document.getElementById('vk-opgeld').value = pctTxt(t.opgeld * 100);
     document.getElementById('vk-btw').value = pctTxt(t.btw * 100);
+    document.getElementById('vk-vast').value = t.vast ? bedragTxt(t.vast) : '';
+    document.getElementById('vk-regeling').value = t.regeling;
     vkHandmatigFlag = true;
     updateVeilingHint();
   }
 }
 
-// ── Percentages van één kavel aanpassen ──
+// ── Kosten van één kavel aanpassen ──
+function kostenVeldenHtml(prefix, t, vkst) {
+  return '<div class="vk-grid">' +
+    '<div><label class="ctl-l" for="' + prefix + '-opgeld">Veilingkosten (opgeld)</label><div class="money pct"><input class="input" id="' + prefix + '-opgeld" type="text" inputmode="decimal" value="' + pctTxt(t.opgeld * 100) + '"><span>%</span></div></div>' +
+    '<div><label class="ctl-l" for="' + prefix + '-btw">Btw</label><div class="money pct"><input class="input" id="' + prefix + '-btw" type="text" inputmode="decimal" value="' + pctTxt(t.btw * 100) + '"><span>%</span></div></div>' +
+    '<div><label class="ctl-l" for="' + prefix + '-vast">Vaste kosten per kavel</label><div class="money"><span>&euro;</span><input class="input" id="' + prefix + '-vast" type="text" inputmode="decimal" value="' + (t.vast ? bedragTxt(t.vast) : '') + '"></div></div>' +
+    '<div><label class="ctl-l" for="' + prefix + '-reg">Btw-regeling</label><select class="input select" id="' + prefix + '-reg">' + regelingOpties() + '</select></div>' +
+    (vkst !== undefined ? '<div><label class="ctl-l" for="' + prefix + '-vkst">Verkoopkosten</label><div class="money"><span>&euro;</span><input class="input" id="' + prefix + '-vkst" type="text" inputmode="decimal" value="' + (vkst ? bedragTxt(vkst) : '') + '"></div></div>' : '') +
+    '</div>';
+}
+function leesKostenVelden(prefix, metVkst) {
+  var o = leesPct(document.getElementById(prefix + '-opgeld').value), b = leesPct(document.getElementById(prefix + '-btw').value);
+  var vast = leesEuro(document.getElementById(prefix + '-vast').value);
+  var r = { opgeld: o / 100, btw: b / 100, vast: vast, regeling: document.getElementById(prefix + '-reg').value };
+  if (o === null || !isFinite(o) || o > 50) r.fout = 'Vul bij veilingkosten een percentage tussen 0 en 50 in.';
+  else if (b === null || !isFinite(b) || b > 30) r.fout = 'Vul bij btw een percentage tussen 0 en 30 in.';
+  else if (!geldigVast(vast)) r.fout = 'Vul bij vaste kosten een geldig bedrag in, of laat het leeg.';
+  if (metVkst) {
+    r.vkst = leesEuro(document.getElementById(prefix + '-vkst').value);
+    if (!r.fout && !geldigVast(r.vkst)) r.fout = 'Vul bij verkoopkosten een geldig bedrag in, of laat het leeg.';
+  }
+  return r;
+}
 function pasTariefAan(idx) {
   var k = kavels[idx]; if (!k) return;
   var t = tariefVan(k);
   var opts = '<option value="">Kies een veilinghuis om over te nemen…</option>';
   getVeilingCfg().huizen.forEach(function(v) { opts += '<option value="' + esc(v.naam) + '">' + esc(v.naam) + ' (' + pctTxt(v.opgeld * 100) + '% + ' + pctTxt(v.btw * 100) + '% btw)</option>'; });
-  var h = '<p class="help" style="margin:0 0 12px">Geldt alleen voor dit kavel. Kosten, maximaal bod en advies worden direct opnieuw berekend.</p>' +
+  var h = '<p class="help" style="margin:0 0 12px">Geldt alleen voor dit kavel. Kosten, maximaal bod en advies worden direct opnieuw berekend. Verkoopkosten zijn je eigen kosten bij doorverkoop, zoals verzending of platformkosten.</p>' +
+    (k.tarief_citaat ? '<div class="note" style="margin:0 0 12px">' + ic('info') + '<span>Op de kavelpagina gevonden: ' + esc(k.tarief_citaat) + '</span></div>' : '') +
     '<div class="field"><select class="input select" id="pt-huis" onchange="ptNeemOver()">' + opts + '</select></div>' +
-    '<div class="vk-grid"><div><label class="ctl-l" for="pt-opgeld">Veilingkosten</label><div class="money pct"><input class="input" id="pt-opgeld" type="text" inputmode="decimal" value="' + pctTxt(t.opgeld * 100) + '"><span>%</span></div></div>' +
-    '<div><label class="ctl-l" for="pt-btw">Btw</label><div class="money pct"><input class="input" id="pt-btw" type="text" inputmode="decimal" value="' + pctTxt(t.btw * 100) + '"><span>%</span></div></div></div>' +
+    kostenVeldenHtml('pt', t, verkoopkostenVan(k)) +
     '<div class="msg err" id="pt-err" role="alert"></div>';
-  openModal('Percentages aanpassen', h, [
+  openModal('Kosten aanpassen', h, [
     { label: 'Annuleren', cls: 'btn-secondary' },
     { label: 'Opslaan en herberekenen', cls: 'btn-primary', keepOpen: true, fn: function() { ptOpslaan(idx); } }
   ]);
+  document.getElementById('pt-reg').value = t.regeling;
 }
 function ptNeemOver() {
   var h = huisOpNaam(document.getElementById('pt-huis').value);
   if (!h) return;
   document.getElementById('pt-opgeld').value = pctTxt(h.opgeld * 100);
   document.getElementById('pt-btw').value = pctTxt(h.btw * 100);
+  document.getElementById('pt-vast').value = h.vast ? bedragTxt(h.vast) : '';
+  document.getElementById('pt-reg').value = h.regeling || 'volledig';
 }
 function ptOpslaan(idx) {
   var k = kavels[idx]; if (!k) { closeModal(); return; }
-  var o = leesPct(document.getElementById('pt-opgeld').value), b = leesPct(document.getElementById('pt-btw').value);
-  var fout = '';
-  if (o === null || !isFinite(o) || o > 50) fout = 'Vul bij veilingkosten een percentage tussen 0 en 50 in.';
-  else if (b === null || !isFinite(b) || b > 30) fout = 'Vul bij btw een percentage tussen 0 en 30 in.';
+  var r = leesKostenVelden('pt', true);
   var box = document.getElementById('pt-err');
-  if (fout) { box.textContent = fout; box.style.display = 'block'; return; }
-  k.veiling_tarief = { opgeld: o / 100, btw: b / 100 };
+  if (r.fout) { box.textContent = r.fout; box.style.display = 'block'; return; }
+  k.veiling_tarief = { opgeld: r.opgeld, btw: r.btw, vast: r.vast, regeling: r.regeling };
   k.tarief_handmatig = true;
+  k.tarief_bron = 'handmatig';
+  k.verkoopkosten = r.vkst;
   var gekozen = document.getElementById('pt-huis').value;
   if (gekozen && huisOpNaam(gekozen)) { k.veiling = gekozen; if (k.kosten) k.kosten.site = gekozen; }
   herberekenKosten(k);
   closeModal();
   slaKavelsOp(); renderOverzicht();
   toonAnalyseResultaat(k, true);
-  toast('Percentages bijgewerkt: ' + pctTxt(o) + '% + ' + pctTxt(b) + '% btw');
+  toast('Kosten bijgewerkt en herberekend');
 }
 
-// ── Veilinghuizen beheren ──
+// ── Veilinghuizen en berekening beheren ──
 var bhDraft = null;
 function beheerVeilingen() {
   var cfg = getVeilingCfg();
-  bhDraft = { huizen: kopie(cfg.huizen), standaard: kopie(cfg.standaard) };
-  openModal('Veilinghuizen en percentages', bhHtml(), [
+  bhDraft = { huizen: kopie(cfg.huizen), standaard: kopie(cfg.standaard), inst: kopie(getInst()) };
+  openModal('Veilinghuizen en berekening', bhHtml(), [
     { label: 'Annuleren', cls: 'btn-secondary' },
     { label: 'Opslaan', cls: 'btn-primary', keepOpen: true, fn: bhOpslaan }
   ]);
+  bhZetSelects();
 }
 function bhHtml() {
-  var h = '<p class="help" style="margin:0 0 12px">Stel per veilinghuis de veilingkosten en btw in. Alleen HNVI (19% + 21% btw) is bevestigd; de andere percentages zijn aannames, controleer ze bij de veiling zelf. Herkenning: delen van de link (gescheiden met komma\'s) waaraan de app het veilinghuis herkent.</p>';
+  var inst = bhDraft.inst;
+  var h = '<div class="bh-row"><div class="ctl-l">Berekening</div><div class="vk-grid">' +
+    '<div><label class="ctl-l" for="bh-doel">Gewenste marge</label><div class="money pct"><input class="input" id="bh-doel" type="text" inputmode="decimal" value="' + pctTxt(inst.doelmarge * 100) + '"><span>%</span></div></div>' +
+    '<div><label class="ctl-l" for="bh-vkst">Verkoopkosten per kavel</label><div class="money"><span>&euro;</span><input class="input" id="bh-vkst" type="text" inputmode="decimal" value="' + (inst.verkoopkosten ? bedragTxt(inst.verkoopkosten) : '') + '"></div></div></div>' +
+    '<label class="ctl-l" for="bh-model" style="margin-top:10px">AI-model</label><select class="input select" id="bh-model">' +
+    MODELLEN.map(function(m) { return '<option value="' + m.id + '">' + m.label + '</option>'; }).join('') + '</select>' +
+    '<div class="help">De gewenste marge is het deel van de verkoopprijs dat overblijft na alle kosten. Een kavel is een Aanrader vanaf deze marge, en het maximale bod is daarop berekend. Verkoopkosten zijn je eigen kosten bij doorverkoop (verzending, platformkosten).</div></div>';
+  h += '<p class="help" style="margin:4px 0 12px">Veilingkosten verschillen per veiling. De app leest ze bij een analyse van de kavelpagina; onderstaande waarden zijn de reserve als de pagina ze niet vermeldt. Alleen HNVI (19% + 21% btw) is door jou bevestigd. Herkenning: delen van het webadres (gescheiden met komma\'s) waaraan de app het veilinghuis herkent.</p>';
   bhDraft.huizen.forEach(function(v, i) {
     h += '<div class="bh-row"><div class="bh-top"><input class="input" id="bh-n-' + i + '" type="text" value="' + esc(v.naam) + '" aria-label="Naam veilinghuis">' +
       '<button class="btn btn-ghost btn-icon btn-sm" type="button" onclick="bhVerwijder(' + i + ')" aria-label="Verwijder ' + esc(v.naam) + '">' + ic('trash') + '</button></div>' +
       '<label class="ctl-l" for="bh-m-' + i + '">Herkenning in de link</label><input class="input" id="bh-m-' + i + '" type="text" value="' + esc(v.match) + '" placeholder="bijv. hnvi.nl">' +
-      '<div class="vk-grid"><div><label class="ctl-l" for="bh-o-' + i + '">Veilingkosten</label><div class="money pct"><input class="input" id="bh-o-' + i + '" type="text" inputmode="decimal" value="' + pctTxt(v.opgeld * 100) + '"><span>%</span></div></div>' +
-      '<div><label class="ctl-l" for="bh-b-' + i + '">Btw</label><div class="money pct"><input class="input" id="bh-b-' + i + '" type="text" inputmode="decimal" value="' + pctTxt(v.btw * 100) + '"><span>%</span></div></div></div>' +
+      kostenVeldenHtml('bh-' + i, { opgeld: v.opgeld, btw: v.btw, vast: v.vast, regeling: v.regeling }) +
       '<div class="help">' + esc(bronLabel(v)) + '</div></div>';
   });
   h += '<button class="btn btn-secondary btn-sm" type="button" onclick="bhVoegToe()">' + ic('plus') + 'Veilinghuis toevoegen</button>';
-  h += '<div class="bh-row" style="margin-top:14px"><div class="ctl-l">Onbekend veilinghuis (standaard)</div><div class="vk-grid">' +
-    '<div><label class="ctl-l" for="bh-so">Veilingkosten</label><div class="money pct"><input class="input" id="bh-so" type="text" inputmode="decimal" value="' + pctTxt(bhDraft.standaard.opgeld * 100) + '"><span>%</span></div></div>' +
-    '<div><label class="ctl-l" for="bh-sb">Btw</label><div class="money pct"><input class="input" id="bh-sb" type="text" inputmode="decimal" value="' + pctTxt(bhDraft.standaard.btw * 100) + '"><span>%</span></div></div></div></div>';
+  h += '<div class="bh-row" style="margin-top:14px"><div class="ctl-l">Onbekend veilinghuis (standaard)</div>' +
+    kostenVeldenHtml('bh-s', bhDraft.standaard) +
+    '<div class="help">18% is de mediaan van 29 gemeten veilinghuizen (bandbreedte 4% tot 25%).</div></div>';
   h += '<div class="bh-reset"><button class="btn btn-ghost btn-sm" type="button" onclick="bhHerstel()">' + ic('undo') + 'Standaardwaarden herstellen</button></div>';
   h += '<div class="msg err" id="bh-err" role="alert"></div>';
   return h;
+}
+function bhZetSelects() {
+  document.getElementById('bh-model').value = bhDraft.inst.model;
+  bhDraft.huizen.forEach(function(v, i) { document.getElementById('bh-' + i + '-reg').value = v.regeling || 'volledig'; });
+  document.getElementById('bh-s-reg').value = bhDraft.standaard.regeling || 'volledig';
+}
+function bhLeesRij(prefix) {
+  return { _o: document.getElementById(prefix + '-opgeld').value, _b: document.getElementById(prefix + '-btw').value,
+    _v: document.getElementById(prefix + '-vast').value, regeling: document.getElementById(prefix + '-reg').value };
 }
 function bhLees() {
   bhDraft.huizen.forEach(function(v, i) {
     var n = document.getElementById('bh-n-' + i); if (!n) return;
     v.naam = n.value; v.match = document.getElementById('bh-m-' + i).value;
-    v._o = document.getElementById('bh-o-' + i).value; v._b = document.getElementById('bh-b-' + i).value;
+    var r = bhLeesRij('bh-' + i); v._o = r._o; v._b = r._b; v._v = r._v; v.regeling = r.regeling;
   });
-  var so = document.getElementById('bh-so'), sb = document.getElementById('bh-sb');
-  if (so) { bhDraft._so = so.value; bhDraft._sb = sb.value; }
+  var s = bhLeesRij('bh-s');
+  bhDraft._s = s; bhDraft.standaard.regeling = s.regeling;
+  bhDraft._doel = document.getElementById('bh-doel').value;
+  bhDraft._vkst = document.getElementById('bh-vkst').value;
+  bhDraft.inst.model = document.getElementById('bh-model').value;
 }
 function bhRender() {
-  var body = document.getElementById('modal-body');
-  body.innerHTML = bhHtml();
+  document.getElementById('modal-body').innerHTML = bhHtml();
   // behoud ingevoerde (nog niet gevalideerde) tekst
   bhDraft.huizen.forEach(function(v, i) {
-    if (v._o != null) document.getElementById('bh-o-' + i).value = v._o;
-    if (v._b != null) document.getElementById('bh-b-' + i).value = v._b;
+    if (v._o != null) document.getElementById('bh-' + i + '-opgeld').value = v._o;
+    if (v._b != null) document.getElementById('bh-' + i + '-btw').value = v._b;
+    if (v._v != null) document.getElementById('bh-' + i + '-vast').value = v._v;
   });
-  if (bhDraft._so != null) { document.getElementById('bh-so').value = bhDraft._so; document.getElementById('bh-sb').value = bhDraft._sb; }
+  if (bhDraft._s) {
+    document.getElementById('bh-s-opgeld').value = bhDraft._s._o;
+    document.getElementById('bh-s-btw').value = bhDraft._s._b;
+    document.getElementById('bh-s-vast').value = bhDraft._s._v;
+  }
+  if (bhDraft._doel != null) document.getElementById('bh-doel').value = bhDraft._doel;
+  if (bhDraft._vkst != null) document.getElementById('bh-vkst').value = bhDraft._vkst;
+  bhZetSelects();
 }
-function bhVoegToe() { bhLees(); bhDraft.huizen.push({ naam: '', match: '', opgeld: 0.17, btw: 0.21, _o: '17', _b: '21' }); bhRender(); var n = document.getElementById('bh-n-' + (bhDraft.huizen.length - 1)); if (n) n.focus(); }
+function bhVoegToe() { bhLees(); bhDraft.huizen.push({ naam: '', match: '', opgeld: 0.18, btw: 0.21, vast: 0, regeling: 'volledig', _o: '18', _b: '21', _v: '' }); bhRender(); var n = document.getElementById('bh-n-' + (bhDraft.huizen.length - 1)); if (n) n.focus(); }
 function bhVerwijder(i) { bhLees(); bhDraft.huizen.splice(i, 1); bhRender(); }
-function bhHerstel() { bhDraft = { huizen: kopie(VEILING_STD), standaard: kopie(VEILING_ONBEKEND_STD) }; bhRender(); }
+function bhHerstel() {
+  bhLees();
+  bhDraft = { huizen: kopie(VEILING_STD), standaard: kopie(VEILING_ONBEKEND_STD), inst: bhDraft.inst, _doel: bhDraft._doel, _vkst: bhDraft._vkst };
+  bhRender();
+}
 function bhOpslaan() {
   bhLees();
   var box = document.getElementById('bh-err');
   var fout = '', huizen = [], namen = {};
+  var doel = leesPct(bhDraft._doel), vkst = leesEuro(bhDraft._vkst);
+  if (doel === null || !isFinite(doel) || doel > 80) fout = 'Vul bij gewenste marge een percentage tussen 0 en 80 in, bijvoorbeeld 20.';
+  else if (!geldigVast(vkst)) fout = 'Vul bij verkoopkosten een geldig bedrag in, of laat het leeg.';
+  function tarief(r, wie) {
+    var o = leesPct(r._o), b = leesPct(r._b), v = leesEuro(r._v);
+    if (o === null || !isFinite(o) || o > 50) return 'Controleer het percentage veilingkosten van ' + wie + ' (0 tot 50).';
+    if (b === null || !isFinite(b) || b > 30) return 'Controleer het btw-percentage van ' + wie + ' (0 tot 30).';
+    if (!geldigVast(v)) return 'Controleer de vaste kosten van ' + wie + '.';
+    return { opgeld: o / 100, btw: b / 100, vast: v, regeling: REGELINGEN[r.regeling] ? r.regeling : 'volledig' };
+  }
   for (var i = 0; i < bhDraft.huizen.length && !fout; i++) {
     var v = bhDraft.huizen[i];
     var naam = String(v.naam || '').trim();
-    var o = leesPct(v._o != null ? v._o : pctTxt(v.opgeld * 100)), b = leesPct(v._b != null ? v._b : pctTxt(v.btw * 100));
     var sleutel = naam.toLowerCase();
-    if (!naam) fout = 'Geef elk veilinghuis een naam.';
-    else if (sleutel === 'auto' || sleutel === 'anders' || sleutel === 'onbekend') fout = '"' + naam + '" is geen toegestane naam. Kies een andere naam.';
-    else if (namen[sleutel]) fout = 'De naam "' + naam + '" komt twee keer voor.';
-    else if (o === null || !isFinite(o) || o > 50) fout = 'Controleer het percentage veilingkosten van ' + naam + ' (0 tot 50).';
-    else if (b === null || !isFinite(b) || b > 30) fout = 'Controleer het btw-percentage van ' + naam + ' (0 tot 30).';
-    else {
-      namen[sleutel] = 1;
-      huizen.push({ naam: naam, match: String(v.match || '').trim() || sleutel.replace(/\s+/g, ''), opgeld: o / 100, btw: b / 100 });
-    }
+    if (!naam) { fout = 'Geef elk veilinghuis een naam.'; break; }
+    if (sleutel === 'auto' || sleutel === 'anders' || sleutel === 'onbekend') { fout = '"' + naam + '" is geen toegestane naam. Kies een andere naam.'; break; }
+    if (namen[sleutel]) { fout = 'De naam "' + naam + '" komt twee keer voor.'; break; }
+    var t = tarief({ _o: v._o != null ? v._o : pctTxt(v.opgeld * 100), _b: v._b != null ? v._b : pctTxt(v.btw * 100), _v: v._v != null ? v._v : bedragTxt(v.vast), regeling: v.regeling }, naam);
+    if (typeof t === 'string') { fout = t; break; }
+    namen[sleutel] = 1;
+    huizen.push({ naam: naam, match: String(v.match || '').trim() || sleutel.replace(/\s+/g, ''), opgeld: t.opgeld, btw: t.btw, vast: t.vast, regeling: t.regeling });
   }
-  var so = leesPct(bhDraft._so), sb = leesPct(bhDraft._sb);
-  if (!fout && (so === null || !isFinite(so) || so > 50)) fout = 'Controleer het standaardpercentage veilingkosten (0 tot 50).';
-  if (!fout && (sb === null || !isFinite(sb) || sb > 30)) fout = 'Controleer het standaard btw-percentage (0 tot 30).';
+  var std = fout ? null : tarief(bhDraft._s, 'het onbekende veilinghuis');
+  if (typeof std === 'string') fout = std;
   if (fout) { box.textContent = fout; box.style.display = 'block'; return; }
-  if (!bewaarVeilingCfg({ huizen: huizen, standaard: { opgeld: so / 100, btw: sb / 100 } })) {
+  var oudeInst = JSON.stringify(getInst());
+  if (!bewaarVeilingCfg({ huizen: huizen, standaard: std }) || !bewaarInst({ doelmarge: doel / 100, verkoopkosten: vkst, model: bhDraft.inst.model })) {
     box.textContent = 'Opslaan lukt niet in deze browser (opslag geblokkeerd).'; box.style.display = 'block'; return;
   }
   closeModal();
   vulVeilingKeuze(); syncVeilingVelden();
-  toast('Veilinghuizen opgeslagen');
+  if (JSON.stringify(getInst()) !== oudeInst) {
+    // Marge en verkoopkosten gelden voor alle kavels: alles direct opnieuw doorrekenen
+    kavels.forEach(function(k) { if (k.status !== 'gewonnen') herberekenKosten(k); });
+    slaKavelsOp(); updateBadge(); renderOverzicht();
+  }
+  toast('Instellingen opgeslagen');
   controleerTarieven(true);
 }
 
-// Lopende kavels die nog met een ander percentage dan de huidige instelling zijn doorgerekend
+// Lopende kavels die nog met een ander tarief dan de huidige instelling van hun veilinghuis zijn doorgerekend
 function verouderdeKavels() {
   return kavels.filter(function(k) {
-    if (k.status === 'gewonnen' || k.tarief_handmatig) return false;
+    if (k.status === 'gewonnen' || k.tarief_handmatig || k.tarief_bron === 'pagina') return false;
     var h = huisOpNaam(veilingVan(k)); if (!h) return false;
-    var t = tariefVan(k);
-    return Math.abs(t.opgeld - h.opgeld) > 1e-9 || Math.abs(t.btw - h.btw) > 1e-9;
+    var t = tariefVan(k), hn = normTarief(h);
+    return Math.abs(t.opgeld - hn.opgeld) > 1e-9 || Math.abs(t.btw - hn.btw) > 1e-9 || t.vast !== hn.vast || t.regeling !== hn.regeling;
   });
 }
 function controleerTarieven(altijd) {
@@ -1538,133 +1721,402 @@ function controleerTarieven(altijd) {
     if (!per[n]) per[n] = { n: 0, oud: t.opgeld, nieuw: h.opgeld };
     per[n].n++;
   });
-  var tekst = '<p>Deze lopende kavels rekenen nog met een ander percentage dan nu is ingesteld:</p><ul class="bh-list">';
+  var tekst = '<p>Deze lopende kavels rekenen nog met andere kosten dan nu is ingesteld:</p><ul class="bh-list">';
   Object.keys(per).forEach(function(n) {
     tekst += '<li><strong>' + esc(n) + '</strong>: ' + per[n].n + (per[n].n === 1 ? ' kavel' : ' kavels') + ', nu ' + pctTxt(per[n].oud * 100) + '%, wordt ' + pctTxt(per[n].nieuw * 100) + '%</li>';
   });
-  tekst += '</ul><p class="help">Kosten, maximaal bod en advies worden opnieuw berekend. Gewonnen kavels en kavels waarvan je zelf het percentage hebt aangepast blijven ongewijzigd.</p>';
+  tekst += '</ul><p class="help">Kosten, maximaal bod en advies worden opnieuw berekend. Gewonnen kavels, kavels waarvan je zelf de kosten hebt aangepast en kavels met kosten van de kavelpagina blijven ongewijzigd.</p>';
   try { localStorage.setItem('va_tarief_gevraagd', sig); } catch (e) {}
   openModal('Bestaande kavels herberekenen?', tekst, [
     { label: 'Nu niet', cls: 'btn-secondary' },
     { label: 'Herberekenen', cls: 'btn-primary', fn: function() {
       var l = verouderdeKavels();
-      l.forEach(function(k) { var h = huisOpNaam(veilingVan(k)); k.veiling_tarief = { opgeld: h.opgeld, btw: h.btw }; herberekenKosten(k); });
+      l.forEach(function(k) { var h = huisOpNaam(veilingVan(k)); k.veiling_tarief = { opgeld: h.opgeld, btw: h.btw, vast: h.vast || 0, regeling: h.regeling || 'volledig' }; k.tarief_bron = 'huis'; herberekenKosten(k); });
       slaKavelsOp(); updateBadge(); renderOverzicht();
       toast(l.length + (l.length === 1 ? ' kavel herberekend' : ' kavels herberekend'));
     } }
   ]);
 }
 
-function analyseer() {
+// ── Claude API ──
+function naamUitUrl(u) {
+  try {
+    var pad = new URL(u).pathname.split('/').filter(Boolean);
+    // Neem het langste stuk met woorden (de 'slug'), niet het kavelnummer
+    var slug = pad.filter(function(p) { return /[a-z]/i.test(p) && p.indexOf('-') !== -1; })
+      .sort(function(a, b) { return b.length - a.length; })[0] || '';
+    slug = decodeURIComponent(slug).replace(/\.\w{2,4}$/, '').replace(/-?\d{5,}$/, '').replace(/[-_]+/g, ' ').trim();
+    return slug ? slug.charAt(0).toUpperCase() + slug.slice(1) : '';
+  } catch (e) { return ''; }
+}
+function parseJSON(txt) {
+  var clean = String(txt || '').replace(/```json/gi, '').replace(/```/g, '').trim();
+  try { return JSON.parse(clean); } catch (e) {}
+  var start = clean.indexOf('{'), end = clean.lastIndexOf('}');
+  if (start !== -1 && end > start) { try { return JSON.parse(clean.slice(start, end + 1)); } catch (e) {} }
+  return null;
+}
+function apiFout(data, status) {
+  var e = new Error((data && data.error) ? data.error.type + ': ' + data.error.message : 'HTTP ' + status);
+  e.apiType = data && data.error ? data.error.type : 'http_' + status;
+  e.status = status;
+  return e;
+}
+// Fout doordat web_search / web_fetch niet beschikbaar is (bijvoorbeeld uitgezet voor je organisatie)
+function isToolFout(e) {
+  return !!e && e.apiType === 'invalid_request_error' && /tool|web_search|web_fetch|server/i.test(e.message || '');
+}
+function normUrl(u) {
+  try { var x = new URL(u); return (x.hostname.replace(/^www\./, '') + x.pathname.replace(/\/+$/, '') + x.search).toLowerCase(); }
+  catch (e) { return String(u || '').toLowerCase(); }
+}
+// Stuurt één beurt naar Claude, inclusief vervolgverzoeken bij pause_turn.
+// Geeft de tekst terug plus alle URL's die echt in zoek- of ophaalresultaten voorkwamen.
+async function vraagClaude(opts) {
+  var key = getApiKey();
+  if (!key) throw new Error('Voer eerst een API key in.');
+  var messages = [{ role: 'user', content: opts.prompt }];
+  var bronnen = {}, zoekvragen = [], corpus = '', laatste = null, alleTekst = '';
+  for (var ronde = 0; ronde < 6; ronde++) {
+    var body = { model: getInst().model, max_tokens: opts.maxTokens || 16000, system: opts.system, messages: messages };
+    if (opts.tools) body.tools = opts.tools;
+    var resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': key,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify(body)
+    });
+    var data = null;
+    try { data = await resp.json(); } catch (e) {}
+    if (!resp.ok || !data || data.error) throw apiFout(data, resp.status);
+    if (!Array.isArray(data.content)) throw new Error('Onverwachte API response');
+    data.content.forEach(function(b) {
+      if (b.type === 'text') {
+        alleTekst += b.text || '';
+        (b.citations || []).forEach(function(c) { if (c.url) bronnen[normUrl(c.url)] = { url: c.url, titel: c.title || '' }; });
+      } else if (b.type === 'server_tool_use' && b.name === 'web_search' && b.input && b.input.query) {
+        zoekvragen.push(b.input.query);
+      } else if (b.type === 'web_search_tool_result' && Array.isArray(b.content)) {
+        b.content.forEach(function(r) { if (r && r.url) bronnen[normUrl(r.url)] = { url: r.url, titel: r.title || '' }; });
+      } else if (b.type === 'web_fetch_tool_result' && b.content && b.content.type === 'web_fetch_result') {
+        var doc = b.content.content || {};
+        bronnen[normUrl(b.content.url)] = { url: b.content.url, titel: doc.title || '', opgehaald: true };
+        var src = doc.source || {};
+        if (src.type === 'text' && typeof src.data === 'string' && corpus.length < 600000) corpus += '\n' + src.data.slice(0, 200000);
+      }
+    });
+    laatste = data;
+    if (data.stop_reason !== 'pause_turn') break;
+    // Lange zoekbeurt gepauzeerd: stuur de assistent-inhoud ongewijzigd terug zodat Claude verdergaat
+    var vorige = messages[messages.length - 1];
+    if (vorige.role === 'assistant') vorige.content = vorige.content.concat(data.content);
+    else messages.push({ role: 'assistant', content: data.content.slice() });
+  }
+  var tekst = laatste.content.filter(function(b) { return b.type === 'text'; }).map(function(b) { return b.text; }).join('');
+  var json = parseJSON(tekst) || parseJSON(alleTekst);
+  if (!json && laatste.stop_reason === 'max_tokens') throw new Error('Het antwoord was te lang en is afgebroken. Probeer het opnieuw.');
+  var corpusLaag = corpus.toLowerCase();
+  return {
+    json: json,
+    zoekvragen: zoekvragen,
+    bronnen: Object.keys(bronnen).map(function(k) { return bronnen[k]; }),
+    // Kwam deze URL echt voor in de zoek- of ophaalresultaten?
+    bevestigd: function(u) {
+      if (!u) return false;
+      if (bronnen[normUrl(u)]) return true;
+      try { var p = new URL(u).pathname; return p.length > 8 && corpusLaag.indexOf(p.toLowerCase()) !== -1; } catch (e) { return false; }
+    }
+  };
+}
+
+function locatieVoor(url) {
+  return /\.be(\/|$)|2dehands|vavato|openbareverkopen|auctelia/i.test(hostVan(url))
+    ? { type: 'approximate', country: 'BE', timezone: 'Europe/Brussels' }
+    : { type: 'approximate', country: 'NL', timezone: 'Europe/Amsterdam' };
+}
+function num(x) {
+  if (typeof x === 'number') return isFinite(x) ? x : null;
+  if (typeof x === 'string' && /\d/.test(x)) { var v = parseBedrag(x.replace(/[^\d.,]/g, '')); return isFinite(v) ? v : null; }
+  return null;
+}
+function kortTekst(s, n) { s = typeof s === 'string' ? s.trim() : ''; return s.length > n ? s.slice(0, n - 1) + '…' : s; }
+
+// Stap 1: kavelpagina lezen (product, staat, huidig bod, sluitingstijd en veilingkosten)
+async function leesKavelpagina(url, extra) {
+  var system = 'Je leest veilingkavels voor een Nederlandse opkoper. Antwoord uitsluitend met één geldig JSON-object, zonder markdown en zonder tekst ervoor of erna.\n\n' +
+    'Werkwijze:\n' +
+    '1. Open de kavelpagina met web_fetch.\n' +
+    '2. Staan de veilingkosten (opgeld, kopersprovisie, buyer\'s premium, kavel- of handlingkosten, btw-regeling) niet op de kavelpagina, open dan op dezelfde website de veilingvoorwaarden of kosteninformatie van deze specifieke veiling (hooguit twee extra pagina\'s).\n' +
+    '3. Lukt het openen niet (bijvoorbeeld omdat de pagina met JavaScript laadt), zoek dan met web_search op het kavelnummer of de titel.\n\n' +
+    'Regels:\n' +
+    '- Verzin niets. Wat je niet op een pagina hebt gezien is null.\n' +
+    '- btw_regeling: "volledig" als er btw over het bod (hamerprijs) én het opgeld komt; "opgeld" als er geen btw over het bod komt (margeregeling / bijzondere regeling gebruikte goederen) en wel btw bovenop het opgeld; "geen" als er geen btw bijkomt omdat het opgeld al inclusief btw is of de btw verlegd/0% is; anders "onbekend".\n' +
+    '- opgeld_pct is het percentage zoals het in combinatie met die btw_regeling klopt (bij "geen" het percentage inclusief btw).\n' +
+    '- vaste_kosten: vast bedrag per kavel in euro vóór btw (bij btw_regeling "geen" het bedrag inclusief btw). Geen vaste kosten gevonden: null.\n' +
+    '- Is het een partij van meerdere stuks, vul dan aantal_stuks in.\n' +
+    '- kosten.bron: korte letterlijke zin of vindplaats waar je de kosten zag.';
+  var prompt = 'Kavelpagina: ' + url + '\n' + (extra ? 'Opmerking van de koper (gaat voor de pagina): ' + extra + '\n' : '') +
+    '\nVul dit JSON-object in:\n' +
+    '{"gevonden":true,"titel":"","veilinghuis":"","kavelnummer":"","product":{"merk":"","model":"","variant":"","zoekterm":"korte zoekterm om dit exacte product tweedehands te vinden"},' +
+    '"staat":"nieuw|zo goed als nieuw|gebruikt|beschadigd|defect|onbekend","staat_toelichting":"","aantal_stuks":1,"huidig_bod":null,"aantal_biedingen":null,"sluit":null,"locatie":null,' +
+    '"kosten":{"opgeld_pct":null,"vaste_kosten":null,"btw_pct":null,"btw_regeling":"onbekend","bron":""},"opmerkingen":[]}';
+  var r = await vraagClaude({
+    system: system, prompt: prompt, maxTokens: 8000,
+    tools: [
+      { type: 'web_fetch_20250910', name: 'web_fetch', max_uses: 4, max_content_tokens: 30000 },
+      { type: 'web_search_20250305', name: 'web_search', max_uses: 3, user_location: locatieVoor(url) }
+    ]
+  });
+  var j = r.json;
+  if (!j || typeof j !== 'object') throw new Error('Kavelpagina: geen bruikbaar antwoord');
+  var p = j.product || {};
+  var kost = j.kosten || {};
+  return {
+    gevonden: j.gevonden !== false,
+    titel: kortTekst(j.titel, 200),
+    veilinghuis: kortTekst(j.veilinghuis, 40),
+    kavelnummer: kortTekst(String(j.kavelnummer == null ? '' : j.kavelnummer), 20),
+    zoekterm: kortTekst(p.zoekterm, 120) || kortTekst([p.merk, p.model, p.variant].filter(Boolean).join(' '), 120),
+    staat: kortTekst(j.staat, 30),
+    staat_toelichting: kortTekst(j.staat_toelichting, 300),
+    aantal_stuks: num(j.aantal_stuks) > 1 ? Math.round(num(j.aantal_stuks)) : 1,
+    huidig_bod: num(j.huidig_bod) > 0 ? num(j.huidig_bod) : null,
+    aantal_biedingen: num(j.aantal_biedingen) != null ? Math.round(num(j.aantal_biedingen)) : null,
+    sluit: kortTekst(j.sluit == null ? '' : String(j.sluit), 60),
+    locatie: kortTekst(j.locatie == null ? '' : String(j.locatie), 80),
+    kosten: {
+      opgeld_pct: num(kost.opgeld_pct), vaste_kosten: num(kost.vaste_kosten), btw_pct: num(kost.btw_pct),
+      btw_regeling: REGELINGEN[kost.btw_regeling] ? kost.btw_regeling : null, bron: kortTekst(kost.bron, 240)
+    },
+    opmerkingen: Array.isArray(j.opmerkingen) ? j.opmerkingen.filter(function(x) { return typeof x === 'string'; }).slice(0, 6).map(function(x) { return kortTekst(x, 240); }) : [],
+    bronnen: r.bronnen.slice(0, 8)
+  };
+}
+
+// Stap 2: tweedehands- en nieuwprijzen opzoeken
+function zoekUrls(term) {
+  var plus = term.split(/\s+/).filter(Boolean).map(encodeURIComponent).join('+');
+  var q = encodeURIComponent(term);
+  return [
+    'https://www.marktplaats.nl/q/' + plus + '/',
+    'https://www.2dehands.be/q/' + plus + '/',
+    'https://www.ebay.nl/sch/i.html?_nkw=' + q + '&LH_Sold=1&LH_Complete=1',
+    'https://www.bol.com/nl/nl/s/?searchtext=' + q
+  ].filter(function(u) { return u.length <= 250; });
+}
+var PRIJS_JSON = '{"productnaam":"","categorie":"","nieuwprijs":null,"nieuwprijs_bron":"winkel en datum","nieuwprijs_url":null,' +
+  '"tweedehands":[{"platform":"Marktplaats","titel":"","prijs":0,"soort":"vraagprijs|verkocht","staat":"","url":null}],' +
+  '"marktplaats":{"laag":0,"gemiddeld":0,"hoog":0,"vertrouwen":"hoog|middel|laag","aantal_vergelijkbaar":0,"tip":"","verkooptijd":"","zoekwoorden":[]},' +
+  '"ebay":{"laag":null,"gemiddeld":null,"hoog":null,"vertrouwen":"laag","tip":"","verkooptijd":"","keywords":[]},' +
+  '"partij":null,"toelichting":"","aandachtspunten":[]}';
+async function zoekPrijzen(product, pagina, extra, url) {
+  var term = (pagina && pagina.zoekterm) || korteZoekterm(product);
+  var system = 'Je bent een Nederlandse marktprijsonderzoeker voor een opkoper die veilingkavels tweedehands doorverkoopt in Nederland en België. Antwoord uitsluitend met één geldig JSON-object, zonder markdown en zonder tekst ervoor of erna.\n\n' +
+    'Werkwijze:\n' +
+    '1. Open met web_fetch de zoekpagina\'s uit het bericht (Marktplaats, 2dehands, verkochte eBay-items). Lukt dat niet of vind je weinig, gebruik dan web_search (bijvoorbeeld met "marktplaats", "2dehands" of "tweakers vraag en aanbod" in de zoekvraag).\n' +
+    '2. Zoek de laagste actuele nieuwprijs bij een gewone Nederlandse winkel (bol.com, Coolblue, MediaMarkt, Amazon.nl, de fabrikant, of de Tweakers Pricewatch). Niet de adviesprijs als winkels lager zitten. Niet meer nieuw te koop: nieuwprijs null en zeg dat in nieuwprijs_bron.\n' +
+    '3. Gebruik alleen advertenties van exact hetzelfde product (zelfde model, variant, opslag, maat, generatie) en een vergelijkbare staat. Laat "gezocht", accessoires, onderdelen, bundels en duidelijke uitschieters weg. Defecte exemplaren alleen als het kavel zelf defect is.\n' +
+    '4. Vraagprijzen op Marktplaats en 2dehands zijn geen verkoopprijzen; er wordt meestal lager verkocht. Verkochte eBay-items zijn de beste aanwijzing voor wat er echt betaald wordt.\n\n' +
+    'Regels:\n' +
+    '- tweedehands: maximaal 12 advertenties die je echt in de resultaten hebt gezien, met de exacte URL. Verzin nooit URL\'s of prijzen. Geen URL beschikbaar: url null.\n' +
+    '- marktplaats.laag / gemiddeld / hoog: realistische VERKOOPprijzen in NL/BE voor één exemplaar in de staat van het kavel. gemiddeld = de prijs waarvoor het binnen een paar weken verkoopt, niet de gemiddelde vraagprijs.\n' +
+    '- vertrouwen: "hoog" bij 5 of meer goed vergelijkbare advertenties of verkochte items, "middel" bij 2 tot 4, anders "laag".\n' +
+    '- ebay: alleen invullen als je eBay-prijzen hebt gezien, anders null-waarden.\n' +
+    '- Partij van meerdere stuks: partij = {"aantal":n,"prijs_per_stuk":verwachte opbrengst per stuk}, en de marktplaats-prijzen gelden voor één stuk.\n' +
+    '- toelichting: één of twee zinnen over hoe je de verwachte verkoopprijs bepaalde.\n' +
+    '- Bedragen in euro als getal, zonder valutateken.';
+  var prompt = 'Product: ' + product + '\n' +
+    (pagina && pagina.titel ? 'Titel op de veilingsite: ' + pagina.titel + '\n' : '') +
+    (pagina && pagina.staat ? 'Staat volgens de veiling: ' + pagina.staat + (pagina.staat_toelichting ? ' (' + pagina.staat_toelichting + ')' : '') + '\n' : '') +
+    (pagina && pagina.aantal_stuks > 1 ? 'Aantal stuks in het kavel: ' + pagina.aantal_stuks + '\n' : '') +
+    (extra ? 'Opmerking van de koper: ' + extra + '\n' : '') +
+    (url ? 'Kavel: ' + url + '\n' : '') +
+    '\nZoekpagina\'s die je mag openen:\n' + zoekUrls(term).join('\n') +
+    '\n\nVul dit JSON-object in:\n' + PRIJS_JSON;
+  var r = await vraagClaude({
+    system: system, prompt: prompt, maxTokens: 16000,
+    tools: [
+      { type: 'web_fetch_20250910', name: 'web_fetch', max_uses: 6, max_content_tokens: 25000 },
+      { type: 'web_search_20250305', name: 'web_search', max_uses: 6, user_location: locatieVoor(url) }
+    ]
+  });
+  return normPrijzen(r.json, r, true);
+}
+
+// Reserve als zoeken niet beschikbaar is: alleen een schatting op basis van kennis van het model
+async function schatPrijzen(product) {
+  var system = 'Je bent een Nederlandse marktprijsexpert. Je hebt geen internettoegang; geef je beste schatting op basis van je kennis. Antwoord uitsluitend met één geldig JSON-object, zonder markdown.';
+  var prompt = 'Schat de huidige nieuwprijs bij Nederlandse winkels (niet de adviesprijs) en de realistische tweedehands verkoopprijs in Nederland voor: "' + product + '".\n' +
+    'Tweedehands ligt altijd onder de nieuwprijs. Laat tweedehands leeg ([]) en zet vertrouwen hooguit op "middel".\n\nVul dit JSON-object in:\n' + PRIJS_JSON;
+  var r = await vraagClaude({ system: system, prompt: prompt, maxTokens: 4000 });
+  var p = normPrijzen(r.json, r, false);
+  if (p.marktplaats.vertrouwen === 'hoog') p.marktplaats.vertrouwen = 'middel';
+  return p;
+}
+
+// Controleert en ordent het prijsantwoord. Getallen worden nagelopen; links worden gemarkeerd als bevestigd
+// als ze echt in de zoek- of ophaalresultaten voorkwamen.
+function normPrijzen(j, r, live) {
+  if (!j || !j.marktplaats) throw new Error('Kon geen marktprijzen ophalen. Probeer opnieuw.');
+  function platform(x) {
+    x = x || {};
+    var p = { laag: num(x.laag), gemiddeld: num(x.gemiddeld), hoog: num(x.hoog),
+      vertrouwen: ['hoog', 'middel', 'laag'].indexOf(x.vertrouwen) !== -1 ? x.vertrouwen : 'laag',
+      aantal_vergelijkbaar: num(x.aantal_vergelijkbaar), tip: kortTekst(x.tip, 300), verkooptijd: kortTekst(x.verkooptijd, 40),
+      zoekwoorden: Array.isArray(x.zoekwoorden || x.keywords) ? (x.zoekwoorden || x.keywords).filter(function(w) { return typeof w === 'string'; }).slice(0, 8) : [] };
+    if (!(p.gemiddeld > 0)) return null;
+    if (!(p.laag > 0) || p.laag > p.gemiddeld) p.laag = p.laag > 0 ? p.gemiddeld : null;
+    if (!(p.hoog > 0) || p.hoog < p.gemiddeld) p.hoog = p.hoog > 0 ? p.gemiddeld : null;
+    p.keywords = p.zoekwoorden;
+    return p;
+  }
+  var mp = platform(j.marktplaats);
+  if (!mp) throw new Error('Kon geen marktprijzen ophalen. Probeer opnieuw.');
+  var eb = platform(j.ebay);
+  var lijst = (Array.isArray(j.tweedehands) ? j.tweedehands : []).map(function(a) {
+    a = a || {};
+    var u = veiligeUrl(a.url);
+    return { platform: kortTekst(a.platform, 30), titel: kortTekst(a.titel, 140), prijs: num(a.prijs),
+      soort: a.soort === 'verkocht' ? 'verkocht' : 'vraagprijs', staat: kortTekst(a.staat, 40), url: u || null,
+      bevestigd: !!(u && r.bevestigd(u)) };
+  }).filter(function(a) { return a.prijs > 0; }).slice(0, 12);
+  var nieuwUrl = veiligeUrl(j.nieuwprijs_url);
+  var p = {
+    productnaam: kortTekst(j.productnaam, 160), categorie: kortTekst(j.categorie, 60),
+    nieuwprijs: num(j.nieuwprijs) > 0 ? num(j.nieuwprijs) : null, nieuwprijs_bron: kortTekst(j.nieuwprijs_bron, 160),
+    nieuwprijs_url: nieuwUrl || null, nieuwprijs_bevestigd: !!(nieuwUrl && r.bevestigd(nieuwUrl)),
+    marktplaats: mp, ebay: eb, tweedehands: lijst,
+    partij: j.partij && num(j.partij.aantal) > 1 ? { aantal: Math.round(num(j.partij.aantal)), prijs_per_stuk: num(j.partij.prijs_per_stuk) > 0 ? num(j.partij.prijs_per_stuk) : null } : null,
+    toelichting: kortTekst(j.toelichting, 400),
+    aandachtspunten: Array.isArray(j.aandachtspunten) ? j.aandachtspunten.filter(function(x) { return typeof x === 'string'; }).slice(0, 6).map(function(x) { return kortTekst(x, 240); }) : [],
+    live: live, opgehaald_op: Date.now(),
+    zoekvragen: r.zoekvragen.slice(0, 12),
+    bronnen: r.bronnen.slice(0, 20).map(function(b) { return { url: b.url, titel: kortTekst(b.titel, 120), opgehaald: !!b.opgehaald }; }),
+    controles: []
+  };
+  // Eigen controle van het AI-antwoord tegen de gevonden advertenties
+  var prijzen = lijst.map(function(a) { return a.prijs; }).sort(function(a, b) { return a - b; });
+  if (prijzen.length >= 3) {
+    var mid = prijzen.length % 2 ? prijzen[(prijzen.length - 1) / 2] : (prijzen[prijzen.length / 2 - 1] + prijzen[prijzen.length / 2]) / 2;
+    p.mediaan_advertenties = mid;
+    if (mp.gemiddeld > mid * 1.25) p.controles.push('De verwachte verkoopprijs (' + fmt(mp.gemiddeld) + ') ligt ruim boven de mediaan van de gevonden advertenties (' + fmt(mid) + '). Controleer of dat terecht is.');
+    if (mp.gemiddeld < mid * 0.5) p.controles.push('De verwachte verkoopprijs (' + fmt(mp.gemiddeld) + ') ligt ver onder de mediaan van de gevonden advertenties (' + fmt(mid) + ').');
+  } else if (live) {
+    p.controles.push('Er zijn weinig vergelijkbare advertenties gevonden (' + prijzen.length + '). De verkoopprijs is daardoor minder zeker.');
+  }
+  var onbevestigd = lijst.filter(function(a) { return a.url && !a.bevestigd; }).length;
+  if (live && onbevestigd) p.controles.push(onbevestigd + (onbevestigd === 1 ? ' link naar een advertentie kwam' : ' links naar advertenties kwamen') + ' niet letterlijk voor in de opgehaalde resultaten. Open die zelf ter controle.');
+  if (p.nieuwprijs && mp.gemiddeld >= p.nieuwprijs) p.controles.push('De tweedehands prijs ligt niet onder de nieuwprijs. Controleer beide bedragen.');
+  return p;
+}
+
+function bepaalProduct(extra, pagina, url) {
+  var basis = extra || (pagina && (pagina.zoekterm || pagina.titel)) || (url ? naamUitUrl(url) : '') || 'onbekend product';
+  if (extra && pagina && pagina.titel && extra.length < 25) basis = extra + ' (' + pagina.titel + ')';
+  return basis.replace(/["“”]/g, '').trim();
+}
+
+async function analyseer() {
   var url = document.getElementById('kavel-url').value.trim();
+  if (url && !/^https?:\/\//i.test(url) && /^[\w-]+(\.[\w-]+)+(\/|$)/.test(url)) { url = 'https://' + url; document.getElementById('kavel-url').value = url; }
   var bodStr = document.getElementById('huidig-bod').value.trim();
   var extra = document.getElementById('extra-txt').value.trim();
 
-  if (!url && !extra) {
-    toonMsg('analyse-err', 'Plak de link naar het kavel of vul een productnaam in.'); return;
-  }
+  if (!url && !extra) { toonMsg('analyse-err', 'Plak de link naar het kavel of vul een productnaam in.'); return; }
+  if (url && !/^https?:\/\/[^\s/]+\.[^\s]+/i.test(url)) { toonMsg('analyse-err', 'De link moet beginnen met https:// en naar een webpagina wijzen.'); return; }
+  var bod = null;
   if (bodStr) {
-    var bodCheck = /^[\d.,\s\u20ac]+$/.test(bodStr) ? parseBedrag(bodStr) : NaN;
-    if (!isFinite(bodCheck) || bodCheck <= 0) { toonMsg('analyse-err', 'Voer een geldig bedrag in, bijvoorbeeld 250.'); return; }
+    bod = /^[\d.,\s€]+$/.test(bodStr) ? parseBedrag(bodStr) : NaN;
+    if (!isFinite(bod) || bod <= 0) { toonMsg('analyse-err', 'Voer een geldig bedrag in, bijvoorbeeld 250.'); return; }
   }
-
-  document.getElementById('analyse-err').style.display = 'none';
-  document.getElementById('analyse-result').style.display = 'none';
-  setBtn('analyse-btn', 'analyse-btn-txt', true, '<span class="spinner"></span> Analyseren...');
-
-  var urlNaam = url ? naamUitUrl(url) : '';
-  var product = (extra || urlNaam || 'onbekend product').replace(/"/g, '').replace(/'/g, '').trim();
-  var bod = bodStr ? parseBedrag(bodStr) : null;
   var veilingInfo = formTarief(url);
   if (veilingInfo.fout) { toonMsg('analyse-err', veilingInfo.fout); return; }
-  var kavelnr = url ? ((url.match(/\/(\d+)(?:\?|$)/) || [])[1]) : null;
+  if (!getApiKey()) { toonMsg('analyse-err', 'Voer eerst je API-sleutel in (bovenaan de pagina).'); return; }
+  var leesKosten = document.getElementById('vk-lees').checked;
+  var huidigType = bodType;
 
+  document.getElementById('analyse-err').style.display = 'none';
+  setBtn('analyse-btn', 'analyse-btn-txt', true, '<span class="spinner"></span> Analyseren...');
   setFase('bezig');
   setStap(1);
 
-  var prijzenPrompt = 'Geef realistische marktprijzen voor: "' + product + '"\n\n' +
-    'BELANGRIJK voor nieuwprijs:\n' +
-    '- Gebruik de HUIDIGE winkelprijs (bol.com, coolblue, mediamarkt, amazon.nl)\n' +
-    '- NIET de officiele adviesprijs van de fabrikant\n' +
-    '- Als een winkel voor minder verkoopt dan de adviesprijs, gebruik die lagere prijs\n' +
-    '- Vermeld in nieuwprijs_bron welke winkel en prijs je kent\n\n' +
-    'BELANGRIJK voor 2e hands:\n' +
-    '- Marktplaats prijs moet ALTIJD lager zijn dan huidige winkelprijs\n' +
-    '- Goede staat: 65-80% van huidige winkelprijs\n' +
-    '- Redelijke staat: 45-65% van huidige winkelprijs\n\n' +
-    'Vul dit JSON object in met echte getallen:\n' +
-    '{"productnaam":"' + product + '","categorie":"categorie","nieuwprijs":100,"nieuwprijs_bron":"winkel en prijs","marktplaats":{"laag":50,"gemiddeld":75,"hoog":100,"vertrouwen":"middel","tip":"verkooptip","verkooptijd":"1-4 weken","zoekwoorden":["woord"]},"ebay":{"laag":60,"gemiddeld":85,"hoog":110,"vertrouwen":"laag","tip":"ebay tip","verkooptijd":"2-6 weken","keywords":["word"]},"aandachtspunten":["punt"]}';
+  try {
+    var pagina = null, live = true, waarschuwingen = [];
+    if (url) {
+      try { pagina = await leesKavelpagina(url, extra); }
+      catch (e) {
+        if (isToolFout(e)) live = false;
+        else if (e.apiType) throw e;
+        else waarschuwingen.push('De kavelpagina kon niet goed worden gelezen. Controleer bod en kosten zelf.');
+      }
+      if (pagina && !pagina.gevonden) { waarschuwingen.push('De kavelpagina kon niet worden geopend. Product en kosten zijn mogelijk onvolledig.'); }
+    }
 
-  setStap(2);
-  console.log('Product voor analyse:', product);
-
-  callClaude(
-    'Je bent een Nederlandse marktprijsexpert. Geef ALLEEN een geldig JSON object terug. GEEN markdown code blocks (geen ```json```), GEEN tekst ervoor of erna. Begin direct met { en eindig met }.',
-    prijzenPrompt,
-    2000
-  ).then(function(prijzenTxt) {
-    var prijzen = parseJSON(prijzenTxt);
-    if (!prijzen || !prijzen.marktplaats) throw new Error('Kon geen marktprijzen ophalen. Probeer opnieuw.');
+    setStap(2);
+    var product = bepaalProduct(extra, pagina && pagina.gevonden ? pagina : null, url);
+    var prijzen = null;
+    if (live) {
+      try { prijzen = await zoekPrijzen(product, pagina, extra, url); }
+      catch (e) { if (isToolFout(e)) live = false; else throw e; }
+    }
+    if (!live) {
+      prijzen = await schatPrijzen(product);
+      waarschuwingen.push('Live zoeken is niet beschikbaar voor je API-sleutel. De prijzen zijn een schatting van het AI-model zonder internet.');
+    }
 
     setStap(3);
+    // Kosten: eigen invoer > kavelpagina > instelling veilinghuis > standaard
+    var tarief = { opgeld: veilingInfo.opgeld, btw: veilingInfo.btw, vast: veilingInfo.vast, regeling: veilingInfo.regeling };
+    var tariefBron = veilingInfo.bron, vanPagina = [];
+    var pk = pagina && pagina.kosten;
+    if (!veilingInfo.handmatig && leesKosten && pk) {
+      if (pk.opgeld_pct != null && pk.opgeld_pct >= 0 && pk.opgeld_pct <= 50) { tarief.opgeld = pk.opgeld_pct / 100; vanPagina.push('opgeld'); }
+      if (pk.btw_pct != null && pk.btw_pct >= 0 && pk.btw_pct <= 30) { tarief.btw = pk.btw_pct / 100; vanPagina.push('btw'); }
+      if (pk.vaste_kosten != null && geldigVast(pk.vaste_kosten)) { tarief.vast = pk.vaste_kosten; vanPagina.push('vaste kosten'); }
+      if (pk.btw_regeling) { tarief.regeling = pk.btw_regeling; vanPagina.push('btw-regeling'); }
+      if (vanPagina.length) tariefBron = 'pagina';
+    }
+    var bodVanPagina = false;
+    if (!bod && pagina && pagina.huidig_bod) { bod = pagina.huidig_bod; bodVanPagina = true; huidigType = 'ander'; }
+    var naam = veilingInfo.naam;
+    if (naam === 'Onbekend' && pagina && pagina.veilinghuis) naam = pagina.veilinghuis;
 
     var mp = prijzen.marktplaats;
-
-    // Detecteer veilingsite en bijbehorende kostenstructuur
-    var kosten = null;
-    if (bod) {
-      var opgeld = veilingInfo.opgeld;
-      var btw_pct = veilingInfo.btw;
-      var totaal = bod * (1 + opgeld) * (1 + btw_pct);
-      var vk = bod * opgeld;
-      var btw = totaal - bod - vk;
-      var marge = mp.gemiddeld - totaal;
-      kosten = { bod: bod, vk: vk, btw: btw, totaal: totaal, marge: marge, site: veilingInfo.naam, opgeld_pct: Math.round(opgeld*1000)/10 };
-    }
-
-    var advies = 'twijfel', adviesReden = '', roi = 50;
-    if (kosten) {
-      var m = kosten.marge;
-      var pct = Math.round((m / mp.gemiddeld) * 100);
-      if (m > 0 && pct >= 20) { advies = 'kopen'; roi = Math.min(93, 55 + pct); }
-      else if (m < -50 || pct < -10) { advies = 'skip'; roi = Math.max(8, 50 + pct / 2); }
-      else { roi = Math.max(25, Math.min(68, 50 + pct / 2)); }
-      adviesReden = m > 0
-        ? 'Inkoopprijs ' + fmt(kosten.totaal) + ' vs MP ~' + fmt(mp.gemiddeld) + ' marge ' + fmt(m) + ' (' + pct + '% van verkoopprijs).'
-        : 'Inkoopprijs ' + fmt(kosten.totaal) + ' ligt ' + fmt(Math.abs(m)) + ' boven MP prijs van ' + fmt(mp.gemiddeld) + ' (' + pct + '%).';
-    } else {
-      var maxBodCalc = mp ? Math.round(mp.laag * 0.8 / ((1 + veilingInfo.opgeld) * (1 + veilingInfo.btw))) : null;
-      adviesReden = maxBodCalc ? 'Maximaal rendabel bieden: ' + fmt(maxBodCalc) + '.' : 'Vul het bod in voor margeberekening.';
-    }
-
-    var maxBod = mp ? Math.round(mp.laag * 0.8 / ((1 + veilingInfo.opgeld) * (1 + veilingInfo.btw))) : null;
+    var idx = url ? kavels.findIndex(function(k) { return k.url === url; }) : -1;
     var kavelData = {
-      id: Date.now(), url: url, titel: prijzen.productnaam || product,
-      veiling: veilingInfo ? veilingInfo.naam : 'Onbekend', veiling_tarief: { opgeld: veilingInfo.opgeld, btw: veilingInfo.btw }, tarief_handmatig: !!veilingInfo.handmatig, kavelnummer: kavelnr, huidig_bod: bod,
-      kosten: kosten, mp_gemiddeld: mp.gemiddeld, mp_laag: mp.laag, mp_hoog: mp.hoog,
+      id: Date.now(), url: url, titel: prijzen.productnaam || (pagina && pagina.titel) || product,
+      veiling: naam, veiling_tarief: tarief, tarief_handmatig: !!veilingInfo.handmatig, tarief_bron: tariefBron,
+      tarief_pagina_velden: vanPagina, tarief_citaat: vanPagina.length && pk ? pk.bron : '',
+      kavelnummer: (pagina && pagina.kavelnummer) || (url ? ((url.match(/\/(\d+)\/?(?:[?#]|$)/) || [])[1]) : null) || null,
+      huidig_bod: bod, bod_van_pagina: bodVanPagina,
+      mp_gemiddeld: mp.gemiddeld, mp_laag: mp.laag, mp_hoog: mp.hoog,
       ebay_gemiddeld: prijzen.ebay ? prijzen.ebay.gemiddeld : null,
-      nieuwprijs: prijzen.nieuwprijs, advies: advies, adviesReden: adviesReden,
-      roi: Math.round(roi), prijzen: prijzen, maxBod: maxBod,
-      eigen_bod: bodType === 'eigen', toegevoegd: Date.now(), status: 'klaar'
+      nieuwprijs: prijzen.nieuwprijs, prijzen: prijzen, live: prijzen.live,
+      pagina: pagina ? { titel: pagina.titel, staat: pagina.staat, staat_toelichting: pagina.staat_toelichting, aantal_stuks: pagina.aantal_stuks,
+        aantal_biedingen: pagina.aantal_biedingen, sluit: pagina.sluit, locatie: pagina.locatie, opmerkingen: pagina.opmerkingen } : null,
+      waarschuwingen: waarschuwingen,
+      eigen_bod: huidigType === 'eigen', toegevoegd: Date.now(), status: 'klaar'
     };
+    if (idx >= 0 && typeof kavels[idx].verkoopkosten === 'number') kavelData.verkoopkosten = kavels[idx].verkoopkosten;
+    herberekenKosten(kavelData);
 
-    var idx = kavels.findIndex(function(k) { return k.url === url && url; });
     if (huidigeThumb) kavelData.thumb = huidigeThumb; else if (idx >= 0 && kavels[idx].thumb) kavelData.thumb = kavels[idx].thumb;
     if (idx >= 0) kavels[idx] = kavelData; else kavels.unshift(kavelData);
     slaKavelsOp();
     updateBadge();
-    verbergStappen();
     toonAnalyseResultaat(kavelData);
     toast('Analyse opgeslagen in je overzicht', huidigeTab !== 'analyse' ? { label: 'Bekijk', fn: function() { switchTab('analyse'); } } : null);
-
-  }).catch(function(e) {
+  } catch (e) {
     console.error('Analyse fout:', e);
-    verbergStappen();
     setFase('invoer');
     toonMsg('analyse-err', vriendelijkeFout(e));
-  }).finally(function() {
+  } finally {
     setBtn('analyse-btn', 'analyse-btn-txt', false, 'Analyseer kavel');
-  });
+  }
 }
 
 // ── 5. Resultaat ────────────────────────────────────────────────────────────
@@ -1683,54 +2135,72 @@ function veilingVan(k) { return k.veiling || (k.kosten && k.kosten.site) || 'Onb
 
 function adviesRedenen(d) {
   var r = [];
-  if (partijOnbetrouwbaar(d)) r.push(['warn', 'Dit lijkt een partij van meerdere stuks' + (partijAantal(d) ? ' (ongeveer ' + partijAantal(d) + ')' : '') + '. De prijsschatting gaat uit van één product en is hier waarschijnlijk niet bruikbaar. Vul onder Prijzen controleren de opbrengst per stuk in.']);
+  if (partijOnbetrouwbaar(d)) r.push(['warn', 'Dit lijkt een partij van meerdere stuks' + (partijAantal(d) ? ' (ongeveer ' + partijAantal(d) + ')' : '') + '. De prijs geldt voor één stuk, dus het kavel is niet zonder meer te beoordelen. Controleer onder Prijzen controleren de opbrengst per stuk.']);
+  (d.waarschuwingen || []).forEach(function(w) { r.push(['warn', w]); });
   if (partijOnbetrouwbaar(d)) return r;
   var mp = d.prijzen && d.prijzen.marktplaats;
   var k = d.kosten;
-  if (k && mp && mp.gemiddeld) {
-    var m = k.marge, pct = Math.round(m / mp.gemiddeld * 100);
-    if (m > 0) r.push(['ok', 'De marktwaarde (' + fmt(mp.gemiddeld) + ') ligt boven de totale kosten (' + fmt(k.totaal) + ').']);
-    else r.push(['bad', 'De totale kosten (' + fmt(k.totaal) + ') liggen niet onder de geschatte marktwaarde (' + fmt(mp.gemiddeld) + ').']);
-    if (m > 0 && pct >= 20) r.push(['ok', 'De verwachte marge is ' + pct + '% van de verkoopprijs, boven de 20% die voor een aanrader nodig is.']);
-    else if (m > 0) r.push(['warn', 'De verwachte marge is ' + pct + '% van de verkoopprijs, onder de 20% die voor een aanrader nodig is.']);
-    else if (m < -50 || pct < -10) r.push(['bad', 'Het verwachte verlies is ' + fmt(-m) + ' (' + Math.abs(pct) + '% van de verkoopprijs).']);
+  var gem = verkoopprijsVan(d);
+  var doel = doelPct();
+  var vkst = verkoopkostenVan(d);
+  if (k && gem && k.marge != null) {
+    var m = k.marge, pctExact = m / gem * 100, pct = Math.round(pctExact);
+    if (m > 0) r.push(['ok', 'De verwachte verkoopprijs (' + fmt(gem) + ') ligt boven de totale kosten (' + fmt(k.totaal) + (vkst ? ' plus ' + fmt(vkst) + ' verkoopkosten' : '') + ').']);
+    else r.push(['bad', 'De totale kosten (' + fmt(k.totaal) + (vkst ? ' plus ' + fmt(vkst) + ' verkoopkosten' : '') + ') liggen niet onder de verwachte verkoopprijs (' + fmt(gem) + ').']);
+    if (m > 0 && pctExact >= doel - 1e-9) r.push(['ok', 'De verwachte marge is ' + pct + '% van de verkoopprijs, minstens de ' + pctTxt(doel) + '% die je als gewenste marge hebt ingesteld.']);
+    else if (m > 0) r.push(['warn', 'De verwachte marge is ' + pct + '% van de verkoopprijs, onder je gewenste marge van ' + pctTxt(doel) + '%.']);
+    else if (m < -50 || pctExact < -10) r.push(['bad', 'Het verwachte verlies is ' + fmt(-m) + ' (' + Math.abs(pct) + '% van de verkoopprijs).']);
     else r.push(['warn', 'De marge is negatief maar klein (' + fmtS(m) + ').']);
-    if (mp.laag && !(d.controle && !d.controle.mp_laag)) {
-      var lm = mp.laag - k.totaal;
-      if (lm > 0) r.push(['ok', 'Ook bij de laagste verwachte prijs (' + fmt(mp.laag) + ') blijft er winst over.']);
-      else r.push(['warn', 'Bij de laagste verwachte prijs (' + fmt(mp.laag) + ') is er geen winst meer (' + fmtS(lm) + ').']);
+    if (mp && mp.laag && !(d.controle && !d.controle.mp_laag)) {
+      var laag = d.controle ? d.controle.mp_laag : mp.laag;
+      var lm = laag - k.totaal - vkst;
+      if (lm > 0) r.push(['ok', 'Ook bij de laagste verwachte prijs (' + fmt(laag) + ') blijft er winst over (' + fmtS(lm) + ').']);
+      else r.push(['warn', 'Bij de laagste verwachte prijs (' + fmt(laag) + ') is er geen winst meer (' + fmtS(lm) + ').']);
     }
   } else if (!k) {
-    r.push(['warn', 'Er is nog geen bod ingevuld, dus de marge kan niet worden berekend.']);
-    if (d.maxBod) r.push(['info', 'Tot ' + fmt(d.maxBod) + ' blijven de totale kosten onder 80% van de laagste verwachte prijs.']);
+    r.push(['warn', 'Er is nog geen bod bekend, dus de marge kan niet worden berekend.']);
   }
+  if (d.maxBod != null) {
+    r.push(['info', d.maxBod > 0
+      ? 'Tot een bod van ' + fmt(d.maxBod) + ' houd je minstens ' + pctTxt(doel) + '% marge over. Bij ' + fmt(d.breakEvenBod) + ' speel je quitte.'
+      : 'Ook bij een heel laag bod blijft er na alle kosten geen ' + pctTxt(doel) + '% marge over.']);
+  }
+  if (d.tarief_bron === 'pagina') r.push(['ok', 'De veilingkosten (' + (d.tarief_pagina_velden || []).join(', ') + ') zijn van de kavelpagina gelezen.']);
+  else if (d.tarief_bron === 'handmatig') r.push(['info', 'De veilingkosten zijn door jou ingesteld.']);
+  else if (d.tarief_bron === 'standaard') r.push(['warn', 'De veilingkosten stonden niet op de kavelpagina; er is gerekend met de standaardwaarde. Controleer het opgeld bij de veiling.']);
+  else if (d.tarief_bron === 'huis') r.push(['warn', 'De veilingkosten stonden niet op de kavelpagina; er is gerekend met jouw instelling voor ' + veilingVan(d) + '.']);
   if (d.controle) {
-    r.push(['ok', 'De marktwaarde komt uit jouw controle van vergelijkbare advertenties (' + new Date(d.controle.op).toLocaleDateString('nl-NL') + ').']);
-    if (d.prijzen && d.prijzen.nieuwprijs && mp && mp.gemiddeld >= d.prijzen.nieuwprijs) r.push(['warn', 'De tweedehands prijs ligt niet onder de nieuwprijs. Controleer beide bedragen.']);
-    r.push(['info', d.controle.nieuw ? 'De eBay-prijs blijft een schatting van het AI-model.' : 'Nieuwprijs en eBay-prijs blijven schattingen van het AI-model.']);
+    r.push(['ok', 'De verkoopprijs komt uit jouw controle van vergelijkbare advertenties (' + new Date(d.controle.op).toLocaleDateString('nl-NL') + ').']);
+    if (d.prijzen && d.prijzen.nieuwprijs && gem >= d.prijzen.nieuwprijs) r.push(['warn', 'De tweedehands prijs ligt niet onder de nieuwprijs. Controleer beide bedragen.']);
   } else if (mp) {
-    if (mp.vertrouwen === 'hoog') r.push(['ok', 'De marktprijs wordt door de analyse als betrouwbaar ingeschat.']);
-    else if (mp.vertrouwen === 'middel') r.push(['warn', 'De marktprijs is indicatief: het model is er matig zeker van.']);
-    else r.push(['warn', 'De marktprijs is onzeker: het model heeft weinig houvast.']);
-    if (mp.hoog && mp.laag && mp.gemiddeld && (mp.hoog - mp.laag) / mp.gemiddeld > 0.6) r.push(['warn', 'De verwachte prijs loopt sterk uiteen (' + fmt(mp.laag) + ' tot ' + fmt(mp.hoog) + ').']);
-    if (d.prijzen && d.prijzen.nieuwprijs && mp.gemiddeld >= d.prijzen.nieuwprijs) r.push(['warn', 'De tweedehands prijs ligt niet onder de nieuwprijs. Controleer beide schattingen.']);
+    if (mp.vertrouwen === 'hoog') r.push(['ok', 'Er zijn genoeg vergelijkbare advertenties gevonden; de verkoopprijs is goed onderbouwd.']);
+    else if (mp.vertrouwen === 'middel') r.push(['warn', 'De verkoopprijs is indicatief: er zijn maar enkele vergelijkbare advertenties.']);
+    else r.push(['warn', 'De verkoopprijs is onzeker: er is weinig vergelijkbaar aanbod gevonden.']);
+    if (mp.hoog && mp.laag && mp.gemiddeld && (mp.hoog - mp.laag) / mp.gemiddeld > 0.6) r.push(['warn', 'De prijzen lopen sterk uiteen (' + fmt(mp.laag) + ' tot ' + fmt(mp.hoog) + ').']);
+    ((d.prijzen && d.prijzen.controles) || []).forEach(function(c) { r.push(['warn', c]); });
   }
-  if (!d.controle) r.push(['info', 'Prijzen zijn een schatting van het AI-model en niet live opgehaald. Controleer vergelijkbare advertenties voordat je biedt.']);
+  if (!d.controle) {
+    if (d.prijzen && d.prijzen.live) r.push(['info', 'Prijzen zijn live opgezocht op ' + new Date(d.prijzen.opgehaald_op).toLocaleDateString('nl-NL') + '. Open een paar van de advertenties hieronder voordat je biedt.']);
+    else r.push(['info', 'Prijzen zijn een schatting van het AI-model en niet live opgehaald. Controleer vergelijkbare advertenties voordat je biedt.']);
+  }
   return r;
 }
 
 function kostenBalk(k, mpGem) {
-  var schaal = Math.max(k.totaal, mpGem);
+  var vkst = k.verkoopkosten || 0;
+  var uit = k.totaal + vkst;
+  var schaal = Math.max(uit, mpGem);
   var p = function(v) { return (v / schaal * 100).toFixed(2); };
   var pos = mpGem / schaal * 100;
   var stand = pos < 18 ? 'l' : pos > 82 ? 'r' : '';
-  var h = '<div class="fbar" role="img" aria-label="Totale kosten ' + fmt(k.totaal) + ' tegenover marktwaarde ' + fmt(mpGem) + '">';
-  h += '<div class="fbar-mark ' + stand + '" style="left:' + pos.toFixed(2) + '%">Marktwaarde ' + fmt(mpGem) + '</div>';
+  var h = '<div class="fbar" role="img" aria-label="Totale kosten ' + fmt(uit) + ' tegenover verwachte verkoopprijs ' + fmt(mpGem) + '">';
+  h += '<div class="fbar-mark ' + stand + '" style="left:' + pos.toFixed(2) + '%">Verkoopprijs ' + fmt(mpGem) + '</div>';
   h += '<div class="fbar-line" style="left:' + pos.toFixed(2) + '%"></div>';
   h += '<div class="fbar-track">';
   h += '<div class="s-bod" style="width:' + p(k.bod) + '%"></div>';
-  h += '<div class="s-vk" style="width:' + p(k.vk) + '%"></div>';
+  h += '<div class="s-vk" style="width:' + p(k.vk + (k.vast || 0)) + '%"></div>';
   h += '<div class="s-btw" style="width:' + p(k.btw) + '%"></div>';
+  if (vkst) h += '<div class="s-vkst" style="width:' + p(vkst) + '%"></div>';
   if (k.marge > 0) h += '<div class="s-winst" style="width:' + p(k.marge) + '%"></div>';
   else if (k.marge < 0) h += '<div class="s-verlies" style="left:' + pos.toFixed(2) + '%;width:' + p(-k.marge) + '%"></div>';
   h += '</div></div>';
@@ -1738,6 +2208,7 @@ function kostenBalk(k, mpGem) {
     '<span><i style="background:var(--seg-bod)"></i>Bod</span>' +
     '<span><i style="background:var(--seg-vk)"></i>Veilingkosten</span>' +
     '<span><i style="background:var(--seg-btw)"></i>Btw</span>' +
+    (vkst ? '<span><i style="background:var(--seg-vkst)"></i>Verkoopkosten</span>' : '') +
     (k.marge > 0 ? '<span><i style="background:var(--pos)"></i>Verwachte winst</span>' : '') +
     (k.marge < 0 ? '<span><i style="background:var(--neg)"></i>Verwacht verlies</span>' : '') +
     '</div>';
@@ -1773,6 +2244,8 @@ function korteZoekterm(t) {
 }
 // null = geen partij, 0 = partij met onbekend aantal, anders het aantal stuks
 function partijAantal(d) {
+  if (d.prijzen && d.prijzen.partij && d.prijzen.partij.aantal > 1) return d.prijzen.partij.aantal;
+  if (d.pagina && d.pagina.aantal_stuks > 1) return d.pagina.aantal_stuks;
   var tekst = (d.titel || '') + ' ' + naamUitUrl(d.url || '');
   var m = tekst.match(/\b(\d{2,})\s*(stuks|stuk|st|pcs|pieces|artikelen|items)\b/i);
   if (m) return parseInt(m[1], 10);
@@ -1806,7 +2279,7 @@ function controleKaart(d, idx) {
   var val = function(v) { return v ? esc(String(v)) : ''; };
   var h = '<div class="card" id="controle-kaart"><div class="card-h"><h2>Prijzen controleren</h2>' +
     (c ? '<span class="conf pos"><i></i>Gecontroleerd op ' + new Date(c.op).toLocaleDateString('nl-NL') + '</span>' : '<span class="conf warn"><i></i>Nog niet gecontroleerd</span>') + '</div>';
-  h += '<p class="card-sub">De prijzen in deze analyse zijn schattingen van het AI-model. Zoek vergelijkbare advertenties op en vul het gemiddelde in. Marge en advies worden dan opnieuw berekend.</p>';
+  h += '<p class="card-sub">' + (d.prijzen && d.prijzen.live ? 'De prijzen zijn live opgezocht, maar advertenties kunnen afwijken van dit kavel.' : 'De prijzen in deze analyse zijn schattingen van het AI-model.') + ' Wil je zeker zijn, zoek dan zelf vergelijkbare advertenties op en vul het gemiddelde in. Marge en advies worden dan opnieuw berekend.</p>';
   var kort = korteZoekterm(d.titel || '');
   h += '<div class="field"><label for="ctl-zoek">Zoekterm</label><input class="input" id="ctl-zoek" type="text" value="' + esc(kort) + '"><div class="help">' +
     (kort !== (d.titel || '').trim() ? 'De titel is ingekort, want lange titels vinden op Marktplaats vaak niets. Pas de zoekterm aan als dat nodig is. ' : '') +
@@ -1820,6 +2293,7 @@ function controleKaart(d, idx) {
   var pa = partijAantal(d);
   var isPartij = c ? !!c.partij : pa !== null;
   var pc = (c && c.partij) || {};
+  if (!c && d.prijzen && d.prijzen.partij && d.prijzen.partij.prijs_per_stuk) pc = { aantal: d.prijzen.partij.aantal, per_stuk: d.prijzen.partij.prijs_per_stuk };
   h += '<label class="ctl-check"><input type="checkbox" id="ctl-partij" onchange="togglePartij()"' + (isPartij ? ' checked' : '') + '> Dit kavel bestaat uit meerdere stuks (partij)</label>';
   h += '<div id="ctl-partijvel" style="display:' + (isPartij ? 'block' : 'none') + '"><div class="note">' + ic('info') + '<span>Zoek een paar losse stuks uit deze partij op en kijk wat ze gemiddeld opbrengen. De marktwaarde van de partij is dan aantal &times; opbrengst per stuk &times; het deel dat je verwacht te verkopen.</span></div>' +
     '<div class="ctl-grid">' +
@@ -1831,7 +2305,7 @@ function controleKaart(d, idx) {
     '<div><label class="ctl-l" for="ctl-gem">Marktplaats gemiddeld</label><div class="money"><span>&euro;</span><input class="input" id="ctl-gem" type="text" inputmode="decimal" placeholder="bijv. 1250" value="' + val(c && c.mp_gem) + '"></div></div>' +
     '<div><label class="ctl-l" for="ctl-laag">Laagste vergelijkbare <span class="opt">(optioneel)</span></label><div class="money"><span>&euro;</span><input class="input" id="ctl-laag" type="text" inputmode="decimal" value="' + val(c && c.mp_laag) + '"></div></div>' +
     '<div><label class="ctl-l" for="ctl-nieuw">Nieuwprijs <span class="opt">(optioneel)</span></label><div class="money"><span>&euro;</span><input class="input" id="ctl-nieuw" type="text" inputmode="decimal" value="' + val(c && c.nieuw) + '"></div></div></div></div>';
-  h += '<div class="help">Zonder laagste prijs rekent het maximaal rendabele bod met 80% van je gemiddelde.</div>';
+  h += '<div class="help">Het maximale bod rekent met je gecontroleerde gemiddelde en je gewenste marge van ' + pctTxt(doelPct()) + '%.' + (pc.per_stuk && !c ? ' De opbrengst per stuk is voorgesteld door de analyse; controleer hem.' : '') + '</div>';
   h += '<div class="msg err" id="ctl-err" role="alert"></div>';
   h += '<div class="ctl-actions"><button class="btn btn-primary" onclick="bewaarControle(' + idx + ')">' + ic('check') + 'Opslaan en herberekenen</button>' +
     (c ? '<button class="btn btn-secondary" onclick="herstelAiSchatting(' + idx + ')">' + ic('undo') + 'Terug naar AI-schatting</button>' : '') + '</div></div>';
@@ -1907,6 +2381,14 @@ function herstelAiSchatting(idx) {
   toast('Teruggezet naar de AI-schatting');
 }
 
+function bronLink(url, tekst, bevestigd) {
+  var u = veiligeUrl(url);
+  if (!u) return esc(tekst);
+  return '<a href="' + esc(u) + '" target="_blank" rel="noopener">' + esc(tekst) + '</a>' + (bevestigd === false ? ' <span class="tag-warn" title="Deze link kwam niet letterlijk voor in de opgehaalde resultaten">niet bevestigd</span>' : '');
+}
+function domeinVan(u) { try { return new URL(u).hostname.replace(/^www\./, ''); } catch (e) { return ''; } }
+var TARIEF_BRON_TXT = { pagina: 'van de kavelpagina', handmatig: 'door jou ingesteld', huis: 'jouw instelling voor dit veilinghuis', standaard: 'standaardwaarde, niet geverifieerd' };
+
 function toonAnalyseResultaat(d, behoudScroll) {
   var mp = d.prijzen && d.prijzen.marktplaats ? d.prijzen.marktplaats : null;
   var eb = d.prijzen && d.prijzen.ebay ? d.prijzen.ebay : null;
@@ -1915,6 +2397,8 @@ function toonAnalyseResultaat(d, behoudScroll) {
   var idx = kavels.indexOf(d);
   var conf = vertrouwenInfo(mp ? mp.vertrouwen : null);
   var url = veiligeUrl(d.url);
+  var gem = verkoopprijsVan(d);
+  var pg = d.pagina || {};
 
   var h = '<div class="res-bar"><button class="btn btn-ghost btn-sm" onclick="switchTab(\'overzicht\')">' + ic('back') + 'Overzicht</button><div class="grp">';
   if (idx >= 0) h += '<button class="btn btn-secondary btn-sm" onclick="heranalyseer(' + idx + ')">' + ic('refresh') + 'Opnieuw analyseren</button>';
@@ -1925,57 +2409,66 @@ function toonAnalyseResultaat(d, behoudScroll) {
   h += '<div class="card hero v-' + a.key + '">';
   h += '<div class="hero-top"><span class="pill pill-lg pill-' + a.key + '">' + a.label + '</span>';
   if (d.controle) h += '<span class="conf pos"><i></i>Prijzen gecontroleerd</span>';
+  else if (d.prijzen && d.prijzen.live) h += '<span class="conf pos"><i></i>Live opgezocht</span>';
+  else if (d.prijzen) h += '<span class="conf warn"><i></i>Schatting zonder internet</span>';
   h += '<span class="hero-meta">' + esc(veilingVan(d)) + (d.kavelnummer ? ' &middot; Kavel ' + esc(d.kavelnummer) : '');
+  if (pg.sluit) h += ' &middot; Sluit ' + esc(pg.sluit);
+  if (pg.aantal_biedingen != null) h += ' &middot; ' + pg.aantal_biedingen + (pg.aantal_biedingen === 1 ? ' bod' : ' biedingen');
   if (url) h += ' &middot; <a href="' + esc(url) + '" target="_blank" rel="noopener">Bekijk kavel</a>';
   h += '</span></div>';
   h += '<h2>' + esc(d.titel || 'Onbekend product') + '</h2>';
-  h += '<p class="uitleg">' + (ond ? 'Dit lijkt een partij van meerdere stuks' + (partijAantal(d) ? ' (ongeveer ' + partijAantal(d) + ')' : '') + '. De AI-schatting gaat uit van één product, dus er is nog geen betrouwbaar advies. Vul hieronder bij Prijzen controleren de opbrengst per stuk in.' : d.kosten ? esc(a.tekst) : 'Er is nog geen bod ingevuld, dus de marge kan niet worden berekend.') + '</p>';
+  if (pg.staat && pg.staat !== 'onbekend') h += '<p class="hero-meta" style="margin-top:4px">Staat volgens de veiling: ' + esc(pg.staat) + (pg.staat_toelichting ? ' &middot; ' + esc(pg.staat_toelichting) : '') + '</p>';
+  h += '<p class="uitleg">' + (ond ? 'Dit lijkt een partij van meerdere stuks' + (partijAantal(d) ? ' (ongeveer ' + partijAantal(d) + ')' : '') + '. De prijzen gelden voor één stuk, dus er is nog geen betrouwbaar advies. Controleer hieronder bij Prijzen controleren de opbrengst per stuk.' : d.kosten ? esc(a.tekst) : 'Er is nog geen bod bekend, dus de marge kan niet worden berekend. Het maximale bod staat hieronder.') + '</p>';
   if (d.adviesReden && !ond) h += '<p class="reden">' + esc(d.adviesReden) + '</p>';
   h += '<div class="hero-kpis">';
-  h += '<div class="kpi"><div class="kpi-l">Maximaal rendabel bod</div><div class="kpi-v">' + (d.maxBod && !ond ? fmt(d.maxBod) : '-') + '</div><div class="kpi-s">' + (d.controle && !d.controle.mp_laag ? 'Totale kosten blijven onder 80% van je gecontroleerde gemiddelde' : 'Totale kosten blijven onder 80% van de laagste prijs') + '</div></div>';
+  var maxTxt = ond || d.maxBod == null ? '-' : d.maxBod > 0 ? fmt(d.maxBod) : 'Niet rendabel';
+  h += '<div class="kpi"><div class="kpi-l">Maximaal bod</div><div class="kpi-v">' + maxTxt + '</div><div class="kpi-s">' +
+    (ond || d.maxBod == null ? 'Nog niet te berekenen' : 'Voor ' + pctTxt(doelPct()) + '% marge &middot; quitte bij ' + fmt(d.breakEvenBod)) + '</div></div>';
   h += '<div class="kpi"><div class="kpi-l">Handelspotentieel</div><div class="kpi-v">' + (ond ? '-' : (d.roi || 0) + '<span style="font-size:13px;font-weight:500;color:var(--ink-3)"> / 100</span>') + '</div>' + (ond ? '<div class="kpi-s">Pas beschikbaar na controle van de prijs</div>' : '<div class="meter"><i data-w="' + (d.roi || 0) + '"></i></div>') + '</div>';
-  h += '<div class="kpi"><div class="kpi-l">Betrouwbaarheid prijzen</div><div class="kpi-v"><span class="conf ' + (d.controle ? 'pos' : ond ? 'warn' : conf.cls) + '" style="font-size:20px;font-weight:700;color:var(--ink)"><i></i>' + (d.controle ? 'Gecontroleerd' : ond ? 'Niet bruikbaar' : conf.label) + '</span></div><div class="kpi-s">' + (d.controle ? 'Marktprijs door jou nagekeken' : ond ? 'Schatting geldt voor \u00e9\u00e9n product' : 'Zekerheid van het AI-model, geen garantie') + '</div></div>';
+  var aantalAdv = d.prijzen && d.prijzen.tweedehands ? d.prijzen.tweedehands.length : 0;
+  h += '<div class="kpi"><div class="kpi-l">Betrouwbaarheid prijzen</div><div class="kpi-v"><span class="conf ' + (d.controle ? 'pos' : ond ? 'warn' : conf.cls) + '" style="font-size:20px;font-weight:700;color:var(--ink)"><i></i>' + (d.controle ? 'Gecontroleerd' : ond ? 'Niet bruikbaar' : conf.label) + '</span></div><div class="kpi-s">' +
+    (d.controle ? 'Marktprijs door jou nagekeken' : ond ? 'Prijs geldt voor één stuk' : d.prijzen && d.prijzen.live ? aantalAdv + ' vergelijkbare advertenties gevonden' : 'Schatting van het AI-model, geen live data') + '</div></div>';
   h += '</div></div>';
 
   // Financiële analyse
+  var vkst = verkoopkostenVan(d);
   h += '<div class="card"><div class="card-h"><h2>Financiële analyse</h2>';
   h += '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">';
   if (d.kosten && d.kosten.site) h += '<span class="kc-meta">' + esc(d.kosten.site) + ' &middot; ' + (d.eigen_bod ? 'Mijn bod' : 'Huidig bod') + '</span>';
-  if (idx >= 0) h += '<button class="btn btn-secondary btn-sm" onclick="pasTariefAan(' + idx + ')">' + ic('percent') + 'Percentages aanpassen</button>';
-  h += '</div>';
-  h += '</div>';
-  if (d.kosten && mp && !ond) {
-    var k = d.kosten, pct = mp.gemiddeld ? Math.round(k.marge / mp.gemiddeld * 100) : 0;
+  if (idx >= 0) h += '<button class="btn btn-secondary btn-sm" onclick="pasTariefAan(' + idx + ')">' + ic('percent') + 'Kosten aanpassen</button>';
+  h += '</div></div>';
+  function kostenRijen(k) {
+    var t = tariefVan(d);
+    var r = '<tr><td>' + (d.eigen_bod ? 'Mijn bod' : 'Huidig bod') + (d.bod_van_pagina ? '<small>Van de kavelpagina gelezen</small>' : '') + '</td><td>' + fmtC(k.bod) + '</td></tr>';
+    r += '<tr class="sub"><td>+ Veilingkosten (' + pctTxt(t.opgeld * 100) + '% opgeld)<small>' + esc(TARIEF_BRON_TXT[d.tarief_bron] || 'instelling') + '</small></td><td>' + fmtC(k.vk) + '</td></tr>';
+    if (k.vast) r += '<tr class="sub"><td>+ Vaste kosten per kavel</td><td>' + fmtC(k.vast) + '</td></tr>';
+    r += '<tr class="sub"><td>+ Btw' + (t.regeling === 'geen' ? '' : ' (' + pctTxt(t.btw * 100) + '%)') + '<small>' + esc(REGELINGEN[t.regeling]) + '</small></td><td>' + fmtC(k.btw) + '</td></tr>';
+    r += '<tr class="tot"><td>= Totale kosten</td><td>' + fmtC(k.totaal) + '</td></tr>';
+    return r;
+  }
+  if (d.kosten && gem && !ond) {
+    var k = d.kosten, pct = Math.round(k.marge / gem * 100);
     var margeCls = k.marge > 0 ? 'pos' : k.marge < 0 ? 'neg' : '';
     h += '<div class="metrics">';
-    h += '<div class="metric"><div class="metric-l">Marktwaarde</div><div class="metric-v">' + fmt(mp.gemiddeld) + '</div><div class="metric-s">' + (d.controle && d.controle.partij ? d.controle.partij.aantal + ' × ' + fmt(d.controle.partij.per_stuk) + (d.controle.partij.verkocht_pct ? ' × ' + d.controle.partij.verkocht_pct + '%' : '') : 'Marktplaats gemiddeld') + '</div></div>';
+    h += '<div class="metric"><div class="metric-l">Verwachte verkoop</div><div class="metric-v">' + fmt(gem) + '</div><div class="metric-s">' + (d.controle && d.controle.partij ? d.controle.partij.aantal + ' × ' + fmt(d.controle.partij.per_stuk) + (d.controle.partij.verkocht_pct ? ' × ' + d.controle.partij.verkocht_pct + '%' : '') : d.controle ? 'Door jou gecontroleerd' : 'Tweedehands NL/BE') + '</div></div>';
     h += '<div class="metric"><div class="metric-l">Totale kosten</div><div class="metric-v">' + fmt(k.totaal) + '</div><div class="metric-s">Incl. veilingkosten en btw</div></div>';
-    h += '<div class="metric"><div class="metric-l">Geschatte marge</div><div class="metric-v ' + margeCls + '">' + fmtS(k.marge) + '</div><div class="metric-s">Marktwaarde min kosten</div></div>';
-    h += '<div class="metric"><div class="metric-l">Marge</div><div class="metric-v ' + margeCls + '">' + pct + '%</div><div class="metric-s">Van de verkoopprijs</div></div>';
+    h += '<div class="metric"><div class="metric-l">Geschatte marge</div><div class="metric-v ' + margeCls + '">' + fmtS(k.marge) + '</div><div class="metric-s">' + (vkst ? 'Na ' + fmt(vkst) + ' verkoopkosten' : 'Verkoop min kosten') + '</div></div>';
+    h += '<div class="metric"><div class="metric-l">Marge</div><div class="metric-v ' + margeCls + '">' + pct + '%</div><div class="metric-s">Van de verkoopprijs (doel ' + pctTxt(doelPct()) + '%)</div></div>';
     h += '</div>';
-    h += kostenBalk(k, mp.gemiddeld);
-    var btwPct = (k.bod + k.vk) ? Math.round(k.btw / (k.bod + k.vk) * 100) : 21;
-    h += '<table class="ctable"><tbody>';
-    h += '<tr><td>' + (d.eigen_bod ? 'Mijn bod' : 'Huidig bod') + '</td><td>' + fmt(k.bod) + '</td></tr>';
-    h += '<tr class="sub"><td>+ Veilingkosten (' + pctTxt(k.opgeld_pct != null ? k.opgeld_pct : 17) + '%)</td><td>' + fmt(k.vk) + '</td></tr>';
-    h += '<tr class="sub"><td>+ Btw (' + btwPct + '% over bod en veilingkosten)</td><td>' + fmt(k.btw) + '</td></tr>';
-    h += '<tr class="tot"><td>= Totale kosten</td><td>' + fmt(k.totaal) + '</td></tr>';
-    h += '<tr class="sub"><td>Marktwaarde (Marktplaats gemiddeld)</td><td>' + fmt(mp.gemiddeld) + '</td></tr>';
-    h += '<tr class="res"><td>Geschatte marge</td><td class="' + margeCls + '">' + fmtS(k.marge) + '</td></tr>';
+    h += kostenBalk(k, gem);
+    h += '<table class="ctable"><tbody>' + kostenRijen(k);
+    h += '<tr class="sub"><td>Verwachte verkoopprijs</td><td>' + fmtC(gem) + '</td></tr>';
+    if (vkst) h += '<tr class="sub"><td>&minus; Verkoopkosten<small>Verzending, platform- of andere kosten bij doorverkoop</small></td><td>' + fmtC(vkst) + '</td></tr>';
+    h += '<tr class="res"><td>Geschatte marge</td><td class="' + margeCls + '">' + fmtSC(k.marge) + '</td></tr>';
     h += '</tbody></table>';
-  } else if (d.kosten && ond) {
-    var kk = d.kosten, btwP = (kk.bod + kk.vk) ? Math.round(kk.btw / (kk.bod + kk.vk) * 100) : 21;
-    h += '<table class="ctable"><tbody>';
-    h += '<tr><td>' + (d.eigen_bod ? 'Mijn bod' : 'Huidig bod') + '</td><td>' + fmt(kk.bod) + '</td></tr>';
-    h += '<tr class="sub"><td>+ Veilingkosten (' + pctTxt(kk.opgeld_pct != null ? kk.opgeld_pct : 17) + '%)</td><td>' + fmt(kk.vk) + '</td></tr>';
-    h += '<tr class="sub"><td>+ Btw (' + btwP + '% over bod en veilingkosten)</td><td>' + fmt(kk.btw) + '</td></tr>';
-    h += '<tr class="tot"><td>= Totale kosten</td><td>' + fmt(kk.totaal) + '</td></tr>';
-    h += '</tbody></table>';
-    h += '<div class="note">' + ic('alert') + '<span>Marktwaarde en marge worden pas getoond nadat je onder Prijzen controleren de opbrengst per stuk hebt ingevuld.</span></div>';
+  } else if (d.kosten) {
+    h += '<table class="ctable"><tbody>' + kostenRijen(d.kosten) + '</tbody></table>';
+    h += '<div class="note">' + ic('alert') + '<span>' + (ond ? 'Verkoopprijs en marge worden pas getoond nadat je onder Prijzen controleren de opbrengst per stuk hebt ingevuld.' : 'Er is geen verkoopprijs bekend, dus de marge kan niet worden berekend.') + '</span></div>';
   } else {
-    h += '<div class="empty small" style="border-style:solid"><h3>Nog geen bod ingevuld</h3><p>Vul een bod in om de totale kosten en de marge te zien.' + (d.maxBod ? ' Bieden tot ' + fmt(d.maxBod) + ' is volgens de berekening rendabel.' : '') + '</p>' +
+    h += '<div class="empty small" style="border-style:solid"><h3>Nog geen bod bekend</h3><p>Vul een bod in om de totale kosten en de marge te zien.' + (d.maxBod > 0 ? ' Bied maximaal ' + fmt(d.maxBod) + ' voor ' + pctTxt(doelPct()) + '% marge.' : '') + '</p>' +
          (idx >= 0 ? '<button class="btn btn-primary" onclick="heranalyseer(' + idx + ')">Bod invullen</button>' : '') + '</div>';
   }
+  if (d.tarief_citaat) h += '<div class="note">' + ic('info') + '<span>Kosten op de kavelpagina: ' + esc(d.tarief_citaat) + '</span></div>';
   h += '</div>';
 
   h += controleKaart(d, idx);
@@ -1986,25 +2479,49 @@ function toonAnalyseResultaat(d, behoudScroll) {
     var icn = r[0] === 'ok' ? 'check' : r[0] === 'bad' ? 'x' : r[0] === 'warn' ? 'alert' : 'info';
     h += '<li class="' + r[0] + '"><span class="wi">' + ic(icn) + '</span><span>' + esc(r[1]) + '</span></li>';
   });
-  h += '</ul><div class="note">' + ic('info') + '<span>Dit advies is een berekende inschatting en geen garantie. De uitkomst hangt af van de geschatte marktprijzen en de werkelijke staat van het product.</span></div></div>';
+  h += '</ul><div class="note">' + ic('info') + '<span>Dit advies is een berekende inschatting en geen garantie. De uitkomst hangt af van de gevonden marktprijzen en de werkelijke staat van het product.</span></div></div>';
 
   // Marktprijzen
   if (d.prijzen) {
-    h += '<div class="card"><div class="card-h"><h2>Marktprijzen</h2></div>';
-    if (ond) h += '<div class="note" style="margin:0 0 14px">' + ic('alert') + '<span>Deze prijzen gelden voor één product, niet voor de hele partij.</span></div>';
+    var pr = d.prijzen;
+    h += '<div class="card"><div class="card-h"><h2>Marktprijzen</h2>' + (pr.live ? '<span class="kc-meta">Opgezocht op ' + new Date(pr.opgehaald_op).toLocaleString('nl-NL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) + '</span>' : '') + '</div>';
+    if (ond) h += '<div class="note" style="margin:0 0 14px">' + ic('alert') + '<span>Deze prijzen gelden voor één stuk, niet voor de hele partij.</span></div>';
     h += '<div class="prices-strip">';
-    if (d.prijzen.nieuwprijs) h += '<div class="ps"><div class="ps-l">Nieuwprijs</div><div class="ps-v">' + fmt(d.prijzen.nieuwprijs) + '</div><div class="ps-s">' + esc(d.prijzen.nieuwprijs_bron || '') + '</div></div>';
-    if (mp) h += '<div class="ps"><div class="ps-l">Tweedehands (Marktplaats)</div><div class="ps-v">' + fmt(mp.gemiddeld) + '</div><div class="ps-s">' + (d.controle ? 'Door jou gecontroleerd' : fmt(mp.laag) + ' tot ' + fmt(mp.hoog)) + '</div></div>';
-    if (eb) h += '<div class="ps"><div class="ps-l">eBay</div><div class="ps-v">' + fmt(eb.gemiddeld) + '</div><div class="ps-s">' + fmt(eb.laag) + ' tot ' + fmt(eb.hoog) + '</div></div>';
-    h += '</div></div>';
+    h += '<div class="ps"><div class="ps-l">Nieuwprijs</div><div class="ps-v">' + (pr.nieuwprijs ? fmt(pr.nieuwprijs) : '-') + '</div><div class="ps-s">' +
+      (pr.nieuwprijs_url ? bronLink(pr.nieuwprijs_url, pr.nieuwprijs_bron || domeinVan(pr.nieuwprijs_url), pr.live ? pr.nieuwprijs_bevestigd : undefined) : esc(pr.nieuwprijs_bron || '')) + '</div></div>';
+    if (mp) h += '<div class="ps"><div class="ps-l">Tweedehands (Marktplaats / 2dehands)</div><div class="ps-v">' + fmt(mp.gemiddeld) + '</div><div class="ps-s">' + (d.controle ? 'Door jou gecontroleerd' : (mp.laag ? fmt(mp.laag) + ' tot ' + fmt(mp.hoog) : 'Verwachte verkoopprijs')) + '</div></div>';
+    if (eb) h += '<div class="ps"><div class="ps-l">eBay</div><div class="ps-v">' + fmt(eb.gemiddeld) + '</div><div class="ps-s">' + (eb.laag ? fmt(eb.laag) + ' tot ' + fmt(eb.hoog) : '') + '</div></div>';
+    h += '</div>';
+    if (pr.toelichting) h += '<div class="tip">' + esc(pr.toelichting) + '</div>';
+    if (pr.tweedehands && pr.tweedehands.length) {
+      h += '<h3 style="font-size:15px;margin:18px 0 6px">Gevonden advertenties</h3><table class="ctable adv"><tbody>';
+      pr.tweedehands.forEach(function(x) {
+        h += '<tr><td>' + bronLink(x.url, x.titel || x.platform || 'Advertentie', pr.live ? x.bevestigd : undefined) +
+          '<small>' + esc([x.platform, x.soort === 'verkocht' ? 'verkocht' : 'vraagprijs', x.staat].filter(Boolean).join(' · ')) + '</small></td><td>' + fmt(x.prijs) + '</td></tr>';
+      });
+      h += '</tbody></table>';
+      if (pr.mediaan_advertenties) h += '<div class="help">Mediaan van deze advertenties: ' + fmt(pr.mediaan_advertenties) + '. Vraagprijzen liggen meestal hoger dan wat er echt betaald wordt.</div>';
+    }
+    h += '</div>';
     h += '<div class="pgrid">';
-    if (mp) h += platformKaart('Marktplaats', mp, 'Zoekwoorden', mp.zoekwoorden, d.controle);
+    if (mp) h += platformKaart('Tweedehands NL/BE', mp, 'Zoekwoorden', mp.zoekwoorden, d.controle);
     if (eb) h += platformKaart('eBay', eb, 'Keywords', eb.keywords);
     h += '</div>';
-    if (d.prijzen.aandachtspunten && d.prijzen.aandachtspunten.length) {
+    var punten = (pr.aandachtspunten || []).concat(pg.opmerkingen || []);
+    if (punten.length) {
       h += '<div class="card"><div class="card-h"><h2>Let op</h2></div><ul class="attn">';
-      d.prijzen.aandachtspunten.forEach(function(p) { h += '<li>' + esc(p) + '</li>'; });
+      punten.forEach(function(p) { h += '<li>' + esc(p) + '</li>'; });
       h += '</ul></div>';
+    }
+    if ((pr.bronnen && pr.bronnen.length) || (pr.zoekvragen && pr.zoekvragen.length)) {
+      h += '<details class="faq" style="margin-top:16px"><summary>Geraadpleegde bronnen (' + (pr.bronnen || []).length + ')</summary><div class="fb">';
+      if (pr.zoekvragen && pr.zoekvragen.length) h += '<p>Zoekopdrachten: ' + pr.zoekvragen.map(function(q) { return '&ldquo;' + esc(q) + '&rdquo;'; }).join(', ') + '</p>';
+      if (pr.bronnen && pr.bronnen.length) {
+        h += '<ul>';
+        pr.bronnen.forEach(function(b) { h += '<li>' + bronLink(b.url, b.titel || domeinVan(b.url)) + (b.opgehaald ? ' <span class="opt">(pagina gelezen)</span>' : '') + '</li>'; });
+        h += '</ul>';
+      }
+      h += '</div></details>';
     }
   }
 
@@ -2089,7 +2606,7 @@ function maakKavelKaart(k, i, opts) {
     else if (c) h += '<span class="conf ' + c.cls + '"><i></i>Betrouwbaarheid ' + c.label.toLowerCase() + '</span>';
     h += '</div>';
   } else if (!opts.gewonnen && k.maxBod) {
-    h += '<div class="kc-result"><span class="kc-meta">Geen bod ingevuld &middot; max. rendabel bod <b>' + fmt(k.maxBod) + '</b></span></div>';
+    h += '<div class="kc-result"><span class="kc-meta">Geen bod bekend &middot; max. bod <b>' + fmt(k.maxBod) + '</b></span></div>';
   }
   if (!opts.gewonnen && k.adviesReden && !ond) h += '<div class="kc-reden">' + esc(k.adviesReden) + '</div>';
 
@@ -2237,7 +2754,7 @@ function herstelUitGewonnen(idx) {
   var k = kavels[idx];
   k.status = k.advies === 'kopen' ? 'klaar' : (k.advies === 'skip' ? 'skip' : 'klaar');
   delete k.gewonnen_op;
-  slaKavelsOp(); renderGewonnen();
+  slaKavelsOp(); updateBadge(); renderGewonnen();
 }
 
 // ── 7. Gewonnen ─────────────────────────────────────────────────────────────
