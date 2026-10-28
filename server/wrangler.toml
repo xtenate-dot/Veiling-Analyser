@@ -28,7 +28,7 @@ MODEL_PRIJZEN = "claude-haiku-5-5"
 # Zoekopdrachten per analyse ($0,01 per stuk). 1 = beter bij weinig aanbod, 0 = altijd goedkoper
 ZOEKOPDRACHTEN = "1"
 # Openbare sitekey van Cloudflare Turnstile (botcontrole bij aanmelden); leeg = uit
-TURNSTILE_SITEKEY = ""
+TURNSTILE_SITEKEY = "0x4AAAAAAFqGuKCrAsvJyp8E"
 # E-mailcontrole met een code staat aan zodra RESEND_API_KEY en EMAIL_VAN zijn ingesteld
 
 # Geheimen zet je met: npx wrangler secret put NAAM
