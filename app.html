@@ -627,6 +627,7 @@ details.faq .fb ul{padding-left:20px}
             <div class="help">Wat je hier invult weegt zwaarder dan de kavelpagina, bijvoorbeeld als de omschrijving onvolledig is. Laat leeg om alles van de pagina te halen.</div>
           </div>
 
+          <label class="ctl-check" style="margin:0 0 14px"><input type="checkbox" id="prijs-hergebruik" checked> Prijzen hergebruiken als dit product de afgelopen 3 dagen al is opgezocht <span class="opt">(bespaart kosten)</span></label>
           <button class="btn btn-primary btn-lg btn-block" id="analyse-btn" onclick="analyseer()"><span id="analyse-btn-txt">Analyseer kavel</span></button>
           <div class="msg err" id="analyse-err" role="alert"></div>
         </div>
@@ -763,8 +764,15 @@ details.faq .fb ul{padding-left:20px}
         <details class="faq">
           <summary>Wat kost een analyse?</summary>
           <div class="fb">
-            <p>Een analyse gebruikt tegoed van je eigen Anthropic-account. Per analyse doet de app hooguit 9 zoekopdrachten ($10 per 1.000, dus maximaal $0,09) en leest hij hooguit 10 pagina&rsquo;s, die als tekst meetellen. Met Claude Sonnet 5.5 ($2 per miljoen tokens invoer, $10 per miljoen uitvoer) komt een analyse meestal uit op enkele tientallen centen; lange pagina&rsquo;s maken het duurder.</p>
-            <p>Claude Haiku 5.5 is goedkoper en sneller, Claude Opus 5.5 grondiger en duurder. Je kiest het model via <strong>Veilinghuizen</strong> in het menu.</p>
+            <p>Een analyse gebruikt tegoed van je eigen Anthropic-account. De app toont bij elke analyse wat die ongeveer kostte, berekend uit wat de API terugmeldt, en onder <strong>Veilinghuizen</strong> het totaal.</p>
+            <p>Zo houdt de app de kosten laag:</p>
+            <ul>
+              <li>De kavelpagina wordt gelezen met Claude Haiku 5.5, het goedkoopste model. Voor het prijsonderzoek is Haiku ook de standaard (zuinig).</li>
+              <li>Hooguit 7 pagina&rsquo;s en 5 zoekopdrachten per analyse, en lange pagina&rsquo;s worden ingekort. Zoekopdrachten kosten $0,01 per stuk; pagina&rsquo;s lezen kost alleen de tekst.</li>
+              <li>Een ander bod doorrekenen via <strong>Bod wijzigen</strong> is gratis: er gaat dan niets naar de API.</li>
+              <li>Is hetzelfde product in dezelfde staat de afgelopen 3 dagen al opgezocht, dan worden die prijzen hergebruikt.</li>
+            </ul>
+            <p>Vind je de prijzen met Haiku niet goed genoeg, kies dan &ldquo;Grondig&rdquo; (Sonnet 5.5). Dat is ongeveer 20 keer zo duur per gelezen tekst.</p>
           </div>
         </details>
       </section>
@@ -1165,11 +1173,59 @@ function slaKavelsOp() {
 
 // ── Instellingen voor de berekening ──
 var MODELLEN = [
-  { id: 'claude-sonnet-5-5', label: 'Claude Sonnet 5.5 (aanbevolen)' },
-  { id: 'claude-haiku-5-5', label: 'Claude Haiku 5.5 (sneller en goedkoper)' },
-  { id: 'claude-opus-5-5', label: 'Claude Opus 5.5 (grondiger, duurder)' }
+  { id: 'claude-haiku-5-5', label: 'Zuinig: Claude Haiku 5.5 (standaard)' },
+  { id: 'claude-sonnet-5-5', label: 'Grondig: Claude Sonnet 5.5 (circa 20× duurder)' },
+  { id: 'claude-opus-5-5', label: 'Zeer grondig: Claude Opus 5.5 (circa 40× duurder)' }
 ];
-var INST_STD = { doelmarge: 0.20, verkoopkosten: 0, model: 'claude-sonnet-5-5' };
+// Het lezen van de kavelpagina is overnemen van gegevens; daarvoor is het goedkoopste model genoeg.
+var MODEL_PAGINA = 'claude-haiku-5-5';
+var INST_STD = { doelmarge: 0.20, verkoopkosten: 0, model: 'claude-haiku-5-5' };
+// API-prijzen in dollar per miljoen tokens (platform.claude.com/docs/en/about-claude/pricing, oktober 2026).
+// Haiku 5.5 kost meer zodra één verzoek boven 100.000 tokens komt.
+var API_PRIJS = {
+  'claude-haiku-5-5': { grens: 100000, laag: { i: 0.10, o: 0.50, cw: 0.125, cr: 0.01 }, hoog: { i: 0.50, o: 2.50, cw: 0.625, cr: 0.05 } },
+  'claude-sonnet-5-5': { laag: { i: 2, o: 10, cw: 2.5, cr: 0.10 } },
+  'claude-opus-5-5': { laag: { i: 4, o: 20, cw: 5, cr: 0.20 } }
+};
+var ZOEK_PRIJS = 0.01; // $10 per 1.000 zoekopdrachten; web_fetch kost alleen tokens
+function apiKostenVan(model, u) {
+  if (!u) return 0;
+  var tab = API_PRIJS[model] || API_PRIJS['claude-sonnet-5-5'];
+  var inp = u.input_tokens || 0, cw = u.cache_creation_input_tokens || 0, cr = u.cache_read_input_tokens || 0, out = u.output_tokens || 0;
+  var t = tab.grens && (inp + cw + cr) > tab.grens ? tab.hoog : tab.laag;
+  var zoek = (u.server_tool_use && u.server_tool_use.web_search_requests) || 0;
+  return (inp * t.i + cw * t.cw + cr * t.cr + out * t.o) / 1e6 + zoek * ZOEK_PRIJS;
+}
+function usdTxt(x) { return '$' + (x || 0).toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: x < 0.1 ? 3 : 2 }); }
+function telApiKosten(usd) {
+  try {
+    var t = JSON.parse(localStorage.getItem('va_api_totaal') || 'null') || { usd: 0, n: 0, sinds: Date.now() };
+    t.usd += usd; t.n++;
+    localStorage.setItem('va_api_totaal', JSON.stringify(t));
+  } catch (e) {}
+}
+function apiTotaal() { try { return JSON.parse(localStorage.getItem('va_api_totaal') || 'null'); } catch (e) { return null; } }
+
+// ── Prijzen hergebruiken: hetzelfde product in dezelfde staat binnen 3 dagen ──
+var CACHE_DAGEN = 3;
+function cacheSleutel(term, staat) { return String(term || '').toLowerCase().replace(/\s+/g, ' ').trim() + '|' + String(staat || '').toLowerCase(); }
+function leesPrijsCache(sleutel) {
+  try {
+    var c = JSON.parse(localStorage.getItem('va_prijscache') || '{}');
+    var e = c[sleutel];
+    if (e && Date.now() - e.op < CACHE_DAGEN * 864e5) return kopie(e.p);
+  } catch (e2) {}
+  return null;
+}
+function bewaarPrijsCache(sleutel, p) {
+  try {
+    var c = JSON.parse(localStorage.getItem('va_prijscache') || '{}');
+    c[sleutel] = { op: Date.now(), p: p };
+    var keys = Object.keys(c).sort(function(a, b) { return c[b].op - c[a].op; });
+    keys.slice(40).forEach(function(k) { delete c[k]; });
+    localStorage.setItem('va_prijscache', JSON.stringify(c));
+  } catch (e) {}
+}
 var instCache = null;
 function getInst() {
   if (instCache) return instCache;
@@ -1593,6 +1649,7 @@ function bhHtml() {
     '<div><label class="ctl-l" for="bh-vkst">Verkoopkosten per kavel</label><div class="money"><span>&euro;</span><input class="input" id="bh-vkst" type="text" inputmode="decimal" value="' + (inst.verkoopkosten ? bedragTxt(inst.verkoopkosten) : '') + '"></div></div></div>' +
     '<label class="ctl-l" for="bh-model" style="margin-top:10px">AI-model</label><select class="input select" id="bh-model">' +
     MODELLEN.map(function(m) { return '<option value="' + m.id + '">' + m.label + '</option>'; }).join('') + '</select>' +
+    (apiTotaal() ? '<div class="help">Gebruikt sinds ' + new Date(apiTotaal().sinds).toLocaleDateString('nl-NL') + ': ' + apiTotaal().n + ' analyses, samen ongeveer ' + usdTxt(apiTotaal().usd) + ' (berekend uit wat de API terugmeldt).</div>' : '') +
     '<div class="help">De gewenste marge is het deel van de verkoopprijs dat overblijft na alle kosten. Een kavel is een Aanrader vanaf deze marge, en het maximale bod is daarop berekend. Verkoopkosten zijn je eigen kosten bij doorverkoop (verzending, platformkosten).</div></div>';
   h += '<p class="help" style="margin:4px 0 12px">Veilingkosten verschillen per veiling. De app leest ze bij een analyse van de kavelpagina; onderstaande waarden zijn de reserve als de pagina ze niet vermeldt. Alleen HNVI (19% + 21% btw) is door jou bevestigd. Herkenning: delen van het webadres (gescheiden met komma\'s) waaraan de app het veilinghuis herkent.</p>';
   bhDraft.huizen.forEach(function(v, i) {
@@ -1777,8 +1834,9 @@ async function vraagClaude(opts) {
   if (!key) throw new Error('Voer eerst een API key in.');
   var messages = [{ role: 'user', content: opts.prompt }];
   var bronnen = {}, zoekvragen = [], corpus = '', laatste = null, alleTekst = '';
+  var model = opts.model || getInst().model, usd = 0;
   for (var ronde = 0; ronde < 6; ronde++) {
-    var body = { model: getInst().model, max_tokens: opts.maxTokens || 16000, system: opts.system, messages: messages };
+    var body = { model: model, max_tokens: opts.maxTokens || 16000, system: opts.system, messages: messages };
     if (opts.tools) body.tools = opts.tools;
     var resp = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -1810,6 +1868,7 @@ async function vraagClaude(opts) {
       }
     });
     laatste = data;
+    usd += apiKostenVan(model, data.usage);
     if (data.stop_reason !== 'pause_turn') break;
     // Lange zoekbeurt gepauzeerd: stuur de assistent-inhoud ongewijzigd terug zodat Claude verdergaat
     var vorige = messages[messages.length - 1];
@@ -1822,6 +1881,7 @@ async function vraagClaude(opts) {
   var corpusLaag = corpus.toLowerCase();
   return {
     json: json,
+    usd: usd,
     zoekvragen: zoekvragen,
     bronnen: Object.keys(bronnen).map(function(k) { return bronnen[k]; }),
     // Kwam deze URL echt voor in de zoek- of ophaalresultaten?
@@ -1865,10 +1925,10 @@ async function leesKavelpagina(url, extra) {
     '"staat":"nieuw|zo goed als nieuw|gebruikt|beschadigd|defect|onbekend","staat_toelichting":"","aantal_stuks":1,"huidig_bod":null,"aantal_biedingen":null,"sluit":null,"locatie":null,' +
     '"kosten":{"opgeld_pct":null,"vaste_kosten":null,"btw_pct":null,"btw_regeling":"onbekend","bron":""},"opmerkingen":[]}';
   var r = await vraagClaude({
-    system: system, prompt: prompt, maxTokens: 8000,
+    system: system, prompt: prompt, maxTokens: 6000, model: MODEL_PAGINA,
     tools: [
-      { type: 'web_fetch_20250910', name: 'web_fetch', max_uses: 4, max_content_tokens: 30000 },
-      { type: 'web_search_20250305', name: 'web_search', max_uses: 3, user_location: locatieVoor(url) }
+      { type: 'web_fetch_20250910', name: 'web_fetch', max_uses: 3, max_content_tokens: 12000 },
+      { type: 'web_search_20250305', name: 'web_search', max_uses: 2, user_location: locatieVoor(url) }
     ]
   });
   var j = r.json;
@@ -1893,7 +1953,8 @@ async function leesKavelpagina(url, extra) {
       btw_regeling: REGELINGEN[kost.btw_regeling] ? kost.btw_regeling : null, bron: kortTekst(kost.bron, 240)
     },
     opmerkingen: Array.isArray(j.opmerkingen) ? j.opmerkingen.filter(function(x) { return typeof x === 'string'; }).slice(0, 6).map(function(x) { return kortTekst(x, 240); }) : [],
-    bronnen: r.bronnen.slice(0, 8)
+    bronnen: r.bronnen.slice(0, 8),
+    usd: r.usd
   };
 }
 
@@ -1917,7 +1978,7 @@ async function zoekPrijzen(product, pagina, extra, url) {
   var term = (pagina && pagina.zoekterm) || korteZoekterm(product);
   var system = 'Je bent een Nederlandse marktprijsonderzoeker voor een opkoper die veilingkavels tweedehands doorverkoopt in Nederland en België. Antwoord uitsluitend met één geldig JSON-object, zonder markdown en zonder tekst ervoor of erna.\n\n' +
     'Werkwijze:\n' +
-    '1. Open met web_fetch de zoekpagina\'s uit het bericht (Marktplaats, 2dehands, verkochte eBay-items). Lukt dat niet of vind je weinig, gebruik dan web_search (bijvoorbeeld met "marktplaats", "2dehands" of "tweakers vraag en aanbod" in de zoekvraag).\n' +
+    '1. Open met web_fetch de zoekpagina\'s uit het bericht (Marktplaats, 2dehands, verkochte eBay-items). Gebruik web_search alleen als dat niet lukt of te weinig oplevert; zoekopdrachten kosten extra, dus wees zuinig.\n' +
     '2. Zoek de laagste actuele nieuwprijs bij een gewone Nederlandse winkel (bol.com, Coolblue, MediaMarkt, Amazon.nl, de fabrikant, of de Tweakers Pricewatch). Niet de adviesprijs als winkels lager zitten. Niet meer nieuw te koop: nieuwprijs null en zeg dat in nieuwprijs_bron.\n' +
     '3. Gebruik alleen advertenties van exact hetzelfde product (zelfde model, variant, opslag, maat, generatie) en een vergelijkbare staat. Laat "gezocht", accessoires, onderdelen, bundels en duidelijke uitschieters weg. Defecte exemplaren alleen als het kavel zelf defect is.\n' +
     '4. Vraagprijzen op Marktplaats en 2dehands zijn geen verkoopprijzen; er wordt meestal lager verkocht. Verkochte eBay-items zijn de beste aanwijzing voor wat er echt betaald wordt.\n\n' +
@@ -1938,10 +1999,10 @@ async function zoekPrijzen(product, pagina, extra, url) {
     '\nZoekpagina\'s die je mag openen:\n' + zoekUrls(term).join('\n') +
     '\n\nVul dit JSON-object in:\n' + PRIJS_JSON;
   var r = await vraagClaude({
-    system: system, prompt: prompt, maxTokens: 16000,
+    system: system, prompt: prompt, maxTokens: 10000,
     tools: [
-      { type: 'web_fetch_20250910', name: 'web_fetch', max_uses: 6, max_content_tokens: 25000 },
-      { type: 'web_search_20250305', name: 'web_search', max_uses: 6, user_location: locatieVoor(url) }
+      { type: 'web_fetch_20250910', name: 'web_fetch', max_uses: 4, max_content_tokens: 10000 },
+      { type: 'web_search_20250305', name: 'web_search', max_uses: 3, user_location: locatieVoor(url) }
     ]
   });
   return normPrijzen(r.json, r, true);
@@ -1993,7 +2054,7 @@ function normPrijzen(j, r, live) {
     partij: j.partij && num(j.partij.aantal) > 1 ? { aantal: Math.round(num(j.partij.aantal)), prijs_per_stuk: num(j.partij.prijs_per_stuk) > 0 ? num(j.partij.prijs_per_stuk) : null } : null,
     toelichting: kortTekst(j.toelichting, 400),
     aandachtspunten: Array.isArray(j.aandachtspunten) ? j.aandachtspunten.filter(function(x) { return typeof x === 'string'; }).slice(0, 6).map(function(x) { return kortTekst(x, 240); }) : [],
-    live: live, opgehaald_op: Date.now(),
+    live: live, opgehaald_op: Date.now(), usd: r.usd,
     zoekvragen: r.zoekvragen.slice(0, 12),
     bronnen: r.bronnen.slice(0, 20).map(function(b) { return { url: b.url, titel: kortTekst(b.titel, 120), opgehaald: !!b.opgehaald }; }),
     controles: []
@@ -2037,6 +2098,7 @@ async function analyseer() {
   if (veilingInfo.fout) { toonMsg('analyse-err', veilingInfo.fout); return; }
   if (!getApiKey()) { toonMsg('analyse-err', 'Voer eerst je API-sleutel in (bovenaan de pagina).'); return; }
   var leesKosten = document.getElementById('vk-lees').checked;
+  var hergebruik = document.getElementById('prijs-hergebruik').checked;
   var huidigType = bodType;
 
   document.getElementById('analyse-err').style.display = 'none';
@@ -2059,8 +2121,13 @@ async function analyseer() {
     setStap(2);
     var product = bepaalProduct(extra, pagina && pagina.gevonden ? pagina : null, url);
     var prijzen = null;
-    if (live) {
-      try { prijzen = await zoekPrijzen(product, pagina, extra, url); }
+    var sleutel = cacheSleutel((pagina && pagina.zoekterm) || korteZoekterm(product), pagina && pagina.staat);
+    if (live && hergebruik) {
+      prijzen = leesPrijsCache(sleutel);
+      if (prijzen) prijzen.hergebruikt = true;
+    }
+    if (live && !prijzen) {
+      try { prijzen = await zoekPrijzen(product, pagina, extra, url); if (prijzen.live) bewaarPrijsCache(sleutel, prijzen); }
       catch (e) { if (isToolFout(e)) live = false; else throw e; }
     }
     if (!live) {
@@ -2099,10 +2166,12 @@ async function analyseer() {
       pagina: pagina ? { titel: pagina.titel, staat: pagina.staat, staat_toelichting: pagina.staat_toelichting, aantal_stuks: pagina.aantal_stuks,
         aantal_biedingen: pagina.aantal_biedingen, sluit: pagina.sluit, locatie: pagina.locatie, opmerkingen: pagina.opmerkingen } : null,
       waarschuwingen: waarschuwingen,
+      api_usd: ((pagina && pagina.usd) || 0) + (prijzen.hergebruikt ? 0 : (prijzen.usd || 0)),
       eigen_bod: huidigType === 'eigen', toegevoegd: Date.now(), status: 'klaar'
     };
     if (idx >= 0 && typeof kavels[idx].verkoopkosten === 'number') kavelData.verkoopkosten = kavels[idx].verkoopkosten;
     herberekenKosten(kavelData);
+    telApiKosten(kavelData.api_usd);
 
     if (huidigeThumb) kavelData.thumb = huidigeThumb; else if (idx >= 0 && kavels[idx].thumb) kavelData.thumb = kavels[idx].thumb;
     if (idx >= 0) kavels[idx] = kavelData; else kavels.unshift(kavelData);
@@ -2401,6 +2470,7 @@ function toonAnalyseResultaat(d, behoudScroll) {
   var pg = d.pagina || {};
 
   var h = '<div class="res-bar"><button class="btn btn-ghost btn-sm" onclick="switchTab(\'overzicht\')">' + ic('back') + 'Overzicht</button><div class="grp">';
+  if (idx >= 0) h += '<button class="btn btn-secondary btn-sm" onclick="wijzigBod(' + idx + ')">' + ic('tag') + 'Bod wijzigen</button>';
   if (idx >= 0) h += '<button class="btn btn-secondary btn-sm" onclick="heranalyseer(' + idx + ')">' + ic('refresh') + 'Opnieuw analyseren</button>';
   if (idx >= 0 && d.status !== 'gewonnen') h += '<button class="btn btn-secondary btn-sm" onclick="markeerGewonnen(' + idx + ',function(){switchTab(\'overzicht\')})">' + ic('trophy') + 'Markeer als gewonnen</button>';
   h += '<button class="btn btn-primary btn-sm" onclick="nieuwKavel()">' + ic('plus') + 'Nieuwe analyse</button></div></div>';
@@ -2466,7 +2536,7 @@ function toonAnalyseResultaat(d, behoudScroll) {
     h += '<div class="note">' + ic('alert') + '<span>' + (ond ? 'Verkoopprijs en marge worden pas getoond nadat je onder Prijzen controleren de opbrengst per stuk hebt ingevuld.' : 'Er is geen verkoopprijs bekend, dus de marge kan niet worden berekend.') + '</span></div>';
   } else {
     h += '<div class="empty small" style="border-style:solid"><h3>Nog geen bod bekend</h3><p>Vul een bod in om de totale kosten en de marge te zien.' + (d.maxBod > 0 ? ' Bied maximaal ' + fmt(d.maxBod) + ' voor ' + pctTxt(doelPct()) + '% marge.' : '') + '</p>' +
-         (idx >= 0 ? '<button class="btn btn-primary" onclick="heranalyseer(' + idx + ')">Bod invullen</button>' : '') + '</div>';
+         (idx >= 0 ? '<button class="btn btn-primary" onclick="wijzigBod(' + idx + ')">Bod invullen</button>' : '') + '</div>';
   }
   if (d.tarief_citaat) h += '<div class="note">' + ic('info') + '<span>Kosten op de kavelpagina: ' + esc(d.tarief_citaat) + '</span></div>';
   h += '</div>';
@@ -2484,7 +2554,11 @@ function toonAnalyseResultaat(d, behoudScroll) {
   // Marktprijzen
   if (d.prijzen) {
     var pr = d.prijzen;
-    h += '<div class="card"><div class="card-h"><h2>Marktprijzen</h2>' + (pr.live ? '<span class="kc-meta">Opgezocht op ' + new Date(pr.opgehaald_op).toLocaleString('nl-NL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) + '</span>' : '') + '</div>';
+    var meta = [];
+    if (pr.live) meta.push((pr.hergebruikt ? 'Hergebruikt van ' : 'Opgezocht op ') + new Date(pr.opgehaald_op).toLocaleString('nl-NL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }));
+    if (typeof d.api_usd === 'number') meta.push('analyse kostte ~' + usdTxt(d.api_usd));
+    h += '<div class="card"><div class="card-h"><h2>Marktprijzen</h2>' + (meta.length ? '<span class="kc-meta">' + meta.join(' &middot; ') + '</span>' : '') + '</div>';
+    if (pr.hergebruikt) h += '<div class="note" style="margin:0 0 14px">' + ic('info') + '<span>Dit product is kort geleden al opgezocht; die prijzen zijn hergebruikt om kosten te besparen. Kies Opnieuw analyseren en zet hergebruiken uit voor verse prijzen.</span></div>';
     if (ond) h += '<div class="note" style="margin:0 0 14px">' + ic('alert') + '<span>Deze prijzen gelden voor één stuk, niet voor de hele partij.</span></div>';
     h += '<div class="prices-strip">';
     h += '<div class="ps"><div class="ps-l">Nieuwprijs</div><div class="ps-v">' + (pr.nieuwprijs ? fmt(pr.nieuwprijs) : '-') + '</div><div class="ps-s">' +
@@ -2629,7 +2703,7 @@ function maakKavelKaart(k, i, opts) {
     });
   } else {
     knop('btn btn-ghost btn-sm', ic('trophy') + 'Gewonnen', null, function() { markeerGewonnen(echteIdx); });
-    knop('btn btn-ghost btn-sm', ic('refresh') + 'Opnieuw', 'Opnieuw analyseren', function() { heranalyseer(echteIdx); });
+    knop('btn btn-ghost btn-sm', ic('tag') + 'Bod', 'Bod wijzigen', function() { wijzigBod(echteIdx); });
     knop('btn btn-ghost btn-sm btn-icon btn-del', ic('trash'), 'Verwijderen', function() { verwijderKavel(echteIdx); });
     card.onclick = function() { if (selectieModus) selecteerRij(i); };
     var cb = card.querySelector('.kavel-checkbox');
@@ -2715,6 +2789,39 @@ function openDetail(idx) {
   switchTab('analyse');
   if (k.prijzen) toonAnalyseResultaat(k);
   else heranalyseer(idx);
+}
+
+// Bod aanpassen zonder nieuwe analyse: alles wordt lokaal doorgerekend, kost niets
+function wijzigBod(idx) {
+  var k = kavels[idx]; if (!k) return;
+  var h = '<p class="help" style="margin:0 0 12px">Het bod is gestegen of je wilt een ander bedrag doorrekenen? Kosten, marge en advies worden direct herberekend met de prijzen die er al zijn. Dit kost geen API-tegoed.</p>' +
+    '<div class="seg" role="group" aria-label="Soort bod"><button type="button" id="wb-ander" class="' + (k.eigen_bod ? '' : 'active') + '" onclick="wbType(false)">Huidig bod</button><button type="button" id="wb-eigen" class="' + (k.eigen_bod ? 'active' : '') + '" onclick="wbType(true)">Mijn bod</button></div>' +
+    '<div class="money"><span>&euro;</span><input class="input" id="wb-bod" type="text" inputmode="decimal" value="' + (k.huidig_bod ? bedragTxt(k.huidig_bod) : '') + '" aria-label="Bod in euro"></div>' +
+    (k.maxBod != null ? '<div class="help">Maximaal bod voor ' + pctTxt(doelPct()) + '% marge: <strong>' + (k.maxBod > 0 ? fmt(k.maxBod) : 'niet rendabel') + '</strong></div>' : '') +
+    '<div class="msg err" id="wb-err" role="alert"></div>';
+  openModal('Bod wijzigen', h, [
+    { label: 'Annuleren', cls: 'btn-secondary' },
+    { label: 'Herberekenen', cls: 'btn-primary', keepOpen: true, fn: function() { wbOpslaan(idx); } }
+  ]);
+}
+function wbType(eigen) {
+  document.getElementById('wb-eigen').classList.toggle('active', eigen);
+  document.getElementById('wb-ander').classList.toggle('active', !eigen);
+}
+function wbOpslaan(idx) {
+  var k = kavels[idx]; if (!k) { closeModal(); return; }
+  var v = document.getElementById('wb-bod').value.trim();
+  var bod = v ? (/^[\d.,\s\u20ac]+$/.test(v) ? parseBedrag(v) : NaN) : null;
+  if (bod !== null && (!isFinite(bod) || bod <= 0)) { toonMsg('wb-err', 'Voer een geldig bedrag in, bijvoorbeeld 250, of laat het leeg.'); return; }
+  k.huidig_bod = bod;
+  k.eigen_bod = document.getElementById('wb-eigen').classList.contains('active');
+  k.bod_van_pagina = false;
+  if (!bod) k.kosten = null;
+  herberekenKosten(k);
+  closeModal();
+  slaKavelsOp(); renderOverzicht();
+  if (huidigeTab === 'analyse') toonAnalyseResultaat(k, true);
+  toast('Bod bijgewerkt: ' + adviesInfo(k.advies).label);
 }
 
 function heranalyseer(idx) {
