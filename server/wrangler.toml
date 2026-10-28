@@ -7,7 +7,7 @@ compatibility_date = "2026-10-01"
 [[d1_databases]]
 binding = "DB"
 database_name = "veiling-analyser"
-database_id = "VUL-HIER-HET-DATABASE-ID-IN"   # uit: npx wrangler d1 create veiling-analyser
+database_id = "17c48dc4-7c06-4fb0-8856-a06ea6b9962f"   # D1 in de EU, aangemaakt 28 okt 2026
 
 [vars]
 # Webadres van de app (voor links in e-mails en terug van de betaalpagina)
