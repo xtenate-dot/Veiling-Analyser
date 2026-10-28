@@ -29,7 +29,9 @@ MODEL_PRIJZEN = "claude-haiku-5-5"
 ZOEKOPDRACHTEN = "1"
 # Openbare sitekey van Cloudflare Turnstile (botcontrole bij aanmelden); leeg = uit
 TURNSTILE_SITEKEY = "0x4AAAAAAFqGuKCrAsvJyp8E"
-# E-mailcontrole met een code staat aan zodra RESEND_API_KEY en EMAIL_VAN zijn ingesteld
+# Afzender van e-mails (domein veilinganalyser.nl staat in Resend, regio Ierland)
+# E-mailcontrole met een code staat pas aan zodra ook het geheim RESEND_API_KEY is ingesteld
+EMAIL_VAN = "Veiling Analyser <noreply@veilinganalyser.nl>"
 
 # Geheimen zet je met: npx wrangler secret put NAAM
 #   ANTHROPIC_API_KEY      (verplicht)
@@ -37,7 +39,6 @@ TURNSTILE_SITEKEY = "0x4AAAAAAFqGuKCrAsvJyp8E"
 #   STRIPE_WEBHOOK_SECRET  (voor betalen)
 #   STRIPE_PRICE_BASIS     (prijs-ID van het Basis-abonnement, begint met price_)
 #   STRIPE_PRICE_PRO       (prijs-ID van het Pro-abonnement)
-#   RESEND_API_KEY         (optioneel, voor wachtwoord vergeten)
+#   RESEND_API_KEY         (voor e-mailcontrole en wachtwoord vergeten)
 #   UITNODIGINGSCODE       (optioneel: alleen wie deze code invult kan een account maken)
 #   TURNSTILE_SECRET       (aanbevolen: geheime sleutel van Cloudflare Turnstile tegen nep-aanmeldingen)
-#   EMAIL_VAN              (optioneel, bijv. "Veiling Analyser <noreply@jouwdomein.nl>")

@@ -151,13 +151,24 @@ Werkt alles, herhaal stap 1 tot en met 4 in de live-modus van Stripe (nieuwe pri
 
 **Nodig om live te gaan.** Zodra de server e-mail kan versturen, moet iedereen na het aanmelden zijn e-mailadres bevestigen met een code van 6 cijfers. Pas daarna kan hij analyseren. Zo kan niemand met verzonnen adressen eindeloos gratis accounts maken. Dezelfde koppeling verstuurt de link voor "wachtwoord vergeten".
 
-1. Maak een account bij [Resend](https://resend.com) (gratis tot 3.000 e-mails per maand en 100 per dag) en verifieer je eigen domein. Daarvoor heb je een domeinnaam nodig, bijvoorbeeld `veilinganalyser.nl`.
-2. Zet de geheimen:
+1. Maak een account bij [Resend](https://resend.com) (gratis tot 3.000 e-mails per maand en 100 per dag) en verifieer je eigen domein.
+   - **Gedaan:** `veilinganalyser.nl` staat in Resend (regio Ierland). Deze records moeten bij Vimexx in de DNS van het domein staan; de actuele waarden staan in Resend onder Domains → veilinganalyser.nl:
+
+     | Type | Naam | Inhoud |
+     |---|---|---|
+     | TXT | `resend._domainkey` | de DKIM-sleutel uit Resend (begint met `p=MIGfMA0G`, eindigt op `IDAQAB`) |
+     | CNAME | `rsend` | `rsend-euw1.forge.rmta.net` |
+     | CNAME | `send` | `send.forge.rmta.net` |
+     | TXT | `_dmarc` | `v=DMARC1; p=none;` (optioneel, aanbevolen) |
+
+   - Klik daarna in Resend op **Verify DNS records**.
+2. De afzender `EMAIL_VAN` staat al in `server/wrangler.toml` (`Veiling Analyser <noreply@veilinganalyser.nl>`). Maak in Resend onder API keys een sleutel met alleen **Sending access** voor dit domein en zet hem als geheim:
 
 ```bash
 npx wrangler secret put RESEND_API_KEY
-npx wrangler secret put EMAIL_VAN        # bijv. Veiling Analyser <noreply@jouwdomein.nl>
 ```
+
+   Of in het Cloudflare-dashboard: Workers & Pages → veiling-analyser → Settings → Variables and Secrets → Add → type Secret, naam `RESEND_API_KEY`.
 
 Wat de server nog meer doet tegen misbruik:
 
