@@ -76,6 +76,15 @@ Stel daarnaast in de Anthropic Console onder Limits een maandelijkse uitgavenlim
 2. Maak onder **API keys** een nieuwe sleutel. Bewaar hem; je ziet hem maar één keer.
 3. Stel onder **Limits** een maandlimiet in.
 
+## Al ingericht (28 oktober 2026)
+
+- **Database:** D1-database `veiling-analyser`, opgeslagen in de EU (goed voor de AVG), met alle tabellen.
+- **Server:** Worker `veiling-analyser` in je Cloudflare-account, gekoppeld aan deze GitHub-repository (map `server`, branch `live-prijzen-en-kostenmodel`). Elke push bouwt en publiceert de server vanzelf op `https://veiling-analyser.xtenate.workers.dev`.
+
+Stap 2 hieronder is daarmee al gedaan, behalve het zetten van de geheime sleutels. Die zet je in het Cloudflare-dashboard: Workers & Pages → veiling-analyser → Settings → Variables and secrets → Add → type **Secret**.
+
+Zodra je de app live zet, zet je de productiebranch terug op `main` (Settings → Builds → Production branch), nadat de pull request is samengevoegd.
+
 ## Stap 2. Server op Cloudflare
 
 Open een terminal in de map `server/`:
