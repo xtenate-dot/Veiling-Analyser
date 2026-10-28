@@ -1,0 +1,47 @@
+// ═══ Veiling Analyser – opstarten ═══════════════════════════════════════════
+// ── 9. Start ────────────────────────────────────────────────────────────────
+var zone = document.getElementById('upload-zone');
+document.getElementById('foto-input').addEventListener('change', function(e) { leesFiles(e.target.files); e.target.value = ''; });
+zone.addEventListener('dragover', function(e) { e.preventDefault(); zone.classList.add('drag'); });
+zone.addEventListener('dragleave', function() { zone.classList.remove('drag'); });
+zone.addEventListener('drop', function(e) { e.preventDefault(); zone.classList.remove('drag'); leesFiles(e.dataTransfer.files); });
+
+hydrateIcons();
+themaLabels();
+document.body.classList.toggle('modus-server', serverModus());
+checkApiKey();
+laadKavels();
+updateBadge();
+setSyncStatus('ok');
+setStap(1);
+setFase('invoer');
+renderOverzicht();
+vulVeilingKeuze(); syncVeilingVelden();
+if (!serverModus() && SHEETS_URL) { syncVanSheets(); }
+werkAccountBij();
+var bh = document.getElementById('bladwijzer'); if (bh) bh.innerHTML = bladwijzerHtml();
+(async function() {
+  var p = new URLSearchParams(location.search);
+  var gedeeld = linkUitParameters();
+  if (p.get('betaald') || p.get('herstel') || gedeeld) history.replaceState(null, '', location.pathname);
+  if (serverModus()) {
+    await laadAccount();
+    if (account) await haalKavelsVanServer();
+    if (p.get('betaald') === '1') { toast('Bedankt! Je abonnement is actief.'); setTimeout(laadAccount, 2500); }
+    if (p.get('betaald') === '0') toast('Betaling geannuleerd. Er is niets afgeschreven.');
+    if (p.get('herstel')) vraagNieuwWachtwoord(p.get('herstel'));
+  }
+  if (gedeeld) {
+    nieuwKavel();
+    document.getElementById('kavel-url').value = gedeeld;
+    syncVeilingVelden();
+    toast('Link ontvangen. Controleer het bod en kies Analyseer kavel.');
+  }
+})();
+setTimeout(function() { controleerTarieven(false); }, 600);
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.getRegistrations().then(function(regs) {
+    regs.forEach(function(r) { r.unregister(); });
+  }).catch(function() {});
+}

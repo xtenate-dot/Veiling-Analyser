@@ -1,0 +1,471 @@
+/* Veiling Analyser – analysekern
+ * Gedeeld door de app (browser) en de server (Cloudflare Worker).
+ * Bevat: het kostenmodel, de AI-stappen (kavelpagina lezen, prijzen zoeken) en de controles op AI-antwoorden.
+ * Alle bedragen worden hier berekend; het AI-model levert alleen gevonden gegevens.
+ */
+(function (root) {
+  'use strict';
+
+  // ── Kostenmodel ─────────────────────────────────────────────────────────────
+  // Totale kosten = bod + opgeld + vaste kosten + btw. De btw-regeling bepaalt waarover btw gaat:
+  //   volledig: over bod, opgeld en vaste kosten (normale btw-kavel)
+  //   opgeld:   alleen over opgeld en vaste kosten (margeregeling, opgeld exclusief btw)
+  //   geen:     geen btw (opgeld is al inclusief btw, of btw verlegd / 0%)
+  var REGELINGEN = {
+    volledig: 'Btw over bod en opgeld',
+    opgeld: 'Margeregeling: btw alleen over opgeld',
+    geen: 'Geen btw (opgeld incl. btw of verlegd)'
+  };
+  function normTarief(t) {
+    t = t || {};
+    return {
+      opgeld: typeof t.opgeld === 'number' && isFinite(t.opgeld) && t.opgeld >= 0 ? t.opgeld : 0.18,
+      btw: typeof t.btw === 'number' && isFinite(t.btw) && t.btw >= 0 ? t.btw : 0.21,
+      vast: typeof t.vast === 'number' && isFinite(t.vast) && t.vast > 0 ? t.vast : 0,
+      regeling: REGELINGEN[t.regeling] ? t.regeling : 'volledig'
+    };
+  }
+  // Totaal is lineair in het bod: totaal = bod × A + B
+  function kostenFactoren(t) {
+    t = normTarief(t);
+    var b = t.regeling === 'geen' ? 0 : t.btw;
+    var btwOverBod = t.regeling === 'volledig' ? 1 : 0;
+    return { A: 1 + t.opgeld + b * (btwOverBod + t.opgeld), B: t.vast * (1 + b) };
+  }
+  function berekenKosten(bod, t) {
+    t = normTarief(t);
+    var b = t.regeling === 'geen' ? 0 : t.btw;
+    var vk = bod * t.opgeld;
+    var btw = ((t.regeling === 'volledig' ? bod : 0) + vk + t.vast) * b;
+    return { bod: bod, vk: vk, vast: t.vast, btw: btw, totaal: bod + vk + t.vast + btw };
+  }
+  // Hoogste bod waarbij de totale kosten niet boven 'totaal' uitkomen (nooit negatief)
+  function bodVoorTotaal(totaal, t) {
+    var f = kostenFactoren(t);
+    var bod = (totaal - f.B) / f.A;
+    return bod > 0 ? bod : 0;
+  }
+
+  // ── API-kosten ──────────────────────────────────────────────────────────────
+  // Dollar per miljoen tokens (platform.claude.com/docs/en/about-claude/pricing, oktober 2026).
+  // Haiku 5.5 kost meer zodra één verzoek boven 100.000 tokens komt.
+  var API_PRIJS = {
+    'claude-haiku-5-5': { grens: 100000, laag: { i: 0.10, o: 0.50, cw: 0.125, cr: 0.01 }, hoog: { i: 0.50, o: 2.50, cw: 0.625, cr: 0.05 } },
+    'claude-sonnet-5-5': { laag: { i: 2, o: 10, cw: 2.5, cr: 0.10 } },
+    'claude-opus-5-5': { laag: { i: 4, o: 20, cw: 5, cr: 0.20 } }
+  };
+  var ZOEK_PRIJS = 0.01; // $10 per 1.000 zoekopdrachten; web_fetch kost alleen tokens
+  function apiKostenVan(model, u) {
+    if (!u) return 0;
+    var tab = API_PRIJS[model] || API_PRIJS['claude-sonnet-5-5'];
+    var inp = u.input_tokens || 0, cw = u.cache_creation_input_tokens || 0, cr = u.cache_read_input_tokens || 0, out = u.output_tokens || 0;
+    var t = tab.grens && (inp + cw + cr) > tab.grens ? tab.hoog : tab.laag;
+    var zoek = (u.server_tool_use && u.server_tool_use.web_search_requests) || 0;
+    return (inp * t.i + cw * t.cw + cr * t.cr + out * t.o) / 1e6 + zoek * ZOEK_PRIJS;
+  }
+
+  // ── Hulpfuncties ────────────────────────────────────────────────────────────
+  function parseBedrag(s) {
+    s = String(s).replace(/[€\s]/g, '');
+    if (s.indexOf(',') !== -1) s = s.replace(/\./g, '').replace(',', '.');
+    else if (/^\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, '');
+    return parseFloat(s);
+  }
+  function num(x) {
+    if (typeof x === 'number') return isFinite(x) ? x : null;
+    if (typeof x === 'string' && /\d/.test(x)) { var v = parseBedrag(x.replace(/[^\d.,]/g, '')); return isFinite(v) ? v : null; }
+    return null;
+  }
+  function kortTekst(s, n) { s = typeof s === 'string' ? s.trim() : ''; return s.length > n ? s.slice(0, n - 1) + '…' : s; }
+  function veiligeUrl(u) { return /^https?:\/\//i.test(u || '') ? u : ''; }
+  function fmtEuro(n) { return (n != null && isFinite(n)) ? '€' + Math.round(n).toLocaleString('nl-NL') : '-'; }
+  function normUrl(u) {
+    try { var x = new URL(u); return (x.hostname.replace(/^www\./, '') + x.pathname.replace(/\/+$/, '') + x.search).toLowerCase(); }
+    catch (e) { return String(u || '').toLowerCase(); }
+  }
+  function hostVan(url) { try { return new URL(url).hostname.toLowerCase(); } catch (e) { return String(url || '').toLowerCase(); } }
+  function parseJSON(txt) {
+    var clean = String(txt || '').replace(/```json/gi, '').replace(/```/g, '').trim();
+    try { return JSON.parse(clean); } catch (e) {}
+    var start = clean.indexOf('{'), end = clean.lastIndexOf('}');
+    if (start !== -1 && end > start) { try { return JSON.parse(clean.slice(start, end + 1)); } catch (e) {} }
+    return null;
+  }
+  function naamUitUrl(u) {
+    try {
+      var pad = new URL(u).pathname.split('/').filter(Boolean);
+      var slug = pad.filter(function (p) { return /[a-z]/i.test(p) && p.indexOf('-') !== -1; })
+        .sort(function (a, b) { return b.length - a.length; })[0] || '';
+      slug = decodeURIComponent(slug).replace(/\.\w{2,4}$/, '').replace(/-?\d{5,}$/, '').replace(/[-_]+/g, ' ').trim();
+      return slug ? slug.charAt(0).toUpperCase() + slug.slice(1) : '';
+    } catch (e) { return ''; }
+  }
+  function korteZoekterm(t) {
+    var s = String(t || '')
+      .replace(/\b\d+\s*(stuks|stuk|st|pcs|pieces)\b\.?/gi, ' ')
+      .replace(/\bo\.?\s?a\.?(?=\s|$)/gi, ' ')
+      .replace(/[(),;:!?"'\/\\]/g, ' ');
+    var stop = { en: 1, de: 1, het: 1, een: 1, van: 1, ruim: 1, circa: 1, ca: 1, diverse: 1, div: 1, met: 1, incl: 1, '&': 1, '+': 1 };
+    var w = s.split(/\s+/).filter(function (x) { return x && !stop[x.toLowerCase().replace(/\.$/, '')] && !/^\d{5,}$/.test(x); });
+    return w.slice(0, 6).join(' ');
+  }
+  function locatieVoor(url) {
+    return /\.be(\/|$)|2dehands|vavato|openbareverkopen|auctelia/i.test(hostVan(url))
+      ? { type: 'approximate', country: 'BE', timezone: 'Europe/Brussels' }
+      : { type: 'approximate', country: 'NL', timezone: 'Europe/Amsterdam' };
+  }
+
+  // HTML van een kavelpagina omzetten naar compacte tekst voor het model.
+  // Houdt titel, meta-gegevens, gestructureerde productdata (JSON-LD) en relevante links over.
+  function htmlNaarTekst(html, url, maxTekens) {
+    maxTekens = maxTekens || 24000;
+    html = String(html || '');
+    var delen = [];
+    var t = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+    if (t) delen.push('Titel: ' + ontsnap(t[1]).trim());
+    var metas = html.match(/<meta[^>]+>/gi) || [];
+    metas.forEach(function (m) {
+      var naam = (m.match(/(?:property|name)=["']([^"']+)["']/i) || [])[1] || '';
+      var inh = (m.match(/content=["']([^"']*)["']/i) || [])[1] || '';
+      if (inh && /^(description|og:title|og:description|product:price|og:price)/i.test(naam)) delen.push(naam + ': ' + ontsnap(inh));
+    });
+    var ld = html.match(/<script[^>]+application\/ld\+json[^>]*>([\s\S]*?)<\/script>/gi) || [];
+    ld.slice(0, 4).forEach(function (blok) { delen.push('Gestructureerde data: ' + blok.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').slice(0, 3000)); });
+    // Links die naar kosten of voorwaarden wijzen, zodat het model die kan openen
+    var links = [], gezien = {};
+    var re = /<a[^>]+href=["']([^"'#]+)["'][^>]*>([\s\S]*?)<\/a>/gi, m;
+    while ((m = re.exec(html)) && links.length < 6) {
+      var tekst = ontsnap(m[2].replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim();
+      if (/voorwaarden|kosten|opgeld|tarieven|conditions|terms|fees|veilinginfo|buyer/i.test(tekst + ' ' + m[1])) {
+        var abs; try { abs = new URL(m[1], url).href; } catch (e) { continue; }
+        if (!gezien[abs] && abs.length <= 250) { gezien[abs] = 1; links.push(tekst.slice(0, 60) + ': ' + abs); }
+      }
+    }
+    var body = html
+      .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+      .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+      .replace(/<(nav|footer|header|svg|noscript)[\s\S]*?<\/\1>/gi, ' ')
+      .replace(/<(br|\/p|\/div|\/li|\/tr|\/h\d)[^>]*>/gi, '\n')
+      .replace(/<[^>]+>/g, ' ');
+    body = ontsnap(body).replace(/[ \t ]+/g, ' ').replace(/\s*\n\s*/g, '\n').replace(/\n{2,}/g, '\n').trim();
+    // Zoek ook ingebedde paginadata (bijvoorbeeld Next.js) naar regels met geld of kosten
+    var data = html.match(/<script[^>]+id=["']__NEXT_DATA__["'][^>]*>([\s\S]*?)<\/script>/i);
+    if (data) {
+      var hits = (data[1].match(/"[a-zA-Z]*(?:bid|price|premium|fee|cost|vat|title|name|description|closing|end|lot)[a-zA-Z]*"\s*:\s*("[^"]{0,300}"|[\d.]+|\{[^{}]{0,300}\})/gi) || []).slice(0, 80);
+      if (hits.length) delen.push('Paginadata: ' + hits.join(' | ').slice(0, 6000));
+    }
+    if (links.length) delen.push('Links naar kosten/voorwaarden:\n' + links.join('\n'));
+    var kop = delen.join('\n');
+    return (kop + '\n\nPaginatekst:\n' + body).slice(0, maxTekens);
+  }
+  function ontsnap(s) {
+    return String(s).replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").replace(/&euro;/g, '€')
+      .replace(/&#(\d+);/g, function (_, d) { return String.fromCharCode(+d); });
+  }
+
+  // ── Claude aanroepen ────────────────────────────────────────────────────────
+  function apiFout(data, status) {
+    var e = new Error((data && data.error) ? data.error.type + ': ' + data.error.message : 'HTTP ' + status);
+    e.apiType = data && data.error ? data.error.type : 'http_' + status;
+    e.status = status;
+    return e;
+  }
+  // Fout doordat web_search / web_fetch niet beschikbaar is
+  function isToolFout(e) {
+    return !!e && e.apiType === 'invalid_request_error' && /tool|web_search|web_fetch|server/i.test(e.message || '');
+  }
+  // Eén beurt naar Claude, inclusief vervolgverzoeken bij pause_turn.
+  // deps.anthropic(body) → Promise<antwoord-JSON>; gooit bij een API-fout.
+  // Geeft het JSON-antwoord, de kosten en alle URL's die echt in zoek- of ophaalresultaten voorkwamen.
+  async function vraagClaude(opts, deps) {
+    var messages = [{ role: 'user', content: opts.prompt }];
+    var bronnen = {}, zoekvragen = [], corpus = '', laatste = null, alleTekst = '', usd = 0;
+    for (var ronde = 0; ronde < 5; ronde++) {
+      var body = { model: opts.model, max_tokens: opts.maxTokens || 8000, system: opts.system, messages: messages };
+      if (opts.tools) body.tools = opts.tools;
+      var data = await deps.anthropic(body);
+      if (!data || !Array.isArray(data.content)) throw new Error('Onverwachte API response');
+      usd += apiKostenVan(opts.model, data.usage);
+      data.content.forEach(function (b) {
+        if (b.type === 'text') {
+          alleTekst += b.text || '';
+          (b.citations || []).forEach(function (c) { if (c.url) bronnen[normUrl(c.url)] = { url: c.url, titel: c.title || '' }; });
+        } else if (b.type === 'server_tool_use' && b.name === 'web_search' && b.input && b.input.query) {
+          zoekvragen.push(b.input.query);
+        } else if (b.type === 'web_search_tool_result' && Array.isArray(b.content)) {
+          b.content.forEach(function (r) { if (r && r.url) bronnen[normUrl(r.url)] = { url: r.url, titel: r.title || '' }; });
+        } else if (b.type === 'web_fetch_tool_result' && b.content && b.content.type === 'web_fetch_result') {
+          var doc = b.content.content || {};
+          bronnen[normUrl(b.content.url)] = { url: b.content.url, titel: doc.title || '', opgehaald: true };
+          var src = doc.source || {};
+          if (src.type === 'text' && typeof src.data === 'string' && corpus.length < 600000) corpus += '\n' + src.data.slice(0, 200000);
+        }
+      });
+      laatste = data;
+      if (data.stop_reason !== 'pause_turn') break;
+      // Gepauzeerde zoekbeurt: assistent-inhoud ongewijzigd terugsturen zodat Claude verdergaat
+      var vorige = messages[messages.length - 1];
+      if (vorige.role === 'assistant') vorige.content = vorige.content.concat(data.content);
+      else messages.push({ role: 'assistant', content: data.content.slice() });
+    }
+    var tekst = laatste.content.filter(function (b) { return b.type === 'text'; }).map(function (b) { return b.text; }).join('');
+    var json = parseJSON(tekst) || parseJSON(alleTekst);
+    if (!json && laatste.stop_reason === 'max_tokens') throw new Error('Het antwoord was te lang en is afgebroken. Probeer het opnieuw.');
+    var corpusLaag = (corpus + '\n' + (opts.extraCorpus || '')).toLowerCase();
+    return {
+      json: json, usd: usd, zoekvragen: zoekvragen,
+      bronnen: Object.keys(bronnen).map(function (k) { return bronnen[k]; }),
+      bevestigd: function (u) {
+        if (!u) return false;
+        if (bronnen[normUrl(u)]) return true;
+        try { var p = new URL(u).pathname; return p.length > 8 && corpusLaag.indexOf(p.toLowerCase()) !== -1; } catch (e) { return false; }
+      }
+    };
+  }
+
+  // ── Stap 1: kavelpagina lezen ──────────────────────────────────────────────
+  var PAGINA_REGELS =
+    'Regels:\n' +
+    '- Verzin niets. Wat niet op de pagina staat is null.\n' +
+    '- btw_regeling: "volledig" als er btw over het bod (hamerprijs) én het opgeld komt; "opgeld" als er geen btw over het bod komt (margeregeling / bijzondere regeling gebruikte goederen) en wel btw bovenop het opgeld; "geen" als er geen btw bijkomt omdat het opgeld al inclusief btw is of de btw verlegd/0% is; anders "onbekend".\n' +
+    '- opgeld_pct is het percentage zoals het bij die btw_regeling klopt (bij "geen" inclusief btw).\n' +
+    '- vaste_kosten: vast bedrag per kavel in euro vóór btw (bij btw_regeling "geen" inclusief btw). Niet gevonden: null.\n' +
+    '- Partij van meerdere stuks: vul aantal_stuks in.\n' +
+    '- kosten.bron: korte letterlijke zin of vindplaats waar je de kosten zag.';
+  var PAGINA_JSON = '{"gevonden":true,"titel":"","veilinghuis":"","kavelnummer":"","product":{"merk":"","model":"","variant":"","zoekterm":"korte zoekterm om dit exacte product tweedehands te vinden"},' +
+    '"staat":"nieuw|zo goed als nieuw|gebruikt|beschadigd|defect|onbekend","staat_toelichting":"","aantal_stuks":1,"huidig_bod":null,"aantal_biedingen":null,"sluit":null,"sluit_iso":null,"locatie":null,' +
+    '"kosten":{"opgeld_pct":null,"vaste_kosten":null,"btw_pct":null,"btw_regeling":"onbekend","bron":""},"opmerkingen":[]}';
+  function vandaag() { return new Date().toISOString().slice(0, 10); }
+
+  async function leesKavelpagina(url, extra, deps) {
+    var paginaTekst = null;
+    if (deps.haalPagina) { try { paginaTekst = await deps.haalPagina(url); } catch (e) { paginaTekst = null; } }
+    var bruikbaar = paginaTekst && paginaTekst.replace(/\s+/g, ' ').length > 400;
+    var system = 'Je leest veilingkavels voor een Nederlandse opkoper. Vandaag is ' + vandaag() + '. Antwoord uitsluitend met één geldig JSON-object, zonder markdown en zonder tekst ervoor of erna.\n\n' +
+      (bruikbaar
+        ? 'De inhoud van de kavelpagina staat in het bericht. Staan de veilingkosten er niet in en staat er een link naar voorwaarden of kosten bij, open die dan met web_fetch (hooguit één pagina).\n\n'
+        : 'Werkwijze: open de kavelpagina met web_fetch. Staan de veilingkosten er niet op, open dan op dezelfde site de voorwaarden of kosteninformatie van deze veiling (hooguit één extra pagina). Lukt openen niet, zoek dan met web_search op het kavelnummer of de titel.\n\n') +
+      PAGINA_REGELS + '\n- sluit_iso: sluitingsmoment als ISO 8601 met tijdzone als dat op de pagina staat, anders null.';
+    var prompt = 'Kavelpagina: ' + url + '\n' + (extra ? 'Opmerking van de koper (gaat voor de pagina): ' + extra + '\n' : '') +
+      (bruikbaar ? '\n--- Inhoud van de pagina ---\n' + paginaTekst + '\n--- Einde ---\n' : '') +
+      '\nVul dit JSON-object in:\n' + PAGINA_JSON;
+    var tools = bruikbaar
+      ? [{ type: 'web_fetch_20250910', name: 'web_fetch', max_uses: 1, max_content_tokens: 6000 }]
+      : [{ type: 'web_fetch_20250910', name: 'web_fetch', max_uses: 2, max_content_tokens: 10000 },
+         { type: 'web_search_20250305', name: 'web_search', max_uses: 1, user_location: locatieVoor(url) }];
+    var r = await vraagClaude({ system: system, prompt: prompt, maxTokens: 4000, model: deps.modelPagina, tools: tools }, deps);
+    var j = r.json;
+    if (!j || typeof j !== 'object') throw new Error('Kavelpagina: geen bruikbaar antwoord');
+    var p = j.product || {};
+    var kost = j.kosten || {};
+    var sluitIso = typeof j.sluit_iso === 'string' && !isNaN(Date.parse(j.sluit_iso)) ? new Date(j.sluit_iso).toISOString() : null;
+    return {
+      gevonden: j.gevonden !== false,
+      direct_gelezen: !!bruikbaar,
+      titel: kortTekst(j.titel, 200),
+      veilinghuis: kortTekst(j.veilinghuis, 40),
+      kavelnummer: kortTekst(String(j.kavelnummer == null ? '' : j.kavelnummer), 20),
+      zoekterm: kortTekst(p.zoekterm, 120) || kortTekst([p.merk, p.model, p.variant].filter(Boolean).join(' '), 120),
+      staat: kortTekst(j.staat, 30),
+      staat_toelichting: kortTekst(j.staat_toelichting, 300),
+      aantal_stuks: num(j.aantal_stuks) > 1 ? Math.round(num(j.aantal_stuks)) : 1,
+      huidig_bod: num(j.huidig_bod) > 0 ? num(j.huidig_bod) : null,
+      aantal_biedingen: num(j.aantal_biedingen) != null ? Math.round(num(j.aantal_biedingen)) : null,
+      sluit: kortTekst(j.sluit == null ? '' : String(j.sluit), 60),
+      sluit_iso: sluitIso,
+      locatie: kortTekst(j.locatie == null ? '' : String(j.locatie), 80),
+      kosten: {
+        opgeld_pct: num(kost.opgeld_pct), vaste_kosten: num(kost.vaste_kosten), btw_pct: num(kost.btw_pct),
+        btw_regeling: REGELINGEN[kost.btw_regeling] ? kost.btw_regeling : null, bron: kortTekst(kost.bron, 240)
+      },
+      opmerkingen: Array.isArray(j.opmerkingen) ? j.opmerkingen.filter(function (x) { return typeof x === 'string'; }).slice(0, 6).map(function (x) { return kortTekst(x, 240); }) : [],
+      bronnen: r.bronnen.slice(0, 8),
+      usd: r.usd
+    };
+  }
+
+  // ── Stap 2: tweedehands- en nieuwprijzen ───────────────────────────────────
+  function zoekUrls(term) {
+    var plus = term.split(/\s+/).filter(Boolean).map(encodeURIComponent).join('+');
+    var q = encodeURIComponent(term);
+    return [
+      'https://www.marktplaats.nl/q/' + plus + '/',
+      'https://www.2dehands.be/q/' + plus + '/',
+      'https://www.ebay.nl/sch/i.html?_nkw=' + q + '&LH_Sold=1&LH_Complete=1',
+      'https://www.bol.com/nl/nl/s/?searchtext=' + q
+    ].filter(function (u) { return u.length <= 250; });
+  }
+  var PRIJS_JSON = '{"productnaam":"","categorie":"","nieuwprijs":null,"nieuwprijs_bron":"winkel en datum","nieuwprijs_url":null,' +
+    '"tweedehands":[{"platform":"Marktplaats","titel":"","prijs":0,"soort":"vraagprijs|verkocht","staat":"","url":null}],' +
+    '"marktplaats":{"laag":0,"gemiddeld":0,"hoog":0,"vertrouwen":"hoog|middel|laag","aantal_vergelijkbaar":0,"tip":"","verkooptijd":"","zoekwoorden":[]},' +
+    '"ebay":{"laag":null,"gemiddeld":null,"hoog":null,"vertrouwen":"laag","tip":"","verkooptijd":"","keywords":[]},' +
+    '"partij":null,"toelichting":"","aandachtspunten":[]}';
+  var PRIJS_REGELS =
+    'Regels:\n' +
+    '- Eerlijkheid gaat voor alles. Gebruik alleen advertenties van exact hetzelfde product (zelfde model, variant, opslag, maat, generatie) in een vergelijkbare staat. Laat "gezocht", accessoires, onderdelen, bundels en uitschieters weg. Defecte exemplaren alleen als het kavel zelf defect is.\n' +
+    '- Vraagprijzen op Marktplaats en 2dehands zijn geen verkoopprijzen; er wordt meestal lager verkocht. Verkochte eBay-items zijn de beste aanwijzing voor wat er echt betaald wordt.\n' +
+    '- tweedehands: maximaal 12 advertenties die je echt hebt gezien, met de exacte URL. Verzin nooit URL\'s of prijzen. Geen URL: url null.\n' +
+    '- marktplaats.laag / gemiddeld / hoog: realistische VERKOOPprijzen in NL/BE voor één exemplaar in de staat van het kavel. gemiddeld = waarvoor het binnen een paar weken verkoopt.\n' +
+    '- vertrouwen: "hoog" bij 5 of meer goed vergelijkbare advertenties of verkochte items, "middel" bij 2 tot 4, anders "laag". Weinig gevonden? Zeg dat eerlijk via een laag vertrouwen en in de toelichting.\n' +
+    '- nieuwprijs: laagste actuele prijs bij een gewone Nederlandse winkel, niet de adviesprijs. Niet gezien: null.\n' +
+    '- ebay: alleen invullen als je eBay-prijzen hebt gezien, anders null-waarden.\n' +
+    '- Partij van meerdere stuks: partij = {"aantal":n,"prijs_per_stuk":verwachte opbrengst per stuk}; de marktplaats-prijzen gelden voor één stuk.\n' +
+    '- toelichting: één of twee zinnen over waarop je de verwachte verkoopprijs baseert.\n' +
+    '- Bedragen in euro als getal.';
+
+  async function zoekPrijzen(product, pagina, extra, url, deps) {
+    // Elke zoekopdracht kost $0,01; pagina's lezen alleen tekst. Standaard hooguit één zoekopdracht.
+    var zoekMax = typeof deps.maxZoek === 'number' ? deps.maxZoek : 1;
+    var term = (pagina && pagina.zoekterm) || korteZoekterm(product);
+    var system = 'Je bent een eerlijke Nederlandse marktprijsonderzoeker voor een opkoper die veilingkavels tweedehands doorverkoopt in Nederland en België. Vandaag is ' + vandaag() + '. Antwoord uitsluitend met één geldig JSON-object, zonder markdown en zonder tekst ervoor of erna.\n\n' +
+      'Werkwijze (zuinig, want elke stap kost geld):\n' +
+      '1. Open met web_fetch de zoekpagina\'s uit het bericht, te beginnen met Marktplaats en de verkochte eBay-items. Open de bol.com-pagina voor de nieuwprijs.\n' +
+      (zoekMax > 0 ? '2. Gebruik web_search alleen als de pagina\'s samen te weinig vergelijkbare advertenties of geen nieuwprijs opleveren. Je hebt hooguit ' + (zoekMax === 1 ? 'één zoekopdracht' : zoekMax + ' zoekopdrachten') + '.\n\n' : '2. Er is geen zoekmachine; werk alleen met deze pagina\'s.\n\n') +
+      PRIJS_REGELS;
+    var prompt = 'Product: ' + product + '\n' +
+      (pagina && pagina.titel ? 'Titel op de veilingsite: ' + pagina.titel + '\n' : '') +
+      (pagina && pagina.staat ? 'Staat volgens de veiling: ' + pagina.staat + (pagina.staat_toelichting ? ' (' + pagina.staat_toelichting + ')' : '') + '\n' : '') +
+      (pagina && pagina.aantal_stuks > 1 ? 'Aantal stuks in het kavel: ' + pagina.aantal_stuks + '\n' : '') +
+      (extra ? 'Opmerking van de koper: ' + extra + '\n' : '') +
+      '\nZoekpagina\'s die je mag openen:\n' + zoekUrls(term).join('\n') +
+      '\n\nVul dit JSON-object in:\n' + PRIJS_JSON;
+    var r = await vraagClaude({
+      system: system, prompt: prompt, maxTokens: 6000, model: deps.modelPrijzen,
+      tools: [{ type: 'web_fetch_20250910', name: 'web_fetch', max_uses: 3, max_content_tokens: 6000 }].concat(
+        zoekMax > 0 ? [{ type: 'web_search_20250305', name: 'web_search', max_uses: zoekMax, user_location: locatieVoor(url) }] : [])
+    }, deps);
+    return normPrijzen(r.json, r, true);
+  }
+
+  // Reserve als live zoeken niet beschikbaar is: schatting op basis van kennis van het model
+  async function schatPrijzen(product, deps) {
+    var system = 'Je bent een Nederlandse marktprijsexpert zonder internettoegang. Geef je beste eerlijke schatting. Antwoord uitsluitend met één geldig JSON-object, zonder markdown.';
+    var prompt = 'Schat de huidige nieuwprijs bij Nederlandse winkels (niet de adviesprijs) en de realistische tweedehands verkoopprijs in Nederland voor: "' + product + '".\n' +
+      'Tweedehands ligt altijd onder de nieuwprijs. Laat tweedehands leeg ([]) en zet vertrouwen hooguit op "middel".\n\nVul dit JSON-object in:\n' + PRIJS_JSON;
+    var r = await vraagClaude({ system: system, prompt: prompt, maxTokens: 3000, model: deps.modelPrijzen }, deps);
+    var p = normPrijzen(r.json, r, false);
+    if (p.marktplaats.vertrouwen === 'hoog') p.marktplaats.vertrouwen = 'middel';
+    return p;
+  }
+
+  // Controleert en ordent het prijsantwoord. Links worden alleen als bevestigd gemarkeerd
+  // als ze echt in de zoek- of ophaalresultaten voorkwamen.
+  function normPrijzen(j, r, live) {
+    if (!j || !j.marktplaats) throw new Error('Kon geen marktprijzen ophalen. Probeer opnieuw.');
+    function platform(x) {
+      x = x || {};
+      var p = {
+        laag: num(x.laag), gemiddeld: num(x.gemiddeld), hoog: num(x.hoog),
+        vertrouwen: ['hoog', 'middel', 'laag'].indexOf(x.vertrouwen) !== -1 ? x.vertrouwen : 'laag',
+        aantal_vergelijkbaar: num(x.aantal_vergelijkbaar), tip: kortTekst(x.tip, 300), verkooptijd: kortTekst(x.verkooptijd, 40),
+        zoekwoorden: Array.isArray(x.zoekwoorden || x.keywords) ? (x.zoekwoorden || x.keywords).filter(function (w) { return typeof w === 'string'; }).slice(0, 8) : []
+      };
+      if (!(p.gemiddeld > 0)) return null;
+      if (!(p.laag > 0) || p.laag > p.gemiddeld) p.laag = p.laag > 0 ? p.gemiddeld : null;
+      if (!(p.hoog > 0) || p.hoog < p.gemiddeld) p.hoog = p.hoog > 0 ? p.gemiddeld : null;
+      p.keywords = p.zoekwoorden;
+      return p;
+    }
+    var mp = platform(j.marktplaats);
+    if (!mp) throw new Error('Kon geen marktprijzen ophalen. Probeer opnieuw.');
+    var eb = platform(j.ebay);
+    var lijst = (Array.isArray(j.tweedehands) ? j.tweedehands : []).map(function (a) {
+      a = a || {};
+      var u = veiligeUrl(a.url);
+      return {
+        platform: kortTekst(a.platform, 30), titel: kortTekst(a.titel, 140), prijs: num(a.prijs),
+        soort: a.soort === 'verkocht' ? 'verkocht' : 'vraagprijs', staat: kortTekst(a.staat, 40), url: u || null,
+        bevestigd: !!(u && r.bevestigd(u))
+      };
+    }).filter(function (a) { return a.prijs > 0; }).slice(0, 12);
+    var nieuwUrl = veiligeUrl(j.nieuwprijs_url);
+    var p = {
+      productnaam: kortTekst(j.productnaam, 160), categorie: kortTekst(j.categorie, 60),
+      nieuwprijs: num(j.nieuwprijs) > 0 ? num(j.nieuwprijs) : null, nieuwprijs_bron: kortTekst(j.nieuwprijs_bron, 160),
+      nieuwprijs_url: nieuwUrl || null, nieuwprijs_bevestigd: !!(nieuwUrl && r.bevestigd(nieuwUrl)),
+      marktplaats: mp, ebay: eb, tweedehands: lijst,
+      partij: j.partij && num(j.partij.aantal) > 1 ? { aantal: Math.round(num(j.partij.aantal)), prijs_per_stuk: num(j.partij.prijs_per_stuk) > 0 ? num(j.partij.prijs_per_stuk) : null } : null,
+      toelichting: kortTekst(j.toelichting, 400),
+      aandachtspunten: Array.isArray(j.aandachtspunten) ? j.aandachtspunten.filter(function (x) { return typeof x === 'string'; }).slice(0, 6).map(function (x) { return kortTekst(x, 240); }) : [],
+      live: live, opgehaald_op: Date.now(), usd: r.usd,
+      zoekvragen: r.zoekvragen.slice(0, 12),
+      bronnen: r.bronnen.slice(0, 20).map(function (b) { return { url: b.url, titel: kortTekst(b.titel, 120), opgehaald: !!b.opgehaald }; }),
+      controles: []
+    };
+    // Eigen controle van het AI-antwoord tegen de gevonden advertenties
+    var prijzen = lijst.map(function (a) { return a.prijs; }).sort(function (a, b) { return a - b; });
+    if (prijzen.length >= 3) {
+      var n = prijzen.length;
+      var mid = n % 2 ? prijzen[(n - 1) / 2] : (prijzen[n / 2 - 1] + prijzen[n / 2]) / 2;
+      p.mediaan_advertenties = mid;
+      if (mp.gemiddeld > mid * 1.25) p.controles.push('De verwachte verkoopprijs (' + fmtEuro(mp.gemiddeld) + ') ligt ruim boven de mediaan van de gevonden advertenties (' + fmtEuro(mid) + '). Controleer of dat terecht is.');
+      if (mp.gemiddeld < mid * 0.5) p.controles.push('De verwachte verkoopprijs (' + fmtEuro(mp.gemiddeld) + ') ligt ver onder de mediaan van de gevonden advertenties (' + fmtEuro(mid) + ').');
+    } else if (live) {
+      p.controles.push('Er zijn weinig vergelijkbare advertenties gevonden (' + prijzen.length + '). De verkoopprijs is daardoor minder zeker.');
+      if (mp.vertrouwen === 'hoog') mp.vertrouwen = 'middel';
+    }
+    var onbevestigd = lijst.filter(function (a) { return a.url && !a.bevestigd; }).length;
+    if (live && onbevestigd) p.controles.push(onbevestigd + (onbevestigd === 1 ? ' link naar een advertentie kwam' : ' links naar advertenties kwamen') + ' niet letterlijk voor in de opgehaalde resultaten. Open die zelf ter controle.');
+    if (p.nieuwprijs && mp.gemiddeld >= p.nieuwprijs) p.controles.push('De tweedehands prijs ligt niet onder de nieuwprijs. Controleer beide bedragen.');
+    return p;
+  }
+
+  function bepaalProduct(extra, pagina, url) {
+    var basis = extra || (pagina && (pagina.zoekterm || pagina.titel)) || (url ? naamUitUrl(url) : '') || 'onbekend product';
+    if (extra && pagina && pagina.titel && extra.length < 25) basis = extra + ' (' + pagina.titel + ')';
+    return basis.replace(/["“”]/g, '').trim();
+  }
+  function cacheSleutel(term, staat) { return String(term || '').toLowerCase().replace(/\s+/g, ' ').trim() + '|' + String(staat || '').toLowerCase(); }
+
+  // ── Volledige analyse ──────────────────────────────────────────────────────
+  // input: { url, extra, hergebruik }
+  // deps:  { anthropic, haalPagina?, modelPagina, modelPrijzen, cacheLees?(sleutel), cacheSchrijf?(sleutel, prijzen), opStap?(n) }
+  async function analyseer(input, deps) {
+    var url = input.url || '', extra = input.extra || '';
+    var pagina = null, live = true, waarschuwingen = [];
+    if (deps.opStap) deps.opStap(1);
+    if (url) {
+      try { pagina = await leesKavelpagina(url, extra, deps); }
+      catch (e) {
+        if (isToolFout(e)) live = false;
+        else if (e.apiType) throw e;
+        else waarschuwingen.push('De kavelpagina kon niet goed worden gelezen. Controleer bod en kosten zelf.');
+      }
+      if (pagina && !pagina.gevonden) waarschuwingen.push('De kavelpagina kon niet worden geopend. Product en kosten zijn mogelijk onvolledig.');
+    }
+    if (deps.opStap) deps.opStap(2);
+    var product = bepaalProduct(extra, pagina && pagina.gevonden ? pagina : null, url);
+    var sleutel = cacheSleutel((pagina && pagina.zoekterm) || korteZoekterm(product), pagina && pagina.staat);
+    var prijzen = null;
+    if (live && input.hergebruik !== false && deps.cacheLees) {
+      try { prijzen = await deps.cacheLees(sleutel); } catch (e) { prijzen = null; }
+      if (prijzen) prijzen.hergebruikt = true;
+    }
+    if (live && !prijzen) {
+      try {
+        prijzen = await zoekPrijzen(product, pagina, extra, url, deps);
+        if (prijzen.live && deps.cacheSchrijf) { try { await deps.cacheSchrijf(sleutel, prijzen); } catch (e) {} }
+      } catch (e) { if (isToolFout(e)) live = false; else throw e; }
+    }
+    if (!live) {
+      prijzen = await schatPrijzen(product, deps);
+      waarschuwingen.push('Live zoeken is niet beschikbaar. De prijzen zijn een schatting van het AI-model zonder internet.');
+    }
+    if (deps.opStap) deps.opStap(3);
+    return {
+      pagina: pagina, prijzen: prijzen, product: product, waarschuwingen: waarschuwingen,
+      usd: ((pagina && pagina.usd) || 0) + (prijzen.hergebruikt ? 0 : (prijzen.usd || 0))
+    };
+  }
+
+  root.VAKern = {
+    REGELINGEN: REGELINGEN, normTarief: normTarief, kostenFactoren: kostenFactoren, berekenKosten: berekenKosten, bodVoorTotaal: bodVoorTotaal,
+    API_PRIJS: API_PRIJS, apiKostenVan: apiKostenVan,
+    parseBedrag: parseBedrag, num: num, kortTekst: kortTekst, veiligeUrl: veiligeUrl, normUrl: normUrl, hostVan: hostVan, parseJSON: parseJSON,
+    naamUitUrl: naamUitUrl, korteZoekterm: korteZoekterm, htmlNaarTekst: htmlNaarTekst, zoekUrls: zoekUrls, cacheSleutel: cacheSleutel,
+    apiFout: apiFout, isToolFout: isToolFout, vraagClaude: vraagClaude,
+    leesKavelpagina: leesKavelpagina, zoekPrijzen: zoekPrijzen, schatPrijzen: schatPrijzen, normPrijzen: normPrijzen,
+    bepaalProduct: bepaalProduct, analyseer: analyseer
+  };
+})(typeof globalThis !== 'undefined' ? globalThis : this);

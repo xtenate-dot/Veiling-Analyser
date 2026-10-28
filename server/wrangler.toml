@@ -1,0 +1,38 @@
+# Veiling Analyser – Cloudflare Worker
+# Zie SETUP.md in de hoofdmap voor de stappen.
+name = "veiling-analyser"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "veiling-analyser"
+database_id = "VUL-HIER-HET-DATABASE-ID-IN"   # uit: npx wrangler d1 create veiling-analyser
+
+[vars]
+# Webadres van de app (voor links in e-mails en terug van de betaalpagina)
+APP_URL = "https://xtenate-dot.github.io/Veiling-Analyser/app.html"
+# Welke websites de server mogen aanroepen (komma-gescheiden)
+APP_ORIGIN = "https://xtenate-dot.github.io"
+# Analyses per kalendermaand per abonnement
+LIMIET_GRATIS = "5"
+LIMIET_BASIS = "100"
+LIMIET_PRO = "500"
+# Veiligheidsplafond: maximaal AI-kosten (in dollar) per 24 uur voor alle klanten samen
+DAGBUDGET_USD = "20"
+# Maximaal aantal analyses per klant per uur
+MAX_PER_UUR = "40"
+# AI-modellen (Haiku is ruim 20x goedkoper dan Sonnet)
+MODEL_PAGINA = "claude-haiku-5-5"
+MODEL_PRIJZEN = "claude-haiku-5-5"
+# Zoekopdrachten per analyse ($0,01 per stuk). 1 = beter bij weinig aanbod, 0 = altijd goedkoper
+ZOEKOPDRACHTEN = "1"
+
+# Geheimen zet je met: npx wrangler secret put NAAM
+#   ANTHROPIC_API_KEY      (verplicht)
+#   STRIPE_SECRET_KEY      (voor betalen)
+#   STRIPE_WEBHOOK_SECRET  (voor betalen)
+#   STRIPE_PRICE_BASIS     (prijs-ID van het Basis-abonnement, begint met price_)
+#   STRIPE_PRICE_PRO       (prijs-ID van het Pro-abonnement)
+#   RESEND_API_KEY         (optioneel, voor wachtwoord vergeten)
+#   EMAIL_VAN              (optioneel, bijv. "Veiling Analyser <noreply@jouwdomein.nl>")
