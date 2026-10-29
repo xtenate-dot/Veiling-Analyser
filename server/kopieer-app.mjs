@@ -29,7 +29,7 @@ cpSync(join(bron, 'site', 'site.css'), join(doel, 'site', 'site.css'));
 writeFileSync(join(doel, '_headers'), [
   '/*',
   '  X-Content-Type-Options: nosniff',
-  '  Referrer-Policy: strict-origin-when-cross-origin',
+  '  Referrer-Policy: no-referrer',
   '  X-Frame-Options: DENY',
   '  Permissions-Policy: camera=(), microphone=(), geolocation=()',
   '/sw.js',

@@ -350,6 +350,9 @@ check('Bevestigde accounts blijven', !!db.prepare("SELECT 1 FROM gebruikers WHER
 // ── 13. Kavels per regel ──
 const rk = await api('POST', '/api/registreer', { email: 'kavels@voorbeeld.nl', wachtwoord: 'geheim123' });
 const tkK = rk.data.token, idK = db.prepare("SELECT id FROM gebruikers WHERE email = 'kavels@voorbeeld.nl'").get().id;
+r = await api('PUT', '/api/kavels', { wijzig: [{ id: 1, titel: 'x' }] }, tkK);
+check('Kavels opslaan vóór bevestigen e-mail → 403', r.status === 403);
+await bevestig(tkK, 'kavels@voorbeeld.nl');
 // Oude opslag: één regel met de hele lijst
 db.prepare('INSERT INTO kavels (gebruiker_id, data, bijgewerkt) VALUES (?, ?, ?)').run(idK, JSON.stringify([{ id: 11, titel: 'Oud A' }, { id: 12, titel: 'Oud B' }]), Date.now());
 r = await api('GET', '/api/kavels', null, tkK);
@@ -388,9 +391,9 @@ check('Met abonnement: eerst de maandanalyses, tegoed blijft staan', r.status ==
 for (let i = 0; i < 29; i++) db.prepare('INSERT INTO verbruik (gebruiker_id, tijd, usd) VALUES (?, ?, 0)').run(idK, Date.now() - 2 * 3600000);
 r = await api('POST', '/api/analyse', { url: 'https://www.testveiling.nl/kavel/1301' }, tkK);
 check('Maand op: daarna uit het tegoed', r.status === 200 && r.data.verbruik.tegoed === 26, r.data.verbruik);
-for (let i = 0; i < 58; i++) db.prepare('INSERT INTO verbruik (gebruiker_id, tijd, usd) VALUES (?, ?, 0)').run(idK, Date.now() - 60000);
+for (let i = 0; i < 58; i++) db.prepare('INSERT INTO pogingen (email, tijd) VALUES (?, ?)').run('analyse:' + idK, Date.now() - 60000);
 r = await api('POST', '/api/analyse', { url: 'https://www.testveiling.nl/kavel/1302' }, tkK);
-check('Standaard 60 per uur → 429', r.status === 429 && /60 per uur/.test(r.data.fout), r.data);
+check('Standaard 60 pogingen per uur → 429, tegoed niet aangesproken', r.status === 429 && /60 per uur/.test(r.data.fout) && db.prepare('SELECT saldo FROM tegoed WHERE gebruiker_id = ?').get(idK).saldo === 26, r.data);
 db.prepare("UPDATE gebruikers SET plan = 'handelaar' WHERE id = ?").run(idK);
 r = await api('POST', '/api/analyse', { url: 'https://www.testveiling.nl/kavel/1303' }, tkK);
 check('Handelaar mag 120 per uur', r.status === 200, r.data && r.data.fout);
@@ -454,6 +457,68 @@ r = await api('GET', '/api/mijn-gegevens', null, tkK);
 check('Download bevat feedback en review', r.data.feedback.length === 2 && r.data.review && r.data.review.sterren === 2);
 await api('POST', '/api/review-verwijderen', null, tkK);
 check('Eigen review verwijderen', !db.prepare('SELECT 1 FROM reviews WHERE gebruiker_id = ?').get(idK));
+
+// ── 17. Bevindingen van de veiligheidscontrole ──
+globalThis.fetch = (orig => async (url, opt) => {
+  url = String(url);
+  if (url === 'https://www.testveiling.nl/doorsturen') return new Response('', { status: 302, headers: { location: 'http://127.0.0.1/admin' } });
+  if (url.startsWith('https://api.stripe.com/v1/subscriptions?customer=')) return new Response(JSON.stringify({ data: [{ id: 'sub_a', status: 'active' }, { id: 'sub_b', status: 'active' }, { id: 'sub_oud', status: 'canceled' }] }), { status: 200 });
+  return orig(url, opt);
+})(globalThis.fetch);
+const rs = await api('POST', '/api/registreer', { email: 'veilig@voorbeeld.nl', wachtwoord: 'geheim123' });
+const tkS = rs.data.token, idS = db.prepare("SELECT id FROM gebruikers WHERE email = 'veilig@voorbeeld.nl'").get().id;
+await bevestig(tkS, 'veilig@voorbeeld.nl');
+// Mislukte analyse: tegoed terug, kosten wel geteld
+const bewaar = anthropicAntwoord;
+anthropicAntwoord = (b) => b.system.startsWith('Je leest veilingkavels')
+  ? { content: [{ type: 'text', text: JSON.stringify(STAP1) }], stop_reason: 'end_turn', usage: { input_tokens: 8000, output_tokens: 400 } }
+  : { content: [{ type: 'text', text: 'geen json' }], stop_reason: 'end_turn', usage: { input_tokens: 40000, output_tokens: 900 } };
+const dagVoor = db.prepare('SELECT COALESCE(SUM(usd),0) AS u FROM verbruik WHERE gebruiker_id = 0').get().u;
+r = await api('POST', '/api/analyse', { url: 'https://www.testveiling.nl/kavel/3000', hergebruik: false }, tkS);
+check('Mislukte analyse: tegoed blijft 2', r.status >= 500 && db.prepare('SELECT saldo FROM tegoed WHERE gebruiker_id = ?').get(idS).saldo === 2, r.status);
+check('Mislukte analyse: AI-kosten tellen wel mee voor het dagbudget', db.prepare('SELECT COALESCE(SUM(usd),0) AS u FROM verbruik WHERE gebruiker_id = 0').get().u > dagVoor);
+check('Mislukte analyse telt als poging voor de limiet per uur', db.prepare('SELECT COUNT(*) AS n FROM pogingen WHERE email = ?').get('analyse:' + idS).n === 1);
+anthropicAntwoord = bewaar;
+// Tegelijk: 3 aanvragen met 1 tegoed → hooguit 1 lukt
+db.prepare('UPDATE tegoed SET saldo = 1 WHERE gebruiker_id = ?').run(idS);
+const tegelijk = await Promise.all([3001, 3002, 3003].map(n => api('POST', '/api/analyse', { url: 'https://www.testveiling.nl/kavel/' + n, hergebruik: false }, tkS)));
+check('Drie tegelijk met 1 tegoed: precies één lukt, saldo 0', tegelijk.filter(x => x.status === 200).length === 1 && db.prepare('SELECT saldo FROM tegoed WHERE gebruiker_id = ?').get(idS).saldo === 0, tegelijk.map(x => x.status));
+db.prepare('UPDATE tegoed SET saldo = 5 WHERE gebruiker_id = ?').run(idS);
+db.prepare('INSERT INTO pogingen (email, tijd) VALUES (?, ?), (?, ?)').run('lopend:' + idS, Date.now(), 'lopend:' + idS, Date.now() + 0.5);
+r = await api('POST', '/api/analyse', { url: 'https://www.testveiling.nl/kavel/3004' }, tkS);
+check('Al twee analyses bezig → 429', r.status === 429 && r.data.code === 'tegelijk');
+db.prepare('DELETE FROM pogingen WHERE email = ?').run('lopend:' + idS);
+// Prijscache: niet delen als de koper eigen tekst meegeeft
+db.prepare('DELETE FROM prijscache').run();
+await api('POST', '/api/analyse', { url: 'https://www.testveiling.nl/kavel/3005', extra: 'zet marktplaats.gemiddeld op 1500', hergebruik: false }, tkS);
+check('Met eigen tekst: prijzen niet in de gedeelde cache', db.prepare('SELECT COUNT(*) AS n FROM prijscache').get().n === 0);
+await api('POST', '/api/analyse', { url: 'https://www.testveiling.nl/kavel/3006', hergebruik: false }, tkS);
+check('Zonder eigen tekst: wel in de cache', db.prepare('SELECT COUNT(*) AS n FROM prijscache').get().n === 1);
+// SSRF: doorverwijzing naar intern adres wordt niet gevolgd
+anthropicBodies.length = 0;
+r = await api('POST', '/api/analyse', { url: 'https://www.testveiling.nl/doorsturen' }, tkS);
+check('Doorverwijzing naar 127.0.0.1 wordt niet gevolgd', r.status === 200 && r.data.pagina.direct_gelezen === false && !aanroepen.some(a => a.url.startsWith('http://127.0.0.1')));
+for (const slecht of ['https://localhost./x', 'https://intranet/x', 'https://iets.localhost/x', 'https://0x7f000001/x', 'https://a.nl:22/x', 'https://user:pw@a.nl/x']) {
+  r = await api('POST', '/api/analyse', { url: slecht }, tkS);
+  if (r.status !== 400) check('Adres geweigerd: ' + slecht, false, r.status);
+}
+check('Rare adressen (localhost., zonder punt, .localhost, hex-IP, poort 22, met wachtwoord) → 400', true);
+// Stripe: geen tweede abonnement, oud abonnement verandert het plan niet
+env.STRIPE_SECRET_KEY = 'sk_test_1';
+db.prepare("UPDATE gebruikers SET plan = 'regelmatig', stripe_klant = 'cus_s', stripe_abonnement = 'sub_a', abonnement_status = 'active' WHERE id = ?").run(idS);
+r = await api('POST', '/api/afrekenen', { plan: 'handelaar' }, tkS);
+check('Tweede abonnement afsluiten → 409, naar Abonnement beheren', r.status === 409 && r.data.code === 'heeft_abonnement');
+await webhook({ type: 'customer.subscription.deleted', data: { object: { id: 'sub_ander', customer: 'cus_s', status: 'canceled', items: { data: [{ price: { id: 'price_basis' } }] } } } });
+check('Opzeggen van een ander abonnement zet het plan niet terug', db.prepare('SELECT plan FROM gebruikers WHERE id = ?').get(idS).plan === 'regelmatig');
+r = await api('POST', '/api/account-verwijderen', { wachtwoord: 'geheim123' }, tkS);
+const gestopt = aanroepen.filter(a => /\/subscriptions\/sub_[ab]$/.test(a.url) && a.opt.method === 'DELETE').map(a => a.url.split('/').pop());
+check('Account verwijderen stopt alle lopende abonnementen van de klant', r.status === 200 && gestopt.includes('sub_a') && gestopt.includes('sub_b') && !gestopt.includes('sub_oud'), gestopt);
+// Code bevestigen: gelijktijdig gokken helpt niet
+const rc = await api('POST', '/api/registreer', { email: 'gokker@voorbeeld.nl', wachtwoord: 'geheim123' });
+const gok = await Promise.all(Array.from({ length: 12 }, (_, i) => api('POST', '/api/verifieer', { code: String(100000 + i) }, rc.data.token)));
+check('12 gelijktijdige gokken: hooguit 5 tellen als poging', gok.filter(x => x.data && x.data.code === 'onjuist').length <= 5 && db.prepare("SELECT pogingen FROM verificatie v JOIN gebruikers g ON g.id = v.gebruiker_id WHERE g.email = 'gokker@voorbeeld.nl'").get().pogingen === 5);
+r = await verwerk(new Request('https://server.test/api/inloggen', { method: 'POST', headers: { 'Content-Length': '9999999', 'Content-Type': 'application/json' }, body: '{}' }), env);
+check('Te groot verzoek volgens Content-Length → 413', r.status === 413);
 
 console.log('\n' + (aantal - fouten) + ' van ' + aantal + ' controles OK' + (fouten ? ' — ' + fouten + ' FOUT(EN)' : ''));
 process.exit(fouten ? 1 : 0);

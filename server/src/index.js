@@ -63,6 +63,8 @@ function json(data, status, extra) {
   return new Response(JSON.stringify(data), { status: status || 200, headers: Object.assign({ 'Content-Type': 'application/json; charset=utf-8' }, extra || {}) });
 }
 async function leesJson(request, max) {
+  const lengte = Number(request.headers.get('Content-Length') || 0);
+  if (lengte > (max || 100000)) throw new Fout(413, 'te_groot', 'Het verzoek is te groot.');
   const tekst = await request.text();
   if (tekst.length > (max || 100000)) throw new Fout(413, 'te_groot', 'Het verzoek is te groot.');
   try { return tekst ? JSON.parse(tekst) : {}; } catch (e) { throw new Fout(400, 'ongeldig', 'Ongeldige gegevens.'); }
@@ -122,7 +124,13 @@ async function limiet(env, sleutel, max, vensterMs, bericht) {
   if (r && r.n >= max) throw new Fout(429, 'te_vaak', bericht);
   await env.DB.prepare('INSERT INTO pogingen (email, tijd) VALUES (?, ?)').bind(sleutel, nu).run();
 }
-function ipVan(request) { return request.headers.get('CF-Connecting-IP') || ''; }
+// IPv6 per /64 (één aansluiting heeft er vaak duizenden), IPv4 per adres
+function ipVan(request) {
+  const ip = request.headers.get('CF-Connecting-IP') || '';
+  if (!ip.includes(':')) return ip;
+  const delen = ip.split('::')[0].split(':');
+  return delen.slice(0, 4).join(':') + '::/64';
+}
 
 // ── E-mailcontrole ───────────────────────────────────────────────────────────
 // Actief zodra de server e-mail kan versturen (Resend), tenzij EMAILCONTROLE = "uit".
@@ -166,10 +174,11 @@ async function verifieer(request, env) {
   if (!g.email_geverifieerd) {
     const v = await env.DB.prepare('SELECT * FROM verificatie WHERE gebruiker_id = ?').bind(g.id).first();
     if (!v || v.verloopt < Date.now()) throw new Fout(400, 'verlopen', 'Deze code is verlopen. Vraag een nieuwe code aan.');
-    if (v.pogingen >= 5) throw new Fout(400, 'te_vaak', 'Te vaak een verkeerde code ingevuld. Vraag een nieuwe code aan.');
+    // Eerst de poging tellen (in één stap), dan pas vergelijken: zo helpt gelijktijdig gokken niet
+    const telt = await env.DB.prepare('UPDATE verificatie SET pogingen = pogingen + 1 WHERE gebruiker_id = ? AND pogingen < 5').bind(g.id).run();
+    if (!telt.meta || !telt.meta.changes) throw new Fout(400, 'te_vaak', 'Te vaak een verkeerde code ingevuld. Vraag een nieuwe code aan.');
     const code = String(b.code || '').replace(/\D/g, '');
     if (!gelijk(await sha256(g.id + ':' + code), v.code_hash)) {
-      await env.DB.prepare('UPDATE verificatie SET pogingen = pogingen + 1 WHERE gebruiker_id = ?').bind(g.id).run();
       throw new Fout(400, 'onjuist', 'Deze code klopt niet. Controleer de e-mail en probeer het opnieuw.');
     }
     await env.DB.batch([
@@ -259,8 +268,9 @@ async function inloggen(request, env) {
   if (p && p.n >= 10) throw new Fout(429, 'te_vaak', 'Te veel mislukte pogingen. Probeer het over een kwartier opnieuw.');
   const ip = ipVan(request);
   if (ip) await limiet(env, 'ip-login:' + ip, 30, 15 * 60000, 'Te veel inlogpogingen vanaf dit internetadres. Probeer het over een kwartier opnieuw.');
-  const g =await env.DB.prepare('SELECT * FROM gebruikers WHERE email = ?').bind(email).first();
-  const ok = g && gelijk(await hashWachtwoord(ww, g.zout), g.wachtwoord_hash);
+  const g = await env.DB.prepare('SELECT * FROM gebruikers WHERE email = ?').bind(email).first();
+  // Ook bij een onbekend adres hashen, zodat de antwoordtijd niet verraadt of er een account is
+  const ok = g ? gelijk(await hashWachtwoord(ww, g.zout), g.wachtwoord_hash) : (await hashWachtwoord(ww, 'geen-account'), false);
   if (!ok) {
     await env.DB.prepare('INSERT INTO pogingen (email, tijd) VALUES (?, ?)').bind(email, Date.now()).run();
     throw new Fout(401, 'onjuist', 'E-mailadres of wachtwoord klopt niet.');
@@ -350,12 +360,19 @@ async function accountVerwijderen(request, env) {
     throw new Fout(403, 'onjuist', 'Dit wachtwoord klopt niet.');
   }
   // Een lopend abonnement direct stoppen, anders betaalt de klant door zonder account
-  if (g.stripe_abonnement && env.STRIPE_SECRET_KEY && ['active', 'trialing', 'past_due', 'unpaid', 'incomplete'].includes(g.abonnement_status)) {
-    await stripe(env, 'DELETE', 'subscriptions/' + encodeURIComponent(g.stripe_abonnement));
+  // Alle lopende abonnementen van deze klant stoppen, ook een eventueel tweede
+  if (env.STRIPE_SECRET_KEY && (g.stripe_klant || g.stripe_abonnement)) {
+    const ids = new Set();
+    if (g.stripe_abonnement && ['active', 'trialing', 'past_due', 'unpaid', 'incomplete'].includes(g.abonnement_status)) ids.add(g.stripe_abonnement);
+    if (g.stripe_klant) {
+      const lijst = await stripe(env, 'GET', 'subscriptions?customer=' + encodeURIComponent(g.stripe_klant) + '&status=all&limit=20');
+      (lijst.data || []).filter(x => ['active', 'trialing', 'past_due', 'unpaid', 'incomplete'].includes(x.status)).forEach(x => ids.add(x.id));
+    }
+    for (const id of ids) await stripe(env, 'DELETE', 'subscriptions/' + encodeURIComponent(id));
   }
   const kanon = g.email_kanon || emailKanon(g.email);
   await env.DB.batch([
-    // Alleen een onherleidbare vingerafdruk van het adres, 40 dagen, tegen het omzeilen van de maandlimiet
+    // Alleen een vingerafdruk (hash) van het adres, een jaar, zodat opnieuw aanmelden geen nieuwe welkomstbundel geeft
     env.DB.prepare('INSERT OR REPLACE INTO verwijderd (kanon_hash, oud_id, tijd) VALUES (?, ?, ?)').bind(await sha256('kanon:' + kanon), g.id, Date.now()),
     // Verbruik blijft anoniem bestaan voor het dagbudget en de maandlimiet; de links gaan weg
     env.DB.prepare('UPDATE verbruik SET gebruiker_id = ?, url = NULL WHERE gebruiker_id = ?').bind(-g.id, g.id),
@@ -401,6 +418,9 @@ export async function opruimen(env, nu = Date.now()) {
     stappen.push(['onbevestigd-codes', 'DELETE FROM verificatie WHERE gebruiker_id IN (' + sub + ')', []]);
     stappen.push(['onbevestigd-items', 'DELETE FROM kavel_items WHERE gebruiker_id IN (' + sub + ')', []]);
     stappen.push(['onbevestigd-tegoed', 'DELETE FROM tegoed WHERE gebruiker_id IN (' + sub + ')', []]);
+    stappen.push(['onbevestigd-feedback', 'DELETE FROM feedback WHERE gebruiker_id IN (' + sub + ')', []]);
+    stappen.push(['onbevestigd-herstel', 'DELETE FROM herstel WHERE gebruiker_id IN (' + sub + ')', []]);
+    stappen.push(['onbevestigd-verbruik', 'UPDATE verbruik SET gebruiker_id = 0, url = NULL WHERE gebruiker_id IN (' + sub + ')', []]);
     stappen.push(['onbevestigd', 'DELETE FROM gebruikers WHERE email_geverifieerd = 0 AND aangemaakt < ?', [grens]]);
   }
   const verslag = {};
@@ -416,6 +436,7 @@ export async function opruimen(env, nu = Date.now()) {
 const FEEDBACK_SOORTEN = { prijs: 'De prijzen kloppen niet', product: 'Verkeerd product herkend', kosten: 'De veilingkosten kloppen niet', anders: 'Iets anders' };
 async function feedbackGeven(request, env) {
   const g = await huidigeGebruiker(request, env);
+  if (emailControle(env) && !g.email_geverifieerd) throw new Fout(403, 'niet_geverifieerd', 'Bevestig eerst je e-mailadres.');
   const b = await leesJson(request);
   const soort = FEEDBACK_SOORTEN[b.soort] ? b.soort : 'anders';
   const tekst = String(b.tekst || '').trim().slice(0, 1000);
@@ -514,8 +535,10 @@ function veiligAdres(url) {
   let u;
   try { u = new URL(url); } catch (e) { return false; }
   if (!/^https?:$/.test(u.protocol)) return false;
-  const h = u.hostname.toLowerCase();
-  if (h === 'localhost' || h.endsWith('.local') || h.endsWith('.internal') || /^\d+\.\d+\.\d+\.\d+$/.test(h) || h.includes(':')) return false;
+  if (u.username || u.password) return false;
+  const h = u.hostname.toLowerCase().replace(/\.$/, '');
+  if (!h.includes('.') || h === 'localhost' || /\.(localhost|local|internal|lan|home|arpa)$/.test(h) || /^[\d.]+$/.test(h) || /^0x/i.test(h) || h.includes(':') || h.includes('[')) return false;
+  if (u.port && !['80', '443', '8080', '8443'].includes(u.port)) return false;
   return true;
 }
 // Haalt de kavelpagina zelf op (gratis) zodat het model alleen een compacte versie hoeft te lezen
@@ -524,11 +547,20 @@ async function haalPagina(url) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 10000);
   try {
-    const r = await fetch(url, {
-      signal: ctrl.signal, redirect: 'follow',
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; VeilingAnalyser/1.0)', 'Accept': 'text/html,application/xhtml+xml', 'Accept-Language': 'nl-NL,nl;q=0.9,en;q=0.5' }
-    });
-    if (!r.ok || !/html/i.test(r.headers.get('content-type') || '')) return null;
+    // Doorverwijzingen zelf volgen (hooguit 3) en elke stap opnieuw controleren
+    let r = null, adres = url;
+    for (let stap = 0; stap < 4; stap++) {
+      r = await fetch(adres, {
+        signal: ctrl.signal, redirect: 'manual',
+        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; VeilingAnalyser/1.0)', 'Accept': 'text/html,application/xhtml+xml', 'Accept-Language': 'nl-NL,nl;q=0.9,en;q=0.5' }
+      });
+      if (r.status < 300 || r.status > 399) break;
+      const naar = r.headers.get('location');
+      if (!naar || stap === 3) return null;
+      adres = new URL(naar, adres).toString();
+      if (!veiligAdres(adres) || K.nietOpenen(adres)) return null;
+    }
+    if (!r || !r.ok || !/html/i.test(r.headers.get('content-type') || '')) return null;
     const reader = r.body.getReader();
     const dec = new TextDecoder();
     let html = '', totaal = 0;
@@ -544,7 +576,7 @@ async function haalPagina(url) {
     return null;
   } finally { clearTimeout(timer); }
 }
-function anthropicVia(env) {
+function anthropicVia(env, teller) {
   return async function (body) {
     const r = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -553,6 +585,7 @@ function anthropicVia(env) {
     });
     let data = null;
     try { data = await r.json(); } catch (e) {}
+    if (data && data.usage && teller) teller.usd += K.apiKostenVan(body.model, data.usage);
     if (!r.ok || !data || data.error) throw K.apiFout(data, r.status);
     return data;
   };
@@ -576,39 +609,53 @@ async function analyse(request, env) {
   const gebruikt = await verbruikDezeMaand(env, g.id);
   const saldo = await saldoVan(env, g.id);
   const uitTegoed = gebruikt >= p[plan].limiet;
-  if (uitTegoed && saldo <= 0) {
-    const betalen = !!env.STRIPE_SECRET_KEY;
-    throw new Fout(402, 'limiet', plan === 'gratis'
-      ? (betalen ? 'Je gratis analyses zijn op. Koop een losse bundel of kies een abonnement om verder te gaan.' : 'Je gratis analyses zijn op. Een ander bod doorrekenen kan wel gewoon.')
-      : 'Je hebt deze maand alle ' + p[plan].limiet + ' analyses van je abonnement gebruikt. Koop een losse bundel, kies een groter abonnement of wacht tot de 1e van volgende maand.');
-  }
-  const uur = await env.DB.prepare('SELECT COUNT(*) AS n FROM verbruik WHERE gebruiker_id = ? AND tijd > ?').bind(g.id, Date.now() - 3600000).first();
-  if (uur && uur.n >= p[plan].perUur) throw new Fout(429, 'te_snel', 'Je doet veel analyses kort na elkaar (meer dan ' + p[plan].perUur + ' per uur). Wacht een paar minuten.');
+  const geenTegoed = () => new Fout(402, 'limiet', plan === 'gratis'
+    ? (env.STRIPE_SECRET_KEY ? 'Je gratis analyses zijn op. Koop een losse bundel of kies een abonnement om verder te gaan.' : 'Je gratis analyses zijn op. Een ander bod doorrekenen kan wel gewoon.')
+    : 'Je hebt deze maand alle ' + p[plan].limiet + ' analyses van je abonnement gebruikt. Koop een losse bundel, kies een groter abonnement of wacht tot de 1e van volgende maand.');
+  if (uitTegoed && saldo <= 0) throw geenTegoed();
+  // Hooguit 2 analyses tegelijk per gebruiker; een aanvraag die vastloopt telt na 3 minuten niet meer mee
+  const lopend = await env.DB.prepare('SELECT COUNT(*) AS n FROM pogingen WHERE email = ? AND tijd > ?').bind('lopend:' + g.id, Date.now() - 180000).first();
+  if (lopend && lopend.n >= 2) throw new Fout(429, 'tegelijk', 'Er lopen al twee analyses tegelijk. Wacht tot een ervan klaar is.');
+  // Elke poging telt mee voor de limiet per uur, ook als hij mislukt
+  await limiet(env, 'analyse:' + g.id, p[plan].perUur, 3600000, 'Je doet veel analyses kort na elkaar (meer dan ' + p[plan].perUur + ' per uur). Wacht een paar minuten.');
   if (await dagbudgetOp(env)) {
     await meldEigenaar(env, 'budget', 'Dagbudget bereikt', 'De server heeft het dagbudget voor AI-kosten bereikt. Analyses worden geweigerd tot het budget weer vrij is. Verhoog DAGBUDGET_USD in wrangler.toml als dit door echte klanten komt.');
     throw new Fout(503, 'budget', 'De analyseservice is voor vandaag even vol. Probeer het later opnieuw.');
   }
-
-  const res = await K.analyseer({ url, extra, fotos, hergebruik: b.hergebruik !== false }, {
-    anthropic: anthropicVia(env),
-    haalPagina: haalPagina,
-    modelPagina: env.MODEL_PAGINA || 'claude-haiku-5-5',
-    modelPrijzen: env.MODEL_PRIJZEN || 'claude-haiku-5-5',
-    maxZoek: env.ZOEKOPDRACHTEN != null ? Number(env.ZOEKOPDRACHTEN) : 1,
-    cacheLees: async (sl) => {
-      const r = await env.DB.prepare('SELECT data FROM prijscache WHERE sleutel = ? AND tijd > ?').bind(sl, Date.now() - CACHE_DAGEN * 864e5).first();
-      return r ? JSON.parse(r.data) : null;
-    },
-    cacheSchrijf: async (sl, pr) => {
-      await env.DB.prepare('INSERT OR REPLACE INTO prijscache (sleutel, data, tijd) VALUES (?, ?, ?)').bind(sl, JSON.stringify(pr), Date.now()).run();
-    }
-  });
-  await env.DB.prepare('INSERT INTO verbruik (gebruiker_id, tijd, usd, url) VALUES (?, ?, ?, ?)').bind(g.id, Date.now(), res.usd || 0, url.slice(0, 500)).run();
-  let nieuwSaldo = saldo;
+  // Tegoed vooraf vastleggen (in één stap, dus niet dubbel te gebruiken); bij een mislukte analyse komt het terug
   if (uitTegoed) {
-    await env.DB.prepare('UPDATE tegoed SET saldo = saldo - 1, bijgewerkt = ? WHERE gebruiker_id = ? AND saldo > 0').bind(Date.now(), g.id).run();
-    nieuwSaldo = Math.max(0, saldo - 1);
+    const af = await env.DB.prepare('UPDATE tegoed SET saldo = saldo - 1, bijgewerkt = ? WHERE gebruiker_id = ? AND saldo > 0').bind(Date.now(), g.id).run();
+    if (!af.meta || !af.meta.changes) throw geenTegoed();
   }
+  const lopendTijd = Date.now() + Math.random();
+  await env.DB.prepare('INSERT INTO pogingen (email, tijd) VALUES (?, ?)').bind('lopend:' + g.id, lopendTijd).run();
+  const teller = { usd: 0 };
+  let res;
+  try {
+    res = await K.analyseer({ url, extra, fotos, hergebruik: b.hergebruik !== false }, {
+      anthropic: anthropicVia(env, teller),
+      haalPagina: haalPagina,
+      modelPagina: env.MODEL_PAGINA || 'claude-haiku-5-5',
+      modelPrijzen: env.MODEL_PRIJZEN || 'claude-haiku-5-5',
+      maxZoek: env.ZOEKOPDRACHTEN != null ? Number(env.ZOEKOPDRACHTEN) : 1,
+      cacheLees: async (sl) => {
+        const r = await env.DB.prepare('SELECT data FROM prijscache WHERE sleutel = ? AND tijd > ?').bind(sl, Date.now() - CACHE_DAGEN * 864e5).first();
+        return r ? JSON.parse(r.data) : null;
+      },
+      cacheSchrijf: async (sl, pr) => {
+        await env.DB.prepare('INSERT OR REPLACE INTO prijscache (sleutel, data, tijd) VALUES (?, ?, ?)').bind(sl, JSON.stringify(pr), Date.now()).run();
+      }
+    });
+  } catch (e) {
+    // Mislukt: geen tegoed kwijt, maar de gemaakte AI-kosten tellen wel mee voor het dagbudget (gebruiker 0 = geen klant)
+    if (uitTegoed) await tegoedErbij(env, g.id, 1);
+    if (teller.usd > 0) await env.DB.prepare('INSERT INTO verbruik (gebruiker_id, tijd, usd, url) VALUES (0, ?, ?, NULL)').bind(Date.now(), teller.usd).run();
+    throw e;
+  } finally {
+    await env.DB.prepare('DELETE FROM pogingen WHERE email = ? AND tijd = ?').bind('lopend:' + g.id, lopendTijd).run();
+  }
+  await env.DB.prepare('INSERT INTO verbruik (gebruiker_id, tijd, usd, url) VALUES (?, ?, ?, ?)').bind(g.id, Date.now(), Math.max(teller.usd, res.usd || 0), url.slice(0, 500)).run();
+  const nieuwSaldo = uitTegoed ? Math.max(0, saldo - 1) : saldo;
   res.verbruik = { gebruikt: gebruikt + 1, limiet: p[plan].limiet, plan: plan, tegoed: nieuwSaldo, beschikbaar: beschikbaarVan(p[plan].limiet, gebruikt + 1, nieuwSaldo) };
   // De kosten zijn een zaak van de app-eigenaar, niet van de klant
   delete res.usd;
@@ -620,7 +667,7 @@ async function analyse(request, env) {
 // ── Kavels synchroniseren ────────────────────────────────────────────────────
 // Eén regel per kavel. De app stuurt alleen wat veranderd is ({ wijzig: [...], verwijder: [id, ...] }).
 // Alles gebeurt met json_each in een paar queries, zodat ook grote lijsten binnen de limieten van D1 blijven.
-const MAX_KAVELS = 5000, WAARSCHUW_KAVELS = 4000, MAX_KAVEL_BYTES = 100000;
+const MAX_KAVELS = 5000, WAARSCHUW_KAVELS = 4000, MAX_KAVEL_BYTES = 100000, MAX_KAVELS_TOTAAL = 20000000; // 20 MB per gebruiker
 function kavelId(k) { const id = k && k.id; return (typeof id === 'string' || typeof id === 'number') && String(id).length <= 64 ? String(id) : null; }
 // Oude opslag (één regel per gebruiker) eenmalig overzetten
 async function zetOudeKavelsOver(env, gebruikerId) {
@@ -652,6 +699,8 @@ async function kavelsLezen(request, env) {
 }
 async function kavelsOpslaan(request, env) {
   const g = await huidigeGebruiker(request, env);
+  if (emailControle(env) && !g.email_geverifieerd) throw new Fout(403, 'niet_geverifieerd', 'Bevestig eerst je e-mailadres; daarna worden je kavels bewaard.');
+  await limiet(env, 'kavels:' + g.id, 600, 3600000, 'Je kavels worden erg vaak opgeslagen. Probeer het over een paar minuten opnieuw.');
   const b = await leesJson(request, 1500000);
   await zetOudeKavelsOver(env, g.id);
   const nu = Date.now();
@@ -677,6 +726,10 @@ async function kavelsOpslaan(request, env) {
     const nieuw = await env.DB.prepare("SELECT COUNT(*) AS n FROM json_each(?) WHERE CAST(json_extract(value, '$.id') AS TEXT) NOT IN (SELECT id FROM kavel_items WHERE gebruiker_id = ?)")
       .bind(JSON.stringify(goed), g.id).first();
     if ((await aantalKavels(env, g.id)) + (nieuw ? nieuw.n : 0) > MAX_KAVELS) throw new Fout(413, 'te_veel', 'Je hebt het maximum van ' + MAX_KAVELS + ' opgeslagen kavels bereikt. Verwijder kavels die je niet meer nodig hebt.');
+    const ids2 = JSON.stringify(goed.map(k => String(k.id)));
+    const ruimte = await env.DB.prepare('SELECT COALESCE(SUM(length(data)), 0) AS n FROM kavel_items WHERE gebruiker_id = ? AND id NOT IN (SELECT value FROM json_each(?))').bind(g.id, ids2).first();
+    const erbij = goed.reduce((t, k) => t + JSON.stringify(k).length, 0);
+    if ((ruimte ? ruimte.n : 0) + erbij > MAX_KAVELS_TOTAAL) throw new Fout(413, 'te_veel', 'Je opgeslagen kavels nemen te veel ruimte in (maximaal 20 MB). Verwijder oude kavels of foto\'s.');
     await env.DB.prepare("INSERT OR REPLACE INTO kavel_items (gebruiker_id, id, data, bijgewerkt) SELECT ?, CAST(json_extract(value, '$.id') AS TEXT), value, ? FROM json_each(?)")
       .bind(g.id, nu, JSON.stringify(goed)).run();
   }
@@ -718,6 +771,9 @@ async function afrekenen(request, env) {
     };
   } else {
     if (!plan || !plan.prijs) throw new Fout(400, 'plan', 'Onbekend abonnement.');
+    if (g.stripe_abonnement && ['active', 'trialing', 'past_due', 'unpaid', 'incomplete'].includes(g.abonnement_status)) {
+      throw new Fout(409, 'heeft_abonnement', 'Je hebt al een abonnement. Overstappen doe je via Abonnement beheren.');
+    }
     velden = {
       'mode': 'subscription',
       'line_items[0][price]': plan.prijs,
@@ -741,16 +797,19 @@ async function portaal(request, env) {
   return json({ url: s.url });
 }
 // Zet de abonnementsgegevens van Stripe over naar de gebruiker
-async function verwerkAbonnement(env, sub, gebruikerId) {
+// nieuw = true bij een net afgesloten abonnement; anders alleen bijwerken als het om het opgeslagen abonnement gaat,
+// zodat een oud of tweede abonnement het plan niet kan terugzetten
+async function verwerkAbonnement(env, sub, gebruikerId, nieuw) {
   const item = sub.items && sub.items.data && sub.items.data[0];
   const prijsId = item && item.price ? item.price.id : null;
   // Nieuwere Stripe-versies zetten current_period_end op het abonnementsitem
   const einde = (sub.current_period_end || (item && item.current_period_end) || 0) * 1000 || null;
   const actief = sub.status === 'active' || sub.status === 'trialing' || sub.status === 'past_due';
   const plan = actief ? (planVanPrijs(env, prijsId) || 'gratis') : 'gratis';
-  const q = gebruikerId
+  const q = nieuw && gebruikerId
     ? env.DB.prepare('UPDATE gebruikers SET plan = ?, stripe_klant = ?, stripe_abonnement = ?, abonnement_status = ?, periode_einde = ? WHERE id = ?').bind(plan, sub.customer, sub.id, sub.status, einde, gebruikerId)
-    : env.DB.prepare('UPDATE gebruikers SET plan = ?, stripe_abonnement = ?, abonnement_status = ?, periode_einde = ? WHERE stripe_klant = ?').bind(plan, sub.id, sub.status, einde, sub.customer);
+    : env.DB.prepare('UPDATE gebruikers SET plan = ?, stripe_abonnement = ?, abonnement_status = ?, periode_einde = ? WHERE (id = ? OR stripe_klant = ?) AND (stripe_abonnement IS NULL OR stripe_abonnement = ?)')
+        .bind(plan, sub.id, sub.status, einde, gebruikerId || 0, sub.customer || '', sub.id);
   await q.run();
 }
 async function stripeWebhook(request, env) {
@@ -765,7 +824,8 @@ async function stripeWebhook(request, env) {
   if (!(delen.v1 || []).some(v => gelijk(v, verwacht))) throw new Fout(400, 'handtekening', 'Ongeldige handtekening.');
   const ev = JSON.parse(ruw);
   const o = ev.data && ev.data.object;
-  if (ev.type === 'checkout.session.completed' && o.mode === 'payment' && o.metadata && o.metadata.bundel) {
+  const afgerond = ev.type === 'checkout.session.completed' || ev.type === 'checkout.session.async_payment_succeeded';
+  if (afgerond && o.mode === 'payment' && o.metadata && o.metadata.bundel) {
     const bundel = bundels(env)[o.metadata.bundel];
     const id = Number(o.client_reference_id || o.metadata.gebruiker_id) || 0;
     if (bundel && id > 0 && o.payment_status === 'paid') {
@@ -774,12 +834,12 @@ async function stripeWebhook(request, env) {
         .bind(String(o.id), id, o.metadata.bundel, bundel.analyses, Date.now()).run();
       if (r.meta && r.meta.changes) await tegoedErbij(env, id, bundel.analyses);
     }
-  } else if (ev.type === 'checkout.session.completed' && o.mode === 'subscription' && o.subscription) {
+  } else if (afgerond && o.mode === 'subscription' && o.subscription) {
     const sub = await stripe(env, 'GET', 'subscriptions/' + o.subscription);
-    await verwerkAbonnement(env, sub, Number(o.client_reference_id) || null);
+    await verwerkAbonnement(env, sub, Number(o.client_reference_id) || null, true);
   } else if (ev.type === 'customer.subscription.created' || ev.type === 'customer.subscription.updated' || ev.type === 'customer.subscription.deleted') {
     const id = o.metadata && Number(o.metadata.gebruiker_id);
-    await verwerkAbonnement(env, o, id || null);
+    await verwerkAbonnement(env, o, id || null, false);
   }
   return json({ ontvangen: true });
 }
