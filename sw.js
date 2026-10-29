@@ -1,7 +1,7 @@
 // Veiling Analyser – service worker
 // Eerst het netwerk (altijd de nieuwste versie), alleen zonder internet de opgeslagen versie.
 // Analyses en accountverzoeken gaan nooit via de cache.
-const CACHE = 'va-schil-v3';
+const CACHE = 'va-schil-v4';
 const SCHIL = ['app.html', 'styles.css', 'config.js', 'kern.js', 'app.js', 'account.js', 'functies.js', 'home.js', 'start.js', 'manifest.json', 'icons/icon192.png', 'icons/icon512.png', 'fonts/bricolage-grotesque.woff2', 'fonts/instrument-sans.woff2', 'privacy.html', 'voorwaarden.html', 'juridisch.css'];
 
 self.addEventListener('install', e => {

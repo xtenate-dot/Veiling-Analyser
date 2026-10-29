@@ -557,5 +557,20 @@ AUTO1.kenteken = 'ZZ-99-ZZ'; AUTO1.titel = 'Auto zonder bekend kenteken';
 r = await api('POST', '/api/analyse', { url: 'https://www.testveiling.nl/kavel/auto-2', hergebruik: false }, tkK);
 check('Onbekend kenteken: analyse lukt wel, met waarschuwing', r.status === 200 && !r.data.pagina.rdw && r.data.waarschuwingen.some(w => /niet gevonden bij de RDW/.test(w)), r.data && r.data.waarschuwingen);
 
+// Te lang antwoord: één keer laten doorschrijven en de twee delen samenvoegen
+{
+  const stukken = JSON.stringify(Object.assign({}, STAP2, { marktplaats: { laag: 100, gemiddeld: 120, hoog: 140, vertrouwen: 'middel' } }));
+  const helft = Math.floor(stukken.length / 2);
+  let ronde = 0, tweedeBody = null;
+  const res = await K.vraagClaude({ system: 's', prompt: 'p', maxTokens: 50, model: 'claude-haiku-5-5' }, { anthropic: async (b) => {
+    ronde++;
+    if (ronde === 1) return { content: [{ type: 'text', text: 'Hier is het: ' + stukken.slice(0, helft) + '  ' }], stop_reason: 'max_tokens', usage: { input_tokens: 10, output_tokens: 50 } };
+    tweedeBody = b;
+    return { content: [{ type: 'text', text: stukken.slice(helft) }], stop_reason: 'end_turn', usage: { input_tokens: 10, output_tokens: 50 } };
+  } });
+  const slot = tweedeBody && tweedeBody.messages[1].content.slice(-1)[0];
+  check('Afgebroken antwoord wordt doorgeschreven en samengevoegd', ronde === 2 && res.json && res.json.marktplaats.gemiddeld === 120 && slot && !/\s$/.test(slot.text));
+}
+
 console.log('\n' + (aantal - fouten) + ' van ' + aantal + ' controles OK' + (fouten ? ' — ' + fouten + ' FOUT(EN)' : ''));
 process.exit(fouten ? 1 : 0);
