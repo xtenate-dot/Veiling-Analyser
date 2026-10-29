@@ -11,6 +11,12 @@ Zonder server werkt de app ook: dan vraagt hij elke gebruiker om een eigen Anthr
 
 - **Rondleiding Cloudflare (afgesproken 29 oktober 2026):** als de app af is, krijgt de eigenaar een rondleiding door het Cloudflare-dashboard. Onderdelen: de Worker en Deployments (versies terugzetten), Variables and Secrets, logboeken bij fouten, de D1-database, de nachtelijke opruimtaak, Turnstile, het domein en de DNS, en de kosten en limieten. Doel: vragen van klanten zelf kunnen beantwoorden.
 - **Alles via Cloudflare:** app, server en de promotiewebsite komen op Cloudflare, op veilinganalyser.nl. De DNS van het domein gaat daarvoor van Vimexx naar Cloudflare; de registratie blijft bij Vimexx.
+- **Werklijst avond 29 oktober 2026** (goedgekeurd door de eigenaar):
+  1. Tabel `verwijderd` in D1 aanmaken (schema.sql opnieuw uitvoeren).
+  2. Kavels per regel opslaan in plaats van één regel per gebruiker (D1 staat maximaal 2 MB per regel toe); oude afgesloten kavels na een jaar verkleinen; waarschuwing in de app bij een grens.
+  3. veilinganalyser.nl toevoegen aan Cloudflare, de vier Resend-records overzetten, nameservers bij Vimexx omzetten, Worker koppelen; daarna APP_URL en Turnstile-hostnamen bijwerken.
+  4. Tegoed in de server: welkomstbundel van 10 analyses eenmalig (verloopt niet), losse bundels 25 (€4,99) en 60 (€9,99) die niet verlopen, abonnementen Af en toe (30, €4,99), Regelmatig (120, €12,99), Handelaar (500, €29,99). Eerst abonnementsanalyses van de maand gebruiken, dan bundeltegoed.
+  5. De promotiewebsite bouwen volgens het goedgekeurde ontwerp (homepagina, prijzen, veilinggids met alle veilinghuizen uit de app, elk tarief eerst bij de bron gecontroleerd, verhalen), zonder logo's van veilinghuizen en met de vermelding dat er geen samenwerking is.
 
 ---
 
