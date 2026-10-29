@@ -525,6 +525,8 @@ async function dagbudgetOp(env) {
 async function telFout(env, bericht) {
   try {
     await env.DB.prepare('INSERT INTO pogingen (email, tijd) VALUES (?, ?)').bind('fout-analyse', Date.now()).run();
+    // Laatste foutmeldingen bewaren (2 dagen, zoals alle pogingen), om te kunnen zien wat er misging
+    await env.DB.prepare('INSERT INTO pogingen (email, tijd) VALUES (?, ?)').bind('foutlog:' + String(bericht || 'onbekend').slice(0, 400), Date.now()).run();
     const r = await env.DB.prepare("SELECT COUNT(*) AS n FROM pogingen WHERE email = 'fout-analyse' AND tijd > ?").bind(Date.now() - 3600000).first();
     if (r && r.n >= 10) await meldEigenaar(env, 'fouten', 'Veel mislukte analyses', r.n + ' analyses zijn in het afgelopen uur mislukt. Laatste fout: ' + String(bericht || '').slice(0, 300));
   } catch (e) { console.error('telFout', e); }

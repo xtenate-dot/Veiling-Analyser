@@ -20,6 +20,10 @@ directory = "public"
 
 
 # Elke nacht om 03:23 UTC: verlopen sessies, oude codes, oude links en nooit bevestigde accounts opruimen
+# Logboek van de Worker in het Cloudflare-dashboard (Observability), om fouten terug te zien
+[observability]
+enabled = true
+
 [triggers]
 crons = ["23 3 * * *"]
 
