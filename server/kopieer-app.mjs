@@ -20,6 +20,11 @@ for (const naam of readdirSync(bron)) {
 }
 cpSync(join(bron, 'icons'), join(doel, 'icons'), { recursive: true });
 cpSync(join(bron, 'fonts'), join(doel, 'fonts'), { recursive: true });
+// De website (homepagina, prijzen, veilinggids, verhalen, Engels) komt in de hoofdmap; de app blijft op /app
+await import(new URL('../site/maak.mjs', import.meta.url));
+cpSync(join(bron, 'site', 'www'), doel, { recursive: true });
+mkdirSync(join(doel, 'site'), { recursive: true });
+cpSync(join(bron, 'site', 'site.css'), join(doel, 'site', 'site.css'));
 // Beveiligingskoppen voor alle pagina's
 writeFileSync(join(doel, '_headers'), [
   '/*',
