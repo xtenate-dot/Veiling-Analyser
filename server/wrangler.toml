@@ -4,6 +4,12 @@ name = "veiling-analyser"
 main = "src/index.js"
 compatibility_date = "2026-10-01"
 
+# Eigen domein: Cloudflare maakt de DNS-records en het certificaat zelf aan
+routes = [
+  { pattern = "veilinganalyser.nl", custom_domain = true },
+  { pattern = "www.veilinganalyser.nl", custom_domain = true }
+]
+
 # De Worker serveert ook de app zelf (HTML, CSS, JS), zodat app en server op één adres staan.
 # Bij elke deploy kopieert kopieer-app.mjs de app-bestanden naar public/.
 [build]
@@ -11,6 +17,7 @@ command = "node kopieer-app.mjs"
 
 [assets]
 directory = "public"
+
 
 # Elke nacht om 03:23 UTC: verlopen sessies, oude codes, oude links en nooit bevestigde accounts opruimen
 [triggers]
@@ -23,8 +30,7 @@ database_id = "17c48dc4-7c06-4fb0-8856-a06ea6b9962f"   # D1 in de EU, aangemaakt
 
 [vars]
 # Webadres van de app (voor links in e-mails en terug van de betaalpagina)
-# Zolang veilinganalyser.nl nog niet aan de Worker hangt: het workers.dev-adres
-APP_URL = "https://veiling-analyser.xtenate.workers.dev/app.html"
+APP_URL = "https://veilinganalyser.nl/app"
 # Welke websites de server mogen aanroepen (komma-gescheiden)
 APP_ORIGIN = "https://veilinganalyser.nl,https://www.veilinganalyser.nl,https://veiling-analyser.xtenate.workers.dev,https://xtenate-dot.github.io"
 # Welkomstbundel: eenmalig bij een nieuw account, verloopt niet
