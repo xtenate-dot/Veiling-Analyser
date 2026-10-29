@@ -574,5 +574,48 @@ check('Onbekend kenteken: analyse lukt wel, met waarschuwing', r.status === 200 
   check('Afgebroken antwoord wordt doorgeschreven en samengevoegd', ronde === 2 && res.json && res.json.marktplaats.gemiddeld === 120 && slot && !/\s$/.test(slot.text));
 }
 
+// ── 19. Geen foutmelding als het te vermijden is ──
+const rh = await api('POST', '/api/registreer', { email: 'herstel@voorbeeld.nl', wachtwoord: 'geheim123' });
+await bevestig(rh.data.token, 'herstel@voorbeeld.nl');
+const tkH = rh.data.token, idH = db.prepare("SELECT id FROM gebruikers WHERE email = 'herstel@voorbeeld.nl'").get().id;
+db.prepare("UPDATE gebruikers SET plan = 'handelaar' WHERE id = ?").run(idH);
+const stap1Antw = { content: [{ type: 'text', text: JSON.stringify(STAP1) }], stop_reason: 'end_turn', usage: { input_tokens: 8000, output_tokens: 400 } };
+let systemen = [];
+anthropicAntwoord = (b) => {
+  systemen.push(b.system.slice(0, 40));
+  if (b.system.startsWith('Je leest veilingkavels')) return stap1Antw;
+  if (b.system.startsWith('Je zet de resultaten')) return { content: [{ type: 'text', text: JSON.stringify(STAP2) }], stop_reason: 'end_turn', usage: { input_tokens: 3000, output_tokens: 600 } };
+  return { content: [
+    { type: 'server_tool_use', id: 's1', name: 'web_search', input: { query: 'iphone 13 marktplaats' } },
+    { type: 'web_search_tool_result', tool_use_id: 's1', content: [{ type: 'web_search_result', url: 'https://www.marktplaats.nl/v/x/m1-iphone', title: 'iPhone 13 128GB € 450', encrypted_content: 'x' }] },
+    { type: 'text', text: 'Ik vond een iPhone 13 voor € 450 en {"marktplaats": afgebroken' }], stop_reason: 'max_tokens', usage: { input_tokens: 30000, output_tokens: 6000, server_tool_use: { web_search_requests: 1 } } };
+};
+r = await api('POST', '/api/analyse', { url: 'https://www.testveiling.nl/kavel/5000', hergebruik: false }, tkH);
+check('Onbruikbaar prijsantwoord → herstelstap zonder zoeken, geen foutmelding', r.status === 200 && r.data.prijzen.hersteld === true && r.data.prijzen.live === true && systemen.some(x => x.startsWith('Je zet de resultaten')), r.data && (r.data.fout || systemen));
+systemen = [];
+anthropicAntwoord = (b) => {
+  systemen.push(b.system.slice(0, 40));
+  if (b.system.startsWith('Je leest veilingkavels')) return stap1Antw;
+  if (/zonder internettoegang/.test(b.system)) return { content: [{ type: 'text', text: JSON.stringify(STAP2) }], stop_reason: 'end_turn', usage: { input_tokens: 500, output_tokens: 400 } };
+  return { content: [{ type: 'text', text: 'geen json' }], stop_reason: 'end_turn', usage: { input_tokens: 30000, output_tokens: 900 } };
+};
+r = await api('POST', '/api/analyse', { url: 'https://www.testveiling.nl/kavel/5001', hergebruik: false }, tkH);
+check('Ook herstel mislukt → gemarkeerde schatting in plaats van foutmelding', r.status === 200 && r.data.prijzen.live === false && r.data.waarschuwingen.some(w => /lukte deze keer niet/.test(w)), r.data && (r.data.fout || r.data.waarschuwingen));
+// AI-dienst even druk: de server probeert het zelf opnieuw
+let drukTeller = 0;
+anthropicAntwoord = (b) => b.system.startsWith('Je leest veilingkavels') ? stap1Antw : { content: [{ type: 'text', text: JSON.stringify(STAP2) }], stop_reason: 'end_turn', usage: { input_tokens: 30000, output_tokens: 900 } };
+globalThis.fetch = (orig => async (url, opt) => {
+  if (String(url).startsWith('https://api.anthropic.com/') && drukTeller++ === 0) return new Response(JSON.stringify({ type: 'error', error: { type: 'overloaded_error', message: 'Overloaded' } }), { status: 529 });
+  return orig(url, opt);
+})(globalThis.fetch);
+r = await api('POST', '/api/analyse', { url: 'https://www.testveiling.nl/kavel/5002', hergebruik: false }, tkH);
+check('AI-dienst één keer druk → server probeert zelf opnieuw, klant ziet geen fout', r.status === 200 && drukTeller >= 2, r.status);
+// Drie mislukkingen kort na elkaar → even pauze, zonder AI-kosten
+anthropicAntwoord = () => ({ content: [{ type: 'text', text: 'geen json' }], stop_reason: 'end_turn', usage: { input_tokens: 1000, output_tokens: 10 } });
+for (const n of [1, 2, 3]) await api('POST', '/api/analyse', { url: 'https://www.testveiling.nl/kavel/510' + n, hergebruik: false }, tkH);
+const aiVoor = aanroepen.filter(a => a.url.startsWith('https://api.anthropic.com/')).length;
+r = await api('POST', '/api/analyse', { url: 'https://www.testveiling.nl/kavel/5104', hergebruik: false }, tkH);
+check('Na 3 mislukte analyses in een half uur: even wachten, geen nieuwe AI-kosten', r.status === 429 && r.data.code === 'even_wachten' && aanroepen.filter(a => a.url.startsWith('https://api.anthropic.com/')).length === aiVoor, r.data);
+
 console.log('\n' + (aantal - fouten) + ' van ' + aantal + ' controles OK' + (fouten ? ' — ' + fouten + ' FOUT(EN)' : ''));
 process.exit(fouten ? 1 : 0);

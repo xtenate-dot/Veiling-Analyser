@@ -580,11 +580,19 @@ async function haalPagina(url) {
 }
 function anthropicVia(env, teller) {
   return async function (body) {
-    const r = await fetch('https://api.anthropic.com/v1/messages', {
+    const stuur = () => fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-api-key': env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
       body: JSON.stringify(body)
     });
+    let r = await stuur();
+    // Druk of een storing bij de AI-dienst (429, 500, 529): die kosten niets, dus de server probeert het zelf
+    // nog twee keer, zodat de klant niet zelf op opnieuw hoeft te drukken
+    for (const wacht of [2000, 5000]) {
+      if (![429, 500, 502, 503, 504, 529].includes(r.status)) break;
+      await new Promise(ok => setTimeout(ok, wacht));
+      r = await stuur();
+    }
     let data = null;
     try { data = await r.json(); } catch (e) {}
     if (data && data.usage && teller) {
@@ -633,6 +641,12 @@ async function analyse(request, env) {
   // Hooguit 2 analyses tegelijk per gebruiker; een aanvraag die vastloopt telt na 3 minuten niet meer mee
   const lopend = await env.DB.prepare('SELECT COUNT(*) AS n FROM pogingen WHERE email = ? AND tijd > ?').bind('lopend:' + g.id, Date.now() - 180000).first();
   if (lopend && lopend.n >= 2) throw new Fout(429, 'tegelijk', 'Er lopen al twee analyses tegelijk. Wacht tot een ervan klaar is.');
+  // Mislukt er bij deze klant kort achter elkaar iets, dan niet blijven proberen (dat kost geld en helpt niet)
+  const mislukt = await env.DB.prepare('SELECT COUNT(*) AS n FROM pogingen WHERE email = ? AND tijd > ?').bind('mislukt:' + g.id, Date.now() - 1800000).first();
+  if (mislukt && mislukt.n >= 3) throw new Fout(429, 'even_wachten', 'Er gingen net een paar analyses mis. Probeer het over een kwartier opnieuw. Je tegoed is niet gebruikt. Lukt het daarna nog niet, mail ons dan via info@veilinganalyser.nl.');
+  // Gaat het bij veel klanten tegelijk mis (storing), dan alle analyses even stilleggen
+  const storing = await env.DB.prepare("SELECT COUNT(*) AS n FROM pogingen WHERE email = 'fout-analyse' AND tijd > ?").bind(Date.now() - 900000).first();
+  if (storing && storing.n >= 15) throw new Fout(503, 'storing', 'Er is op dit moment een storing bij de analyses. We zijn ermee bezig; probeer het over een kwartier opnieuw. Je tegoed is niet gebruikt.');
   // Elke poging telt mee voor de limiet per uur, ook als hij mislukt
   await limiet(env, 'analyse:' + g.id, p[plan].perUur, 3600000, 'Je doet veel analyses kort na elkaar (meer dan ' + p[plan].perUur + ' per uur). Wacht een paar minuten.');
   if (await dagbudgetOp(env)) {
@@ -669,6 +683,7 @@ async function analyse(request, env) {
     // Mislukt: geen tegoed kwijt, maar de gemaakte AI-kosten tellen wel mee voor het dagbudget (gebruiker 0 = geen klant)
     if (uitTegoed) await tegoedErbij(env, g.id, 1);
     if (teller.usd > 0) await bewaarVerbruik(env, 0, teller.usd, null, teller.tokens);
+    await env.DB.prepare('INSERT INTO pogingen (email, tijd) VALUES (?, ?)').bind('mislukt:' + g.id, Date.now()).run();
     throw e;
   } finally {
     await env.DB.prepare('DELETE FROM pogingen WHERE email = ? AND tijd = ?').bind('lopend:' + g.id, lopendTijd).run();
@@ -909,7 +924,7 @@ export async function verwerk(request, env) {
       const t = e && e.apiType;
       const bericht = t === 'overloaded_error' ? 'De analyseservice is even druk. Probeer het over een paar seconden opnieuw.'
         : t === 'rate_limit_error' ? 'De analyseservice is even druk. Probeer het over een minuut opnieuw.'
-        : 'De analyse is mislukt. Probeer het opnieuw.';
+        : 'De analyse is mislukt. Je tegoed is niet gebruikt. Probeer het over een paar minuten opnieuw.';
       resp = json({ fout: bericht, code: t || 'serverfout' }, t ? 503 : 500);
     }
   }

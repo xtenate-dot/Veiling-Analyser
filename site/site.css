@@ -113,6 +113,27 @@ ul.lijst li{margin-bottom:6px}
 .prijs small{font-family:var(--ff);font-size:16px;font-weight:600;color:var(--ink-3)}
 .pakket{display:flex;flex-direction:column;gap:8px}
 .pakket .knop{margin-top:auto}
+/* Alle kaarten in een rij even hoog, met titel, prijs, aantal, kenmerken en knop op dezelfde hoogte */
+.pakketten{align-items:stretch}
+.pakketten-2{grid-template-columns:repeat(auto-fit,minmax(260px,360px))}
+@supports (grid-template-rows:subgrid){
+  .pakketten .pakket{display:grid;grid-row:span 6;grid-template-rows:subgrid;gap:10px}
+}
+.pk-kop{display:flex;justify-content:space-between;align-items:center;gap:8px;min-height:30px}
+.pk-kop h3{margin:0}
+.pk-wie{margin:0}
+.pakket .prijs{margin:6px 0 0;align-self:end}
+.pk-aantal{margin:0;display:flex;flex-direction:column;gap:2px}
+.pk-aantal b{color:var(--ink)}
+.pakket-uit .pk-aantal b{color:#FFFFFF}
+.pk-aantal span{font-size:14px}
+.pk-lijst{list-style:none;margin:6px 0 4px;padding:12px 0 0;border-top:1px solid var(--line);display:grid;gap:6px;align-content:start}
+.pakket-uit .pk-lijst{border-top-color:rgba(255,255,255,.18)}
+.pk-lijst li{position:relative;padding-left:22px;font-size:14.5px}
+.pk-lijst li::before{content:"";position:absolute;left:2px;top:.45em;width:10px;height:6px;border-left:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(-45deg);opacity:.75}
+.pakket .knop{align-self:end;justify-self:stretch;text-align:center}
+.pk-functies{columns:2 280px;column-gap:32px}
+.pk-functies li{break-inside:avoid}
 .pakket-uit{background:#3A1F4D;color:#FFFFFF;border:none}
 .pakket-uit p,.pakket-uit .prijs small{color:var(--on-dark-2)}
 .badge{display:inline-block;background:var(--brass-on-dark);color:#1E1225;font-size:13px;font-weight:700;padding:4px 10px;border-radius:99px}
@@ -163,3 +184,6 @@ details.vraag p{margin:10px 0 0;color:var(--ink-2)}
 .voet ul{list-style:none;margin:0;padding:0}
 .voet li{margin-bottom:6px}
 .voet b{color:var(--ink);display:block;margin-bottom:8px}
+.pakket .prijs small{display:block;margin-top:6px}
+.pakket-uit li{color:var(--on-dark-2)}
+.pk-kop .badge{white-space:nowrap}

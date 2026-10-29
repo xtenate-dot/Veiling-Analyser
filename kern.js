@@ -220,10 +220,9 @@
     }
     var tekst = laatste.content.filter(function (b) { return b.type === 'text'; }).map(function (b) { return b.text; }).join('');
     var json = parseJSON(tekst) || parseJSON(alleTekst) || (doorgeschreven ? parseJSON(alleTekst.slice(alleTekst.indexOf('{'))) : null);
-    if (!json && laatste.stop_reason === 'max_tokens') throw new Error('Het antwoord was te lang en is afgebroken. Probeer het opnieuw.');
     var corpusLaag = (corpus + '\n' + (opts.extraCorpus || '')).toLowerCase();
-    return {
-      json: json, usd: usd, zoekvragen: zoekvragen,
+    var resultaat = {
+      json: json, usd: usd, zoekvragen: zoekvragen, tekst: alleTekst,
       bronnen: Object.keys(bronnen).map(function (k) { return bronnen[k]; }),
       bevestigd: function (u) {
         if (!u) return false;
@@ -231,6 +230,12 @@
         try { var p = new URL(u).pathname; return p.length > 8 && corpusLaag.indexOf(p.toLowerCase()) !== -1; } catch (e) { return false; }
       }
     };
+    if (!json && laatste.stop_reason === 'max_tokens') {
+      var fout = new Error('Het antwoord was te lang en is afgebroken. Probeer het opnieuw.');
+      fout.resultaat = resultaat; // wat er wel al gevonden is, voor een herstelpoging
+      throw fout;
+    }
+    return resultaat;
   }
 
   // ── Stap 1: kavelpagina lezen ──────────────────────────────────────────────
@@ -466,12 +471,33 @@
       (extra ? 'Opmerking van de koper: ' + extra + '\n' : '') +
       '\nPagina\'s die je mag openen:\n' + zoekUrls(term).join('\n') +
       '\n\nVul dit JSON-object in:\n' + PRIJS_JSON;
-    var r = await vraagClaude({
-      system: system, prompt: prompt, maxTokens: 6000, model: deps.modelPrijzen,
-      tools: [{ type: 'web_fetch_20250910', name: 'web_fetch', max_uses: 3, max_content_tokens: 6000, blocked_domains: NIET_OPENEN }].concat(
-        zoekMax > 0 ? [{ type: 'web_search_20250305', name: 'web_search', max_uses: zoekMax, user_location: locatieVoor(url) }] : [])
+    return prijzenMetHerstel(function () {
+      return vraagClaude({
+        system: system, prompt: prompt, maxTokens: 6000, model: deps.modelPrijzen,
+        tools: [{ type: 'web_fetch_20250910', name: 'web_fetch', max_uses: 3, max_content_tokens: 6000, blocked_domains: NIET_OPENEN }].concat(
+          zoekMax > 0 ? [{ type: 'web_search_20250305', name: 'web_search', max_uses: zoekMax, user_location: locatieVoor(url) }] : [])
+      }, deps);
+    }, product, deps, PRIJS_JSON);
+  }
+
+  // Het zoeken zelf is gelukt maar het antwoord is onbruikbaar (te lang, geen geldig JSON, geen verkoopprijs)?
+  // Dan zetten we wat er al gevonden is om met een korte vervolgvraag zonder zoeken (kost een fractie van een cent),
+  // in plaats van een foutmelding waarna de klant opnieuw gaat proberen. Fouten van de AI-dienst zelf gaan wel door.
+  async function prijzenMetHerstel(vraag, product, deps, jsonVorm) {
+    var r;
+    try { r = await vraag(); } catch (e) { if (!e.resultaat) throw e; r = e.resultaat; }
+    if (r.json) { try { return normPrijzen(r.json, r, true); } catch (e) {} }
+    var gevonden = r.bronnen.slice(0, 30).map(function (b) { return '- ' + (b.titel || '') + ' ' + b.url; }).join('\n');
+    var notities = String(r.tekst || '').slice(-20000);
+    if (!gevonden && !notities.trim()) { var leeg = new Error('Geen prijzen gevonden'); leeg.usd = r.usd; throw leeg; }
+    var r2 = await vraagClaude({
+      system: 'Je zet de resultaten van een prijsonderzoek om naar JSON. Antwoord uitsluitend met één geldig JSON-object, zonder markdown en zonder tekst ervoor of erna. Gebruik alleen prijzen en links die hieronder staan; verzin niets.\n\n' + PRIJS_REGELS,
+      prompt: 'Product: ' + product + '\n\nGevonden pagina\'s en zoekresultaten:\n' + (gevonden || '(geen)') + '\n\nAantekeningen van het onderzoek:\n' + (notities || '(geen)') + '\n\nVul dit JSON-object in, met korte teksten:\n' + jsonVorm,
+      maxTokens: 4000, model: deps.modelPrijzen
     }, deps);
-    return normPrijzen(r.json, r, true);
+    var p = normPrijzen(r2.json, { bevestigd: r.bevestigd, bronnen: r.bronnen, zoekvragen: r.zoekvragen, usd: r.usd + r2.usd }, true);
+    p.hersteld = true;
+    return p;
   }
 
   async function zoekVoertuigPrijzen(product, pagina, extra, url, deps, zoekMax) {
@@ -493,12 +519,13 @@
       (pagina.staat ? 'Staat volgens de veiling: ' + pagina.staat + (pagina.staat_toelichting ? ' (' + pagina.staat_toelichting + ')' : '') + '\n' : '') +
       (extra ? 'Opmerking van de koper: ' + extra + '\n' : '') +
       '\nVul dit JSON-object in:\n' + PRIJS_JSON_VOERTUIG;
-    var r = await vraagClaude({
-      system: system, prompt: prompt, maxTokens: 10000, model: deps.modelPrijzen,
-      tools: [{ type: 'web_fetch_20250910', name: 'web_fetch', max_uses: 2, max_content_tokens: 6000, blocked_domains: NIET_OPENEN.concat(NIET_OPENEN_VOERTUIG) }].concat(
-        zoekMax > 0 ? [{ type: 'web_search_20250305', name: 'web_search', max_uses: zoekMax, user_location: locatieVoor(url) }] : [])
-    }, deps);
-    var p = normPrijzen(r.json, r, true);
+    var p = await prijzenMetHerstel(function () {
+      return vraagClaude({
+        system: system, prompt: prompt, maxTokens: 10000, model: deps.modelPrijzen,
+        tools: [{ type: 'web_fetch_20250910', name: 'web_fetch', max_uses: 2, max_content_tokens: 6000, blocked_domains: NIET_OPENEN.concat(NIET_OPENEN_VOERTUIG) }].concat(
+          zoekMax > 0 ? [{ type: 'web_search_20250305', name: 'web_search', max_uses: zoekMax, user_location: locatieVoor(url) }] : [])
+      }, deps);
+    }, product, deps, PRIJS_JSON_VOERTUIG);
     p.voertuig = true;
     return p;
   }
@@ -598,7 +625,7 @@
   // deps:  { anthropic, haalPagina?, modelPagina, modelPrijzen, cacheLees?(sleutel), cacheSchrijf?(sleutel, prijzen), opStap?(n) }
   async function analyseer(input, deps) {
     var url = input.url || '', extra = input.extra || '', fotos = fotoBlokken(input.fotos).length ? input.fotos : null;
-    var pagina = null, live = true, waarschuwingen = [];
+    var pagina = null, live = true, waarschuwingen = [], extraUsd = 0;
     if (deps.opStap) deps.opStap(1);
     if (url || fotos) {
       try { pagina = await leesKavelpagina(url, extra, deps, fotos); }
@@ -637,7 +664,16 @@
         prijzen = await zoekPrijzen(product, pagina, extra, url, deps);
         // Alleen delen met anderen als niemand de opdracht heeft kunnen beïnvloeden (geen eigen tekst of foto's)
         if (prijzen.live && sleutel && deps.cacheSchrijf && !extra && !fotos) { try { await deps.cacheSchrijf(sleutel, prijzen); } catch (e) {} }
-      } catch (e) { if (isToolFout(e)) live = false; else throw e; }
+      } catch (e) {
+        if (isToolFout(e)) live = false;
+        else if (e.apiType) throw e;
+        else {
+          // Laatste vangnet: liever een duidelijk gemarkeerde schatting dan een foutmelding
+          extraUsd += e.usd || (e.resultaat && e.resultaat.usd) || 0;
+          prijzen = await schatPrijzen(product, deps);
+          waarschuwingen.push('Het live prijsonderzoek lukte deze keer niet. De prijzen zijn een schatting van het AI-model; controleer ze zelf via de knoppen Marktplaats en 2dehands.');
+        }
+      }
     }
     if (!live) {
       prijzen = await schatPrijzen(product, deps);
@@ -654,7 +690,7 @@
     if (deps.opStap) deps.opStap(3);
     return {
       pagina: pagina, prijzen: prijzen, product: product, waarschuwingen: waarschuwingen,
-      usd: ((pagina && pagina.usd) || 0) + (prijzen.hergebruikt ? 0 : (prijzen.usd || 0))
+      usd: ((pagina && pagina.usd) || 0) + (prijzen.hergebruikt ? 0 : (prijzen.usd || 0)) + extraUsd
     };
   }
 

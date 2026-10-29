@@ -10,7 +10,7 @@ function check(naam, ok, extra) { console.log((ok ? 'OK   ' : 'FOUT ') + naam + 
   const jsFouten = [];
   page.on('pageerror', e => jsFouten.push(e.message));
   await page.route(/fonts\.(googleapis|gstatic)\.com/, r => r.abort());
-  await page.route('**/config.js', r => r.fulfill({ contentType: 'application/javascript', body: "window.VA_CONFIG = { api: 'http://localhost:8787', prijzen: { basis: '€ 9,99 per maand', pro: '€ 24,99 per maand' } };" }));
+  await page.route('**/config.js', r => r.fulfill({ contentType: 'application/javascript', body: "window.VA_CONFIG = { api: 'http://localhost:8787', prijzen: { regelmatig: '€ 12,99 per maand', handelaar: '€ 29,99 per maand', b25: '€ 4,99', b60: '€ 9,99' } };" }));
   await page.goto('http://localhost:8080/app.html');
   await page.waitForTimeout(400);
 

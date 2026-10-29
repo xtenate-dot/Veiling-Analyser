@@ -209,7 +209,7 @@ function toonAccount() {
     if (bund.length) {
       h += '<h3 class="acc-kop">Losse bundel</h3><p class="help" style="margin:0 0 8px">Eén keer betalen, verloopt niet.</p><div class="plan-grid">';
       bund.forEach(function(b) {
-        h += '<button type="button" class="plan-k" onclick="koopBundel(\'' + b.id + '\')"><b>' + esc(b.naam) + '</b><span>' + (prijzen[b.id] ? esc(prijzen[b.id]) : '') + '</span><span style="color:var(--link);font-weight:600">Koop bundel</span></button>';
+        h += '<button type="button" class="plan-k" onclick="koopBundel(\'' + b.id + '\')">' + planInhoud(b.naam, prijzen[b.id], 'eenmalig', b.analyses) + '<span class="pk-actie">Koop bundel</span></button>';
       });
       h += '</div>';
     }
@@ -218,10 +218,10 @@ function toonAccount() {
       h += '<h3 class="acc-kop">Abonnement</h3><p class="help" style="margin:0 0 8px">Elke maand nieuwe analyses. Maandelijks opzegbaar.</p><div class="plan-grid">';
       abos.forEach(function(p) {
         var huidig = p.id === a.plan;
-        var inhoud = '<b>' + esc(p.naam) + '</b><span>' + p.limiet + ' analyses per maand' + (prijzen[p.id] ? ', ' + esc(prijzen[p.id]) : '') + '</span>' + (huidig ? '<span>Je huidige abonnement</span>' : '');
+        var inhoud = planInhoud(p.naam, prijzen[p.id], 'per maand', p.limiet, true);
         h += huidig || a.plan !== 'gratis'
-          ? '<div class="plan-k' + (huidig ? ' huidig' : '') + '">' + inhoud + '</div>'
-          : '<button type="button" class="plan-k" onclick="afrekenen(\'' + p.id + '\')">' + inhoud + '<span style="color:var(--link);font-weight:600">Kies ' + esc(p.naam) + '</span></button>';
+          ? '<div class="plan-k' + (huidig ? ' huidig' : '') + '">' + inhoud + '<span class="pk-actie">' + (huidig ? 'Je huidige abonnement' : '') + '</span></div>'
+          : '<button type="button" class="plan-k" onclick="afrekenen(\'' + p.id + '\')">' + inhoud + '<span class="pk-actie">Kies ' + esc(p.naam) + '</span></button>';
       });
       h += '</div>';
       if (a.plan !== 'gratis') h += '<p class="help">Overstappen of opzeggen doe je via Abonnement beheren.</p>';
@@ -238,6 +238,15 @@ function toonAccount() {
 async function afrekenen(plan) {
   try { var d = await apiCall('/api/afrekenen', { method: 'POST', body: { plan: plan } }); location.href = d.url; }
   catch (e) { toast(e.message, null, true); }
+}
+// Eén kaart: naam, prijs, aantal met prijs per analyse, en onderaan de actie (op gelijke hoogte via subgrid)
+function planInhoud(naam, prijsTekst, per, aantal, perMaand) {
+  var bedrag = prijsTekst ? String(prijsTekst).replace(/\s*per maand$/, '') : '';
+  var getal = bedrag ? Number(bedrag.replace(/[^\d,]/g, '').replace(',', '.')) : 0;
+  var stuk = getal && aantal ? '€' + (Math.round(getal / aantal * 100) / 100).toFixed(2).replace('.', ',') + ' per analyse' : '';
+  return '<b>' + esc(naam) + '</b>' +
+    '<span class="pk-prijs">' + (bedrag ? esc(bedrag) + ' <small>' + esc(per) + '</small>' : '') + '</span>' +
+    '<span>' + (perMaand && aantal ? aantal.toLocaleString('nl-NL') + ' analyses per maand<br>' : '') + stuk + '</span>';
 }
 async function koopBundel(bundel) {
   try { var d = await apiCall('/api/afrekenen', { method: 'POST', body: { bundel: bundel } }); location.href = d.url; }

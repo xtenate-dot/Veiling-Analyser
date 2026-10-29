@@ -501,6 +501,11 @@ details.faq .fb ul{padding-left:20px}
 .plan-k b{font-family:var(--ff-d);font-size:17px}
 .plan-k span{font-size:13px;color:var(--ink-2)}
 .plan-k.huidig{border-color:var(--accent);background:var(--accent-soft)}
+@supports (grid-template-rows:subgrid){ .plan-k{display:grid;grid-row:span 4;grid-template-rows:subgrid;gap:4px} }
+.plan-k .pk-prijs{font-family:var(--ff-d);font-weight:800;font-size:20px;color:var(--ink)}
+.plan-k .pk-prijs small{display:block;font-family:var(--ff);font-size:12px;font-weight:600;color:var(--ink-3)}
+.plan-k .pk-actie{color:var(--link);font-weight:600;align-self:end}
+.plan-k.huidig .pk-actie{color:var(--ink-2);font-weight:600}
 button.plan-k:hover{border-color:var(--accent)}
 .tabs{display:flex;gap:4px;margin-bottom:16px;border-bottom:1px solid var(--line)}
 .tabs button{padding:8px 4px;margin-right:14px;font-weight:600;color:var(--ink-3);border-bottom:2px solid transparent;margin-bottom:-1px}

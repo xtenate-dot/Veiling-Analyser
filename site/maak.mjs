@@ -28,7 +28,7 @@ function voet(taal) {
   return `<footer class="voet"><div class="wrap raster">
   <div><b>Veiling Analyser</b>${nl ? 'Veiling Analyser is een handelsnaam van' : 'Veiling Analyser is a trade name of'} ${BEDRIJF.naam}.<br>${BEDRIJF.adres}<br>KvK ${BEDRIJF.kvk} · ${nl ? 'btw' : 'VAT'} ${BEDRIJF.btw}<br><a href="mailto:${BEDRIJF.email}">${BEDRIJF.email}</a></div>
   <div><b>${nl ? 'Website' : 'Website'}</b><ul><li><a href="${nl ? '/prijzen' : '/en/pricing'}">${nl ? 'Prijzen' : 'Pricing'}</a></li><li><a href="/veilinggids/">${nl ? 'Veilinggids' : 'Auction guide (Dutch)'}</a></li>${nl ? '<li><a href="/verhalen/">Verhalen</a></li><li><a href="/hoe-we-rekenen">Zo rekent de app</a></li><li><a href="/over">Over ons en contact</a></li>' : ''}</ul></div>
-  <div><b>${nl ? 'Juridisch' : 'Legal'}</b><ul><li><a href="/privacy">${nl ? 'Privacybeleid' : 'Privacy policy (Dutch)'}</a></li><li><a href="/voorwaarden">${nl ? 'Voorwaarden' : 'Terms (Dutch)'}</a></li><li>${nl ? 'Geen samenwerking met de genoemde veilinghuizen.' : 'Not affiliated with the auction houses mentioned.'}</li></ul></div>
+  <div><b>${nl ? 'Juridisch' : 'Legal'}</b><ul><li><a href="/privacy">${nl ? 'Privacybeleid' : 'Privacy policy (Dutch)'}</a></li><li><a href="/voorwaarden">${nl ? 'Voorwaarden' : 'Terms (Dutch)'}</a></li></ul></div>
   <div><b>${nl ? 'De app' : 'The app'}</b><ul><li><a href="/app">${nl ? 'Naar de app' : 'Open the app'}</a></li><li>© 2026 ${BEDRIJF.naam}</li></ul></div>
 </div></footer>`;
 }
@@ -157,7 +157,6 @@ const HOME_NL = pagina({
   <details class="vraag"><summary>Haalt een handelaar niet meer dan een particulier?</summary><p>Vaak wel. De app rekent met wat een particulier krijgt bij verkoop aan een particulier. Haal jij meer of minder, pas de verkoopprijs dan zelf aan. <a href="/hoe-we-rekenen">Lees hoe de app rekent.</a></p></details>
   <details class="vraag"><summary>Gaan mijn gratis analyses verloren?</summary><p>Nee. De 10 analyses bij je account en losse bundels blijven staan tot je ze gebruikt.</p></details>
   <details class="vraag"><summary>Kan ik opzeggen?</summary><p>Altijd, per maand. Je abonnement loopt door tot het einde van de betaalde maand.</p></details>
-  <details class="vraag"><summary>Werken jullie samen met veilinghuizen?</summary><p>Nee. Veiling Analyser is onafhankelijk. We noemen veilinghuizen alleen om uit te leggen hoe hun kosten werken.</p></details>
   <details class="vraag"><summary>Wat gebeurt er met mijn gegevens?</summary><p>We vragen alleen je e-mailadres. Je kunt je gegevens altijd downloaden of je account verwijderen. Lees meer in het <a href="/privacy">privacybeleid</a>.</p></details>
 </div></section>
 
@@ -175,13 +174,35 @@ const PAKKETTEN = [
   { id: 'handelaar', nl: 'Handelaar', en: 'Trader', n: 500, p: '29,99', pe: '29.99', nlw: 'Voor wie kavels koopt om door te verkopen.', enw: 'For buying lots to resell.' },
   { id: 'handelaar_plus', nl: 'Handelaar Plus', en: 'Trader Plus', n: 1500, p: '69,99', pe: '69.99', nlw: 'Voor grote handelaren die dagelijks veel kavels bekijken.', enw: 'For large traders checking many lots a day.' }
 ];
+// Eén kaart; alle kaarten hebben dezelfde opbouw, zodat titel, prijs, kenmerken en knop op één lijn staan
+function pakketKaart(nl, k) {
+  return `<div class="kaart pakket${k.top ? ' pakket-uit' : ''}">
+    <div class="pk-kop"><h3>${k.titel}</h3>${k.top ? `<span class="badge">${nl ? 'Meest gekozen' : 'Most popular'}</span>` : ''}</div>
+    <p class="pk-wie">${k.wie}</p>
+    <p class="prijs">${k.prijs}${k.per ? `<small> ${k.per}</small>` : ''}</p>
+    <p class="pk-aantal"><b>${k.aantal}</b><span>${k.stuk}</span></p>
+    <ul class="pk-lijst">${k.kenmerken.map(x => `<li>${x}</li>`).join('')}</ul>
+    <a class="knop ${k.top ? 'knop-messing' : 'knop-twee'}" href="/app">${k.knop}</a></div>`;
+}
+const perStuk = (prijs, n, nl) => { const v = Math.round(prijs / n * 100) / 100; return '€' + (nl ? v.toFixed(2).replace('.', ',') : v.toFixed(2)) + (nl ? ' per analyse' : ' per analysis'); };
 function prijzenInhoud(nl) {
-  const pak = PAKKETTEN.map(x => `<div class="kaart pakket${x.top ? ' pakket-uit' : ''}">
-    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><h3>${nl ? x.nl : x.en}</h3>${x.top ? `<span class="badge">${nl ? 'Meest gekozen' : 'Most popular'}</span>` : ''}</div>
-    <p>${nl ? x.nlw : x.enw}</p>
-    <p class="prijs">€${nl ? x.p : x.pe}<small> ${nl ? 'per maand' : 'per month'}</small></p>
-    <p style="font-weight:700">${x.n.toLocaleString('nl-NL')} ${nl ? 'analyses per maand' : 'analyses a month'}</p>
-    <a class="knop ${x.top ? 'knop-messing' : 'knop-twee'}" href="/app">${nl ? 'Kies ' + x.nl : 'Choose ' + x.en}</a></div>`).join('');
+  const bundels = [
+    { titel: nl ? '25 analyses' : '25 analyses', wie: nl ? 'Om de app rustig uit te proberen op een paar veilingen.' : 'To try the app on a few auctions.', prijs: '€' + (nl ? '4,99' : '4.99'), per: nl ? 'eenmalig' : 'one-off', aantal: '25 analyses', stuk: perStuk(4.99, 25, nl),
+      kenmerken: nl ? ['Verloopt niet', 'Geen abonnement', 'Alle functies van de app'] : ['Never expires', 'No subscription', 'All app features'], knop: nl ? 'Koop bundel' : 'Buy bundle' },
+    { titel: nl ? '60 analyses' : '60 analyses', wie: nl ? 'Voor wie af en toe biedt en niet vast wil zitten.' : 'For occasional bidders who want no commitment.', prijs: '€' + (nl ? '9,99' : '9.99'), per: nl ? 'eenmalig' : 'one-off', aantal: '60 analyses', stuk: perStuk(9.99, 60, nl),
+      kenmerken: nl ? ['Verloopt niet', 'Geen abonnement', 'Alle functies van de app'] : ['Never expires', 'No subscription', 'All app features'], knop: nl ? 'Koop bundel' : 'Buy bundle' }
+  ];
+  const perUur = { af_en_toe: 60, regelmatig: 60, handelaar: 120, handelaar_plus: 200 };
+  const pak = PAKKETTEN.map(x => pakketKaart(nl, {
+    titel: nl ? x.nl : x.en, wie: nl ? x.nlw : x.enw, top: x.top,
+    prijs: '€' + (nl ? x.p : x.pe), per: nl ? 'per maand' : 'per month',
+    aantal: x.n.toLocaleString('nl-NL') + (nl ? ' analyses per maand' : ' analyses a month'), stuk: perStuk(Number(x.pe), x.n, nl),
+    kenmerken: nl ? ['Alle functies van de app', 'Tot ' + perUur[x.id] + ' analyses per uur', 'Maandelijks opzegbaar'] : ['All app features', 'Up to ' + perUur[x.id] + ' analyses an hour', 'Cancel monthly'],
+    knop: nl ? 'Kies ' + x.nl : 'Choose ' + x.en
+  })).join('');
+  const functies = nl
+    ? ['Echte vraagprijzen en verkochte items, met links', 'Opgeld, btw en kavelkosten van de kavelpagina', 'Maximaal bod voor de marge die jij kiest', 'Foto\'s laten bekijken bij een analyse', 'Auto\'s: gegevens uit het kentekenregister (RDW)', 'Meerdere links tegelijk analyseren', 'Je kavels op al je apparaten', 'Winst per verkocht kavel bijhouden en exporteren']
+    : ['Real asking prices and sold items, with links', 'Buyer\'s premium, VAT and lot fees from the lot page', 'Maximum bid for the margin you choose', 'Photo check during an analysis', 'Cars: data from the Dutch vehicle register (RDW)', 'Analyse several links at once', 'Your lots on all your devices', 'Track and export profit per sold lot'];
   return `<section class="held"><div class="wrap smal" style="text-align:center">
   <h1>${nl ? 'Betaal voor wat je gebruikt' : 'Pay for what you use'}</h1>
   <p class="intro" style="margin:16px auto 0">${nl ? 'Begin met 10 gratis analyses. Bied je af en toe, koop dan een losse bundel. Bied je vaak, dan is een abonnement voordeliger. Alle prijzen zijn inclusief btw.' : 'Start with 10 free analyses. Bid now and then? Buy a one-off bundle. Bid often? A subscription is cheaper. All prices include VAT.'}</p>
@@ -189,14 +210,15 @@ function prijzenInhoud(nl) {
 <section class="wrap"><div class="welkom"><div style="flex:1 1 420px"><h2 style="font-size:24px;margin-bottom:4px">${nl ? 'Welkomstbundel: 10 analyses gratis' : 'Welcome bundle: 10 free analyses'}</h2><p>${nl ? 'Eenmalig bij je account. Ze verlopen niet: je gebruikt ze wanneer je wilt.' : 'Once, with your account. They never expire.'}</p></div><a class="knop knop-hoofd" href="/app">${nl ? 'Account maken' : 'Create account'}</a></div></section>
 <section class="sectie" style="padding-bottom:0"><div class="wrap">
   <h2 style="margin-bottom:6px">${nl ? 'Losse bundels' : 'One-off bundles'}</h2><p style="color:var(--ink-2)">${nl ? 'Eén keer betalen, geen abonnement. Verlopen niet.' : 'Pay once, no subscription. Never expire.'}</p>
-  <div class="rij">
-    <div class="kaart pakket"><h3>25 analyses</h3><p class="prijs">€${nl ? '4,99' : '4.99'}</p><p>${nl ? '€0,20 per analyse' : '€0.20 per analysis'}</p><a class="knop knop-twee" href="/app">${nl ? 'Koop bundel' : 'Buy bundle'}</a></div>
-    <div class="kaart pakket"><h3>60 analyses</h3><p class="prijs">€${nl ? '9,99' : '9.99'}</p><p>${nl ? '€0,17 per analyse' : '€0.17 per analysis'}</p><a class="knop knop-twee" href="/app">${nl ? 'Koop bundel' : 'Buy bundle'}</a></div>
-  </div>
+  <div class="raster pakketten pakketten-2">${bundels.map(b => pakketKaart(nl, b)).join('')}</div>
 </div></section>
 <section class="sectie"><div class="wrap">
   <h2 style="margin-bottom:6px">${nl ? 'Abonnementen' : 'Subscriptions'}</h2><p style="color:var(--ink-2)">${nl ? 'Elke maand nieuwe analyses. Maandelijks opzegbaar.' : 'New analyses every month. Cancel monthly.'}</p>
-  <div class="raster">${pak}</div>
+  <div class="raster pakketten">${pak}</div>
+</div></section>
+<section class="sectie" style="padding-top:0"><div class="wrap">
+  <div class="kaart kaart-grijs"><h2 style="font-size:24px;margin-bottom:12px">${nl ? 'Bij elk pakket, ook de gratis analyses' : 'Included with every plan, free analyses too'}</h2>
+  <ul class="lijst pk-functies">${functies.map(x => `<li>${x}</li>`).join('')}</ul></div>
 </div></section>
 <section class="sectie sectie-wit"><div class="wrap smal">
   <h2>${nl ? 'Goed om te weten' : 'Good to know'}</h2>
@@ -225,11 +247,11 @@ const GIDS = [
   {
     slug: 'hnvi', naam: 'HNVI', land: 'Nederland',
     kort: '19% opgeld, btw over bod en opgeld',
-    cijfers: [['Opgeld', '19%', ''], ['Btw', '21%', 'over bod en opgeld'], ['Vaste kosten per kavel', '€0', '']],
+    cijfers: [['Opgeld', '19%', 'bovenop je bod'], ['Btw', '21%', 'in de meeste gevallen, over bod en opgeld'], ['Vaste kosten per kavel', 'Geen', 'niet genoemd in de voorwaarden']],
     voorbeeld: { bod: 100, regels: [['Opgeld 19%', 19], ['Btw 21% over €119,00', 24.99]], totaal: 143.99 },
-    tekst: '<p>Bij HNVI komt er 19% opgeld bovenop je bod. Over het bod én het opgeld betaal je 21% btw. Een bod van €100 kost je zo €143,99.</p>',
-    extra: '<h2>Ophalen en betalen</h2><p>[Ophaaldagen, betaaltermijn en bezorgmogelijkheden volgens de veilingvoorwaarden van HNVI.]</p>',
-    bron: '[link naar de veilingvoorwaarden van HNVI]', bronUrl: null
+    tekst: '<p>Bij HNVI bied je exclusief 19% opgeld en exclusief btw. Over het bod én het opgeld komt in de meeste gevallen 21% btw. Een bod van €100 kost je zo €143,99. Staat bij een kavel een ander btw-tarief, dan leest de app dat van de kavelpagina.</p>',
+    extra: '<h2>Ophalen en betalen</h2><ul class="lijst"><li>Ophalen kan alleen op de afhaaldag die bij de veiling staat. Opsturen is niet mogelijk.</li><li>Betaal uiterlijk 24 uur vóór de afhaaldag per bank (weekend en feestdagen tellen niet mee). Lukt dat niet, dan betaal je op de afhaaldag contant of met pin, als pinnen daar kan.</li><li>Neem zelf gereedschap en vervoer mee; ophalen en demonteren is voor eigen rekening en risico.</li></ul><h2>Let op</h2><ul class="lijst"><li>Kavels worden voetstoots verkocht, zonder garantie. Ga als het kan naar de kijkdag.</li><li>Een bod is onherroepelijk. Biedt iemand in de laatste drie minuten, dan wordt de veiling met vijf minuten verlengd.</li><li>Haal je een kavel niet (op tijd) op, dan kan HNVI een boete rekenen ter hoogte van de koopsom, of het opgeld en bijkomende kosten plus €20 administratiekosten en btw.</li></ul>',
+    bron: 'Algemene voorwaarden HNVI', bronUrl: 'https://www.hnvi.nl/algemene-voorwaarden'
   },
   {
     slug: 'troostwijk', naam: 'Troostwijk Auctions', land: 'Nederland en België',
@@ -267,7 +289,7 @@ function gidsPagina(h) {
     inhoud: `<section class="sectie"><div class="wrap smal artikel">
   <p class="kruimel"><a href="/veilinggids/">Veilinggids</a> › ${h.naam}</p>
   <h1 style="font-size:clamp(32px,4.4vw,48px)">Kosten bij ${h.naam}: wat betaal je bovenop je bod?</h1>
-  <p class="intro" style="margin-top:14px">Een onafhankelijke uitleg. Veiling Analyser werkt niet samen met ${h.naam}.</p>
+  <p class="intro" style="margin-top:14px">Een onafhankelijke uitleg.</p>
   <div class="cijfers">${h.cijfers.map(([a, b, c]) => `<div><span>${a}</span><b>${b}</b>${c ? `<small>${c}</small>` : ''}</div>`).join('')}</div>
   ${h.tekst}
   ${tabel}
@@ -283,7 +305,7 @@ const GIDS_INDEX = pagina({
   pad: '/veilinggids/', actief: 'gids',
   inhoud: `<section class="sectie"><div class="wrap">
   <h1 style="font-size:clamp(34px,4.6vw,52px)">Veilinggids</h1>
-  <p class="intro" style="margin:14px 0 28px">Wat betaal je bovenop je bod? Per veilinghuis het opgeld, de btw en andere kosten, met de bron erbij. Veiling Analyser werkt niet samen met deze veilinghuizen.</p>
+  <p class="intro" style="margin:14px 0 28px">Wat betaal je bovenop je bod? Per veilinghuis het opgeld, de btw en andere kosten, met de bron erbij.</p>
   <ul class="gidslijst">${GIDS.map(h => `<li><a href="/veilinggids/${h.slug}"><b>${h.naam}</b><span>${h.kort}</span></a></li>`).join('')}</ul>
   <h2 style="font-size:24px;margin:40px 0 12px">Binnenkort</h2>
   <p style="color:var(--ink-2)">Deze veilinghuizen voegen we toe zodra we hun kosten bij de bron hebben gecontroleerd. Tot die tijd leest de app de kosten van de kavelpagina zelf.</p>
@@ -364,9 +386,18 @@ const OVER = pagina({
   inhoud: `<section class="sectie"><div class="wrap smal artikel">
   <h1 style="font-size:clamp(34px,4.6vw,52px)">Over Veiling Analyser</h1>
   <p class="intro" style="margin:14px 0 8px">Veiling Analyser helpt je bepalen tot welk bedrag je op een veilingkavel kunt bieden, met echte prijzen en alle kosten meegerekend.</p>
+  <h2>Waarom deze app</h2>
+  <p>Iedereen die online op veilingen biedt, kent het: je ziet een kavel dat een koopje lijkt, de klok tikt af en je biedt nog één keer. Pas na het gunnen zie je wat je echt betaalt: opgeld, btw, soms kavelkosten. En dan nog de vraag of je het ooit voor meer verkoopt dan je ervoor gaf.</p>
+  <p>Dat uitzoeken kost per kavel al snel een kwartier: de voorwaarden lezen, advertenties vergelijken, rekenen. Veiling Analyser doet het in ongeveer een halve minuut. Je plakt de link, en je ziet wat het kavel je in totaal kost, wat het tweedehands opbrengt en tot welk bod het de moeite waard is.</p>
+  <h2>Waar we op letten</h2>
+  <ul class="lijst">
+    <li><b>Eerlijk boven mooi.</b> Weinig vergelijkbaar aanbod of twijfel over het product? Dan staat dat erbij, in plaats van een verzonnen getal.</li>
+    <li><b>Alle kosten mee.</b> Opgeld, btw en vaste kosten komen van de kavelpagina en tellen altijd mee.</li>
+    <li><b>Jij beslist.</b> Prijzen, kosten en je marge pas je zelf aan; het maximale bod rekent direct mee.</li>
+    <li><b>Zo min mogelijk gegevens.</b> We vragen alleen je e-mailadres en verkopen niets door.</li>
+  </ul>
   <h2>Wie zit erachter</h2>
-  <p>[Jouw verhaal: wie je bent, waarom je de app maakte en wat je met veilingen hebt.]</p>
-  <p>Veiling Analyser is een handelsnaam van ${BEDRIJF.naam}.</p>
+  <p>Veiling Analyser is een handelsnaam van ${BEDRIJF.naam}, een klein bedrijf uit Waalwijk. We bouwen en onderhouden de app zelf. Elke melding die je via <i>Klopt er iets niet?</i> stuurt, lezen we zelf, en daarmee maken we de app beter.</p>
   <h2>Contact</h2>
   <p>Vragen, ideeën of iets dat niet klopt? Mail naar <a href="mailto:${BEDRIJF.email}">${BEDRIJF.email}</a>. We reageren meestal binnen twee werkdagen.</p>
   <div class="tabel-box"><table class="tabel"><tbody>
@@ -376,8 +407,6 @@ const OVER = pagina({
     <tr><td>Btw-nummer</td><td>${BEDRIJF.btw}</td></tr>
     <tr><td>E-mail</td><td><a href="mailto:${BEDRIJF.email}">${BEDRIJF.email}</a></td></tr>
   </tbody></table></div>
-  <h2>Onafhankelijk</h2>
-  <p>We werken niet samen met veilinghuizen of met Marktplaats, 2dehands of eBay. Namen van veilinghuizen gebruiken we alleen om uit te leggen hoe hun kosten werken.</p>
 </div></section>`
 });
 
