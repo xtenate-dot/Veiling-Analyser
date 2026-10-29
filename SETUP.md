@@ -22,6 +22,13 @@ Zonder server werkt de app ook: dan vraagt hij elke gebruiker om een eigen Anthr
   4e. Marktplaats/2dehands: geen pagina's van die sites zelf laten ophalen (web_fetch `blocked_domains`), alleen zoekresultaten met links gebruiken; knop "Bekijk zelf op Marktplaats"; toestemming of API-toegang vragen bij Marktplaats (Adevinta). Laat beoordelen door een ICT-jurist.
   4f. Later: demovideo van 30 seconden (schermopname van de echte app met voorbeeldgegevens, staand en liggend).
   4g. Op site en voorwaarden: "Veiling Analyser is een handelsnaam van Xtenate", met KvK-nummer en adres.
+  4h. info@veilinganalyser.nl via Cloudflare Email Routing doorsturen naar xtenate@gmail.com (gratis). Bedrijfsgegevens in site, voorwaarden en privacy: Xtenate, KvK 85656364, btw NL004127521B86, Besoyensestraat 42, 5141 AK Waalwijk (bron: helmetcoverstore.com). Telefoonnummer alleen als de eigenaar dat wil.
+  4i. Melding per e-mail bij veel mislukte analyses of een bijna bereikt dagbudget. Back-up/terugzetten van D1 uitzoeken en in de rondleiding opnemen. Cloudflare Web Analytics (zonder cookies) op de site. Feedbackknop "Klopt er iets niet?" bij elke analyse.
+  4j. Tekst bij foto's: de app kan foto's lezen, maar ziet niet elk detail; controleer zelf op schade en defecte onderdelen. In de app bij het uploaden, bij de uitslag en op de site.
+  4k. Echte test zodra de Anthropic-sleutel er is: zo'n twintig kavels van verschillende veilinghuizen en soorten artikelen (klein en groot, kort en lang omschreven, met en zonder foto's uploaden), elke uitkomst met de hand nakijken, echte kosten per analyse meten.
+  4l. Onafhankelijke veiligheidscontrole van de server door een aparte controle die het werk niet heeft gemaakt, vóór de livegang.
+  4m. Engelse versie van de website (taalkeuze NL/EN), later eventueel de app en Frans. Vertaalde teksten laten nalezen.
+  GitHub Pages-versie blijft voorlopig staan (alleen voor de eigenaar om te testen).
   5. De promotiewebsite bouwen volgens het goedgekeurde ontwerp (homepagina, prijzen, veilinggids met alle veilinghuizen uit de app, elk tarief eerst bij de bron gecontroleerd, verhalen), zonder logo's van veilinghuizen en met de vermelding dat er geen samenwerking is.
 
 ---
