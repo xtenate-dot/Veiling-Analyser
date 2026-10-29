@@ -16,6 +16,12 @@ Zonder server werkt de app ook: dan vraagt hij elke gebruiker om een eigen Anthr
   2. Kavels per regel opslaan in plaats van één regel per gebruiker (D1 staat maximaal 2 MB per regel toe); oude afgesloten kavels na een jaar verkleinen; waarschuwing in de app bij een grens.
   3. veilinganalyser.nl toevoegen aan Cloudflare, de vier Resend-records overzetten, nameservers bij Vimexx omzetten, Worker koppelen; daarna APP_URL en Turnstile-hostnamen bijwerken.
   4. Tegoed in de server: welkomstbundel van 10 analyses eenmalig (verloopt niet), losse bundels 25 (€4,99) en 60 (€9,99) die niet verlopen, abonnementen Af en toe (30, €4,99), Regelmatig (120, €12,99), Handelaar (500, €29,99). Eerst abonnementsanalyses van de maand gebruiken, dan bundeltegoed.
+  4b. Extra abonnement Handelaar Plus (1.500 per maand, €69,99). Maximaal aantal analyses per uur standaard naar 60, Handelaar 120, Handelaar Plus 200. Dagbudget (`DAGBUDGET_USD`, nu $20 ≈ 1.300 analyses per dag voor alle klanten samen) meeschalen.
+  4c. Reviews: alleen ingelogde gebruikers met minstens één analyse kunnen een review achterlaten; op de site staat hoe reviews worden gecontroleerd en hoe het gemiddelde wordt berekend (ACM-regels sinds 28 mei 2022); negatieve reviews worden niet weggelaten; nooit verzonnen reviews.
+  4d. Betaalmiddelen iDEAL, Bancontact en kaart tonen bij de prijzen (en aanzetten in Stripe zodra betalen live gaat).
+  4e. Marktplaats/2dehands: geen pagina's van die sites zelf laten ophalen (web_fetch `blocked_domains`), alleen zoekresultaten met links gebruiken; knop "Bekijk zelf op Marktplaats"; toestemming of API-toegang vragen bij Marktplaats (Adevinta). Laat beoordelen door een ICT-jurist.
+  4f. Later: demovideo van 30 seconden (schermopname van de echte app met voorbeeldgegevens, staand en liggend).
+  4g. Op site en voorwaarden: "Veiling Analyser is een handelsnaam van Xtenate", met KvK-nummer en adres.
   5. De promotiewebsite bouwen volgens het goedgekeurde ontwerp (homepagina, prijzen, veilinggids met alle veilinghuizen uit de app, elk tarief eerst bij de bron gecontroleerd, verhalen), zonder logo's van veilinghuizen en met de vermelding dat er geen samenwerking is.
 
 ---
