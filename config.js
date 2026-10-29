@@ -10,7 +10,10 @@ window.VA_CONFIG = {
     var h = location.hostname;
     return /(^|\.)veilinganalyser\.nl$/.test(h) || h === 'veiling-analyser.xtenate.workers.dev' ? location.origin : '';
   })(),
-  prijzen: { basis: '€ 9,99 per maand incl. btw', pro: '€ 24,99 per maand incl. btw' },
+  prijzen: {
+    af_en_toe: '€ 4,99 per maand', regelmatig: '€ 12,99 per maand', handelaar: '€ 29,99 per maand', handelaar_plus: '€ 69,99 per maand',
+    b25: '€ 4,99', b60: '€ 9,99'
+  },
   voorwaarden: 'voorwaarden.html',
   privacy: 'privacy.html'
 };

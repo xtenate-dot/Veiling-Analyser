@@ -179,7 +179,7 @@
   // deps.anthropic(body) → Promise<antwoord-JSON>; gooit bij een API-fout.
   // Geeft het JSON-antwoord, de kosten en alle URL's die echt in zoek- of ophaalresultaten voorkwamen.
   async function vraagClaude(opts, deps) {
-    var messages = [{ role: 'user', content: opts.prompt }];
+    var messages = [{ role: 'user', content: opts.content || opts.prompt }];
     var bronnen = {}, zoekvragen = [], corpus = '', laatste = null, alleTekst = '', usd = 0;
     for (var ronde = 0; ronde < 5; ronde++) {
       var body = { model: opts.model, max_tokens: opts.maxTokens || 8000, system: opts.system, messages: messages };
@@ -237,24 +237,43 @@
     '"staat":"nieuw|zo goed als nieuw|gebruikt|beschadigd|defect|onbekend","staat_toelichting":"","aantal_stuks":1,"huidig_bod":null,"aantal_biedingen":null,"sluit":null,"sluit_iso":null,"locatie":null,' +
     '"kosten":{"opgeld_pct":null,"vaste_kosten":null,"btw_pct":null,"btw_regeling":"onbekend","bron":""},"opmerkingen":[]}';
   function vandaag() { return new Date().toISOString().slice(0, 10); }
+  // Marktplaats en 2dehands openen we niet zelf (hun voorwaarden beperken automatisch uitlezen).
+  // Prijzen van die sites komen alleen uit zoekresultaten, met een link naar de advertentie.
+  var NIET_OPENEN = ['marktplaats.nl', '2dehands.be', '2ememain.be'];
+  function nietOpenen(url) { var h = hostVan(url); return NIET_OPENEN.some(function (d) { return h === d || h.slice(-(d.length + 1)) === '.' + d; }); }
+  var MAX_FOTOS = 4;
+  // Voor de knop "Bekijk zelf": de zoekopdracht op Marktplaats en 2dehands, te openen in de browser van de gebruiker
+  function marktplaatsLinks(term) {
+    var plus = String(term || '').split(/\s+/).filter(Boolean).map(encodeURIComponent).join('+');
+    if (!plus) return null;
+    return { marktplaats: 'https://www.marktplaats.nl/q/' + plus + '/', tweedehands: 'https://www.2dehands.be/q/' + plus + '/' };
+  }
+  function fotoBlokken(fotos) {
+    return (Array.isArray(fotos) ? fotos : []).filter(function (f) {
+      return f && /^image\/(jpeg|png|webp|gif)$/.test(f.media_type) && typeof f.data === 'string' && f.data.length > 100 && f.data.length < 1500000;
+    }).slice(0, MAX_FOTOS).map(function (f) { return { type: 'image', source: { type: 'base64', media_type: f.media_type, data: f.data } }; });
+  }
 
-  async function leesKavelpagina(url, extra, deps) {
+  async function leesKavelpagina(url, extra, deps, fotos) {
     var paginaTekst = null;
-    if (deps.haalPagina) { try { paginaTekst = await deps.haalPagina(url); } catch (e) { paginaTekst = null; } }
+    var beelden = fotoBlokken(fotos);
+    if (url && deps.haalPagina) { try { paginaTekst = await deps.haalPagina(url); } catch (e) { paginaTekst = null; } }
     var bruikbaar = paginaTekst && paginaTekst.replace(/\s+/g, ' ').length > 400;
     var system = 'Je leest veilingkavels voor een Nederlandse opkoper. Vandaag is ' + vandaag() + '. Antwoord uitsluitend met één geldig JSON-object, zonder markdown en zonder tekst ervoor of erna.\n\n' +
-      (bruikbaar
+      (beelden.length ? 'Er zijn ' + beelden.length + ' foto\'s van het kavel meegestuurd. Gebruik ze om merk, model, uitvoering en staat te herkennen. Zet in foto.herkend kort wat je op de foto\'s ziet en in foto.gebreken alleen gebreken die duidelijk zichtbaar zijn (krassen, deuken, breuk, ontbrekende onderdelen). Je ziet niet elk detail: schrijf niets wat je niet zeker ziet.\n\n' : '') +
+      (!url ? 'Er is geen kavelpagina; werk met de foto\'s en de opmerking van de koper. Laat velden die je niet kunt zien op null.\n\n' : bruikbaar
         ? 'De inhoud van de kavelpagina staat in het bericht. Staan de veilingkosten er niet in en staat er een link naar voorwaarden of kosten bij, open die dan met web_fetch (hooguit één pagina).\n\n'
         : 'Werkwijze: open de kavelpagina met web_fetch. Staan de veilingkosten er niet op, open dan op dezelfde site de voorwaarden of kosteninformatie van deze veiling (hooguit één extra pagina). Lukt openen niet, zoek dan met web_search op het kavelnummer of de titel.\n\n') +
       PAGINA_REGELS + '\n- sluit_iso: sluitingsmoment als ISO 8601 met tijdzone als dat op de pagina staat, anders null.';
-    var prompt = 'Kavelpagina: ' + url + '\n' + (extra ? 'Opmerking van de koper (gaat voor de pagina): ' + extra + '\n' : '') +
+    var prompt = (url ? 'Kavelpagina: ' + url + '\n' : '') + (extra ? 'Opmerking van de koper (gaat voor de pagina): ' + extra + '\n' : '') +
       (bruikbaar ? '\n--- Inhoud van de pagina ---\n' + paginaTekst + '\n--- Einde ---\n' : '') +
-      '\nVul dit JSON-object in:\n' + PAGINA_JSON;
-    var tools = bruikbaar
-      ? [{ type: 'web_fetch_20250910', name: 'web_fetch', max_uses: 1, max_content_tokens: 6000 }]
-      : [{ type: 'web_fetch_20250910', name: 'web_fetch', max_uses: 2, max_content_tokens: 10000 },
+      '\nVul dit JSON-object in:\n' + PAGINA_JSON + (beelden.length ? '\nVoeg toe: "foto":{"herkend":"","gebreken":[]}' : '');
+    var tools = !url ? null : bruikbaar
+      ? [{ type: 'web_fetch_20250910', name: 'web_fetch', max_uses: 1, max_content_tokens: 6000, blocked_domains: NIET_OPENEN }]
+      : [{ type: 'web_fetch_20250910', name: 'web_fetch', max_uses: 2, max_content_tokens: 10000, blocked_domains: NIET_OPENEN },
          { type: 'web_search_20250305', name: 'web_search', max_uses: 1, user_location: locatieVoor(url) }];
-    var r = await vraagClaude({ system: system, prompt: prompt, maxTokens: 4000, model: deps.modelPagina, tools: tools }, deps);
+    var content = beelden.length ? beelden.concat([{ type: 'text', text: prompt }]) : null;
+    var r = await vraagClaude({ system: system, prompt: prompt, content: content, maxTokens: 4000, model: deps.modelPagina, tools: tools }, deps);
     var j = r.json;
     if (!j || typeof j !== 'object') throw new Error('Kavelpagina: geen bruikbaar antwoord');
     var p = j.product || {};
@@ -279,6 +298,11 @@
         opgeld_pct: num(kost.opgeld_pct), vaste_kosten: num(kost.vaste_kosten), btw_pct: num(kost.btw_pct),
         btw_regeling: REGELINGEN[kost.btw_regeling] ? kost.btw_regeling : null, bron: kortTekst(kost.bron, 240)
       },
+      foto: beelden.length && j.foto && typeof j.foto === 'object' ? {
+        aantal: beelden.length,
+        herkend: kortTekst(j.foto.herkend, 240),
+        gebreken: Array.isArray(j.foto.gebreken) ? j.foto.gebreken.filter(function (x) { return typeof x === 'string' && x.trim(); }).slice(0, 6).map(function (x) { return kortTekst(x, 160); }) : []
+      } : null,
       opmerkingen: Array.isArray(j.opmerkingen) ? j.opmerkingen.filter(function (x) { return typeof x === 'string'; }).slice(0, 6).map(function (x) { return kortTekst(x, 240); }) : [],
       bronnen: r.bronnen.slice(0, 8),
       usd: r.usd
@@ -287,11 +311,8 @@
 
   // ── Stap 2: tweedehands- en nieuwprijzen ───────────────────────────────────
   function zoekUrls(term) {
-    var plus = term.split(/\s+/).filter(Boolean).map(encodeURIComponent).join('+');
     var q = encodeURIComponent(term);
     return [
-      'https://www.marktplaats.nl/q/' + plus + '/',
-      'https://www.2dehands.be/q/' + plus + '/',
       'https://www.ebay.nl/sch/i.html?_nkw=' + q + '&LH_Sold=1&LH_Complete=1',
       'https://www.bol.com/nl/nl/s/?searchtext=' + q
     ].filter(function (u) { return u.length <= 250; });
@@ -320,19 +341,21 @@
     var term = (pagina && pagina.zoekterm) || korteZoekterm(product);
     var system = 'Je bent een eerlijke Nederlandse marktprijsonderzoeker voor een opkoper die veilingkavels tweedehands doorverkoopt in Nederland en België. Vandaag is ' + vandaag() + '. Antwoord uitsluitend met één geldig JSON-object, zonder markdown en zonder tekst ervoor of erna.\n\n' +
       'Werkwijze (zuinig, want elke stap kost geld):\n' +
-      '1. Open met web_fetch de zoekpagina\'s uit het bericht, te beginnen met Marktplaats en de verkochte eBay-items. Open de bol.com-pagina voor de nieuwprijs.\n' +
-      (zoekMax > 0 ? '2. Gebruik web_search alleen als de pagina\'s samen te weinig vergelijkbare advertenties of geen nieuwprijs opleveren. Je hebt hooguit ' + (zoekMax === 1 ? 'één zoekopdracht' : zoekMax + ' zoekopdrachten') + '.\n\n' : '2. Er is geen zoekmachine; werk alleen met deze pagina\'s.\n\n') +
+      (zoekMax > 0
+        ? '1. Zoek met web_search naar advertenties van dit product op Marktplaats (in België ook 2dehands), bijvoorbeeld "<productnaam> marktplaats". Je hebt hooguit ' + (zoekMax === 1 ? 'één zoekopdracht' : zoekMax + ' zoekopdrachten') + '. Open pagina\'s van Marktplaats en 2dehands niet zelf: gebruik alleen de titels, prijzen en links uit de zoekresultaten.\n'
+        : '1. Er is geen zoekmachine. Marktplaats en 2dehands kun je niet openen; laat die prijzen leeg als ze niet uit andere bronnen blijken.\n') +
+      '2. Open met web_fetch de verkochte eBay-items en de bol.com-pagina voor de nieuwprijs uit het bericht.\n\n' +
       PRIJS_REGELS;
     var prompt = 'Product: ' + product + '\n' +
       (pagina && pagina.titel ? 'Titel op de veilingsite: ' + pagina.titel + '\n' : '') +
       (pagina && pagina.staat ? 'Staat volgens de veiling: ' + pagina.staat + (pagina.staat_toelichting ? ' (' + pagina.staat_toelichting + ')' : '') + '\n' : '') +
       (pagina && pagina.aantal_stuks > 1 ? 'Aantal stuks in het kavel: ' + pagina.aantal_stuks + '\n' : '') +
       (extra ? 'Opmerking van de koper: ' + extra + '\n' : '') +
-      '\nZoekpagina\'s die je mag openen:\n' + zoekUrls(term).join('\n') +
+      '\nPagina\'s die je mag openen:\n' + zoekUrls(term).join('\n') +
       '\n\nVul dit JSON-object in:\n' + PRIJS_JSON;
     var r = await vraagClaude({
       system: system, prompt: prompt, maxTokens: 6000, model: deps.modelPrijzen,
-      tools: [{ type: 'web_fetch_20250910', name: 'web_fetch', max_uses: 3, max_content_tokens: 6000 }].concat(
+      tools: [{ type: 'web_fetch_20250910', name: 'web_fetch', max_uses: 3, max_content_tokens: 6000, blocked_domains: NIET_OPENEN }].concat(
         zoekMax > 0 ? [{ type: 'web_search_20250305', name: 'web_search', max_uses: zoekMax, user_location: locatieVoor(url) }] : [])
     }, deps);
     return normPrijzen(r.json, r, true);
@@ -422,17 +445,17 @@
   // input: { url, extra, hergebruik }
   // deps:  { anthropic, haalPagina?, modelPagina, modelPrijzen, cacheLees?(sleutel), cacheSchrijf?(sleutel, prijzen), opStap?(n) }
   async function analyseer(input, deps) {
-    var url = input.url || '', extra = input.extra || '';
+    var url = input.url || '', extra = input.extra || '', fotos = fotoBlokken(input.fotos).length ? input.fotos : null;
     var pagina = null, live = true, waarschuwingen = [];
     if (deps.opStap) deps.opStap(1);
-    if (url) {
-      try { pagina = await leesKavelpagina(url, extra, deps); }
+    if (url || fotos) {
+      try { pagina = await leesKavelpagina(url, extra, deps, fotos); }
       catch (e) {
         if (isToolFout(e)) live = false;
         else if (e.apiType) throw e;
         else waarschuwingen.push('De kavelpagina kon niet goed worden gelezen. Controleer bod en kosten zelf.');
       }
-      if (pagina && !pagina.gevonden) waarschuwingen.push('De kavelpagina kon niet worden geopend. Product en kosten zijn mogelijk onvolledig.');
+      if (url && pagina && !pagina.gevonden) waarschuwingen.push('De kavelpagina kon niet worden geopend. Product en kosten zijn mogelijk onvolledig.');
     }
     if (deps.opStap) deps.opStap(2);
     var product = bepaalProduct(extra, pagina && pagina.gevonden ? pagina : null, url);
@@ -464,6 +487,7 @@
     API_PRIJS: API_PRIJS, apiKostenVan: apiKostenVan,
     parseBedrag: parseBedrag, num: num, kortTekst: kortTekst, veiligeUrl: veiligeUrl, normUrl: normUrl, hostVan: hostVan, parseJSON: parseJSON,
     naamUitUrl: naamUitUrl, korteZoekterm: korteZoekterm, htmlNaarTekst: htmlNaarTekst, zoekUrls: zoekUrls, cacheSleutel: cacheSleutel,
+    nietOpenen: nietOpenen, marktplaatsLinks: marktplaatsLinks, MAX_FOTOS: MAX_FOTOS,
     apiFout: apiFout, isToolFout: isToolFout, vraagClaude: vraagClaude,
     leesKavelpagina: leesKavelpagina, zoekPrijzen: zoekPrijzen, schatPrijzen: schatPrijzen, normPrijzen: normPrijzen,
     bepaalProduct: bepaalProduct, analyseer: analyseer

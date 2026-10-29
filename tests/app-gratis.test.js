@@ -11,7 +11,7 @@ function check(naam, ok, extra) { console.log((ok ? 'OK   ' : 'FOUT ') + naam + 
   await page.goto('http://localhost:8080/app.html');
   await page.waitForFunction(() => window.serverInfo);
   await page.click('#welkom-knoppen >> text=Account maken');
-  check('Registratie toont uitnodigingscode en 3 gratis analyses', await page.isVisible('#li-code') && /3 analyses gratis\./.test(await page.textContent('#modal-body')), await page.textContent('#modal-body >> p.help'));
+  check('Registratie toont uitnodigingscode en 3 analyses cadeau', await page.isVisible('#li-code') && /3 analyses cadeau\. Ze verlopen niet/.test(await page.textContent('#modal-body')), await page.textContent('#modal-body >> p.help'));
   check('Geen tekst over abonnement', !/abonnement/i.test(await page.textContent('#modal-body')));
   await page.fill('#li-email', 'vriend@voorbeeld.nl'); await page.fill('#li-ww', 'geheim123'); await page.fill('#li-code', 'fout');
   await page.click('#modal-actions .btn-primary'); await page.waitForTimeout(300);
@@ -33,12 +33,12 @@ function check(naam, ok, extra) { console.log((ok ? 'OK   ' : 'FOUT ') + naam + 
   await page.fill('#batch-links', [1, 2, 3, 4].map(i => 'https://www.testveiling.nl/kavel/' + (700 + i)).join('\n'));
   await page.click('#modal-actions .btn-primary');
   await page.waitForFunction(() => !batchBezig, null, { timeout: 20000 });
-  check('Batch stopt na 3 met gratis-melding', await page.evaluate(() => kavels.length === 3) && /Vanaf de 1e/.test(await page.textContent('#batch-err')));
+  check('Batch stopt na 3 met gratis-melding', await page.evaluate(() => kavels.length === 3) && /gratis analyses zijn op/.test(await page.textContent('#batch-err')));
   check('Knop is Klaar, niet Abonnement kiezen', (await page.textContent('#modal-actions .btn-primary')) === 'Klaar');
   await page.click('#modal-actions .btn-primary');
   await page.evaluate(() => toonAccount());
   const acc = await page.textContent('#modal-body');
-  check('Account: geen abonnementen, wel wanneer het weer kan', !/Kies /.test(acc) && /Vanaf de 1e/.test(acc), acc);
+  check('Account: geen abonnementen, wel uitleg over het tegoed', !/Kies /.test(acc) && /0 tegoed dat niet verloopt/.test(acc) && /ander bod doorrekenen/.test(acc), acc);
   check('Geen knop Abonnement beheren', !(await page.isVisible('text=Abonnement beheren')));
   await page.evaluate(() => { closeModal(); switchTab('handleiding'); });
   check('Handleiding: geen Stripe-tekst', !(await page.isVisible('text=via Stripe')));

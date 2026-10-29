@@ -27,14 +27,22 @@ database_id = "17c48dc4-7c06-4fb0-8856-a06ea6b9962f"   # D1 in de EU, aangemaakt
 APP_URL = "https://veiling-analyser.xtenate.workers.dev/app.html"
 # Welke websites de server mogen aanroepen (komma-gescheiden)
 APP_ORIGIN = "https://veilinganalyser.nl,https://www.veilinganalyser.nl,https://veiling-analyser.xtenate.workers.dev,https://xtenate-dot.github.io"
-# Analyses per kalendermaand per abonnement
-LIMIET_GRATIS = "10"
-LIMIET_BASIS = "100"
-LIMIET_PRO = "500"
-# Veiligheidsplafond: maximaal AI-kosten (in dollar) per 24 uur voor alle klanten samen
+# Welkomstbundel: eenmalig bij een nieuw account, verloopt niet
+WELKOM_TEGOED = "10"
+# Analyses per kalendermaand per abonnement (gratis: geen maandtegoed, alleen de welkomstbundel)
+LIMIET_GRATIS = "0"
+LIMIET_AF_EN_TOE = "30"
+LIMIET_REGELMATIG = "120"
+LIMIET_HANDELAAR = "500"
+LIMIET_HANDELAAR_PLUS = "1500"
+# Veiligheidsplafond voor AI-kosten per 24 uur, voor alle klanten samen:
+# DAGBUDGET_USD plus DAGBUDGET_PER_KLANT_USD voor elke betalende klant (abonnement of bundel in de afgelopen 30 dagen)
 DAGBUDGET_USD = "20"
-# Maximaal aantal analyses per klant per uur
-MAX_PER_UUR = "40"
+DAGBUDGET_PER_KLANT_USD = "1"
+# Maximaal aantal analyses per klant per uur (Handelaar minstens 120, Handelaar Plus minstens 200)
+MAX_PER_UUR = "60"
+# Hierheen gaan meldingen bij veel mislukte analyses of een (bijna) vol dagbudget
+EIGENAAR_EMAIL = "xtenate@gmail.com"
 # AI-modellen (Haiku is ruim 20x goedkoper dan Sonnet)
 MODEL_PAGINA = "claude-haiku-5-5"
 MODEL_PRIJZEN = "claude-haiku-5-5"
@@ -50,8 +58,10 @@ EMAIL_VAN = "Veiling Analyser <noreply@veilinganalyser.nl>"
 #   ANTHROPIC_API_KEY      (verplicht)
 #   STRIPE_SECRET_KEY      (voor betalen)
 #   STRIPE_WEBHOOK_SECRET  (voor betalen)
-#   STRIPE_PRICE_BASIS     (prijs-ID van het Basis-abonnement, begint met price_)
-#   STRIPE_PRICE_PRO       (prijs-ID van het Pro-abonnement)
+#   STRIPE_PRICE_AF_EN_TOE, STRIPE_PRICE_REGELMATIG, STRIPE_PRICE_HANDELAAR, STRIPE_PRICE_HANDELAAR_PLUS
+#                          (prijs-ID's van de abonnementen, beginnen met price_, terugkerend per maand)
+#   STRIPE_PRICE_BUNDEL_25, STRIPE_PRICE_BUNDEL_60
+#                          (prijs-ID's van de losse bundels, eenmalig)
 #   RESEND_API_KEY         (voor e-mailcontrole en wachtwoord vergeten)
 #   UITNODIGINGSCODE       (optioneel: alleen wie deze code invult kan een account maken)
 #   TURNSTILE_SECRET       (aanbevolen: geheime sleutel van Cloudflare Turnstile tegen nep-aanmeldingen)

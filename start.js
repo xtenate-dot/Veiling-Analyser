@@ -30,6 +30,7 @@ var bh = document.getElementById('bladwijzer'); if (bh) bh.innerHTML = bladwijze
     await laadAccount();
     if (account) await haalKavelsVanServer();
     if (p.get('betaald') === '1') { toast('Bedankt! Je abonnement is actief.'); setTimeout(laadAccount, 2500); }
+    if (p.get('betaald') === 'bundel') { toast('Bedankt! Je bundel wordt bijgeschreven.'); setTimeout(laadAccount, 2500); }
     if (p.get('betaald') === '0') toast('Betaling geannuleerd. Er is niets afgeschreven.');
     if (p.get('herstel')) vraagNieuwWachtwoord(p.get('herstel'));
   }

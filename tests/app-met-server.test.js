@@ -28,7 +28,7 @@ function check(naam, ok, extra) { console.log((ok ? 'OK   ' : 'FOUT ') + naam + 
   await page.fill('#li-ww', 'geheim123');
   await page.click('#modal-actions .btn-primary');
   await page.waitForFunction(() => window.account && window.account.email);
-  check('Account aangemaakt en ingelogd', await page.evaluate(() => account.plan === 'gratis' && account.limiet === 3));
+  check('Account aangemaakt en ingelogd', await page.evaluate(() => account.plan === 'gratis' && account.limiet === 0 && account.tegoed === 3));
 
   // Analyseren via de server
   await page.evaluate(() => nieuwKavel());
@@ -61,10 +61,10 @@ function check(naam, ok, extra) { console.log((ok ? 'OK   ' : 'FOUT ') + naam + 
   await page.click('#modal-actions .btn-primary');
   await page.waitForFunction(() => !batchBezig, null, { timeout: 20000 });
   const tekst = await page.textContent('#batch-err');
-  check('Batch: 2 gelukt, daarna stopt hij bij de limiet met uitleg', await page.evaluate(() => kavels.length === 3) && /alle 3 analyses/.test(tekst), tekst);
+  check('Batch: 2 gelukt, daarna stopt hij bij de limiet met uitleg', await page.evaluate(() => kavels.length === 3) && /gratis analyses zijn op/.test(tekst), tekst);
   await page.screenshot({ path: OUT + '/srv-batch.png' });
   await page.click('#modal-actions .btn-primary');
-  check('Knop Abonnement kiezen opent abonnementen', await page.isVisible('text=Kies Basis'));
+  check('Knop Abonnement kiezen opent abonnementen', await page.isVisible('text=Kies Regelmatig'));
   await page.screenshot({ path: OUT + '/srv-account.png' });
   await page.evaluate(() => closeModal());
 

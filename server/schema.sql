@@ -75,8 +75,62 @@ CREATE TABLE IF NOT EXISTS pogingen (
 );
 CREATE INDEX IF NOT EXISTS idx_pogingen ON pogingen(email, tijd);
 
--- Verwijderde accounts: alleen een hash van het genormaliseerde adres, 40 dagen bewaard,
--- zodat verwijderen en opnieuw aanmelden de maandlimiet niet terugzet
+-- Kavels per regel (D1 staat maximaal 2 MB per regel toe; één regel per gebruiker liep daar tegenaan)
+CREATE TABLE IF NOT EXISTS kavel_items (
+  gebruiker_id INTEGER NOT NULL,
+  id TEXT NOT NULL,
+  data TEXT NOT NULL,
+  bijgewerkt INTEGER NOT NULL,
+  PRIMARY KEY (gebruiker_id, id)
+);
+
+-- Tegoed dat niet verloopt: de welkomstbundel en gekochte losse bundels
+CREATE TABLE IF NOT EXISTS tegoed (
+  gebruiker_id INTEGER PRIMARY KEY,
+  saldo INTEGER NOT NULL DEFAULT 0,
+  bijgewerkt INTEGER NOT NULL
+);
+-- Gekochte bundels (één regel per Stripe-betaling, zodat een betaling nooit twee keer wordt bijgeschreven)
+CREATE TABLE IF NOT EXISTS aankopen (
+  stripe_sessie TEXT PRIMARY KEY,
+  gebruiker_id INTEGER NOT NULL,
+  bundel TEXT NOT NULL,
+  analyses INTEGER NOT NULL,
+  tijd INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_aankopen_tijd ON aankopen(tijd);
+
+-- "Klopt er iets niet?" bij een analyse
+CREATE TABLE IF NOT EXISTS feedback (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  gebruiker_id INTEGER NOT NULL,
+  tijd INTEGER NOT NULL,
+  soort TEXT NOT NULL,
+  tekst TEXT,
+  kavel_url TEXT,
+  product TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_feedback_tijd ON feedback(tijd);
+
+-- Reviews: één per gebruiker, alleen na minstens één echte analyse
+CREATE TABLE IF NOT EXISTS reviews (
+  gebruiker_id INTEGER PRIMARY KEY,
+  sterren INTEGER NOT NULL,
+  tekst TEXT NOT NULL,
+  naam TEXT NOT NULL,
+  analyses INTEGER NOT NULL,
+  tijd INTEGER NOT NULL,
+  zichtbaar INTEGER NOT NULL DEFAULT 1
+);
+
+-- Verstuurde meldingen aan de eigenaar (niet vaker dan nodig mailen)
+CREATE TABLE IF NOT EXISTS meldingen (
+  soort TEXT PRIMARY KEY,
+  tijd INTEGER NOT NULL
+);
+
+-- Verwijderde accounts: alleen een hash van het genormaliseerde adres, een jaar bewaard,
+-- zodat verwijderen en opnieuw aanmelden geen nieuwe welkomstbundel of lege maandteller oplevert
 CREATE TABLE IF NOT EXISTS verwijderd (
   kanon_hash TEXT PRIMARY KEY,
   oud_id INTEGER NOT NULL,

@@ -45,8 +45,8 @@ globalThis.fetch = async (url, opt = {}) => {
 
 const env = {
   DB: maakD1(), ANTHROPIC_API_KEY: 'sk-ant-server', APP_URL: 'https://app.test/app.html', APP_ORIGIN: 'https://app.test',
-  LIMIET_GRATIS: '2', LIMIET_BASIS: '100', DAGBUDGET_USD: '20', MAX_PER_UUR: '40',
-  STRIPE_SECRET_KEY: 'sk_test_1', STRIPE_WEBHOOK_SECRET: 'whsec_test', STRIPE_PRICE_BASIS: 'price_basis', STRIPE_PRICE_PRO: 'price_pro',
+  WELKOM_TEGOED: '2', LIMIET_GRATIS: '0', DAGBUDGET_USD: '20', DAGBUDGET_PER_KLANT_USD: '1', MAX_PER_UUR: '60',
+  STRIPE_SECRET_KEY: 'sk_test_1', STRIPE_WEBHOOK_SECRET: 'whsec_test', STRIPE_PRICE_REGELMATIG: 'price_basis', STRIPE_PRICE_HANDELAAR: 'price_pro', STRIPE_PRICE_BUNDEL_25: 'price_b25',
   RESEND_API_KEY: 're_1', EMAIL_VAN: 'VA <noreply@test.nl>'
 };
 async function api(methode, pad, body, token, kop = {}) {
@@ -82,7 +82,7 @@ paginaHtml = '<html><head><title>Kavel 4711 – iPhone 13</title><meta property=
 // ── 1. Registreren en inloggen ──
 let r = await api('POST', '/api/registreer', { email: 'Jan@Voorbeeld.nl', wachtwoord: 'geheim123' });
 check('Registreren → 201 met token', r.status === 201 && /^[0-9a-f]{64}$/.test(r.data.token), r.status);
-check('E-mail kleine letters, plan gratis, limiet 2', r.data.account.email === 'jan@voorbeeld.nl' && r.data.account.plan === 'gratis' && r.data.account.limiet === 2);
+check('E-mail kleine letters, plan gratis, welkomstbundel 2', r.data.account.email === 'jan@voorbeeld.nl' && r.data.account.plan === 'gratis' && r.data.account.limiet === 0 && r.data.account.tegoed === 2 && r.data.account.beschikbaar === 2, r.data.account);
 const token = r.data.token;
 check('CORS-kop voor toegestane herkomst', r.headers.get('access-control-allow-origin') === 'https://app.test');
 r = await api('POST', '/api/registreer', { email: 'jan@voorbeeld.nl', wachtwoord: 'anders123' });
@@ -153,7 +153,7 @@ check('Stap 1 met Haiku, hooguit 1 extra pagina', anthropicBodies[0].model === '
 check('Stap 2 met Haiku, hooguit 3 pagina\'s en 1 zoekopdracht', anthropicBodies[1].model === 'claude-haiku-5-5' && JSON.stringify(anthropicBodies[1].tools.map(t => t.max_uses)) === '[3,1]');
 check('Server-sleutel gebruikt, niet zichtbaar voor klant', aanroepen.find(a => a.url.includes('anthropic')).opt.headers['x-api-key'] === 'sk-ant-server' && JSON.stringify(r.data).indexOf('sk-ant') === -1);
 check('Kosten niet naar de klant', r.data.usd === undefined && r.data.prijzen.usd === undefined && r.data.pagina.usd === undefined);
-check('Verbruik 1 van 2', r.data.verbruik.gebruikt === 1 && r.data.verbruik.limiet === 2);
+check('Verbruik: 1 uit tegoed, nog 1 over', r.data.verbruik.gebruikt === 1 && r.data.verbruik.tegoed === 1 && r.data.verbruik.beschikbaar === 1, r.data.verbruik);
 const kosten1 = env.DB._db.prepare('SELECT usd FROM verbruik').get().usd;
 // Haiku: 8000×0,10 + 400×0,50 + 40000×0,10 + 900×0,50 per miljoen + 1 zoekopdracht = $0,015450
 check('Kosten per analyse: $0,01545 (onder 2 cent)', Math.abs(kosten1 - 0.01545) < 1e-9, kosten1);
@@ -166,7 +166,7 @@ const kosten2 = env.DB._db.prepare('SELECT usd FROM verbruik ORDER BY id DESC').
 check('Kosten met cache: $0,001 (alleen pagina lezen)', Math.abs(kosten2 - 0.001) < 1e-9, kosten2);
 
 r = await api('POST', '/api/analyse', { url: 'https://www.testveiling.nl/kavel/4711' }, token);
-check('Limiet bereikt → 402 met uitleg', r.status === 402 && /alle 2 analyses/.test(r.data.fout), r.data);
+check('Tegoed op → 402 met uitleg (bundel of abonnement)', r.status === 402 && /gratis analyses zijn op/.test(r.data.fout) && /bundel/.test(r.data.fout), r.data);
 r = await api('POST', '/api/analyse', { url: 'http://127.0.0.1/admin' }, token);
 check('Interne adressen geweigerd', r.status === 400 || r.status === 402);
 
@@ -187,7 +187,7 @@ r = await api('GET', '/api/kavels', null, r2.data.token);
 check('Andere gebruiker ziet ze niet', r.data.kavels.length === 0);
 
 // ── 5. Stripe ──
-r = await api('POST', '/api/afrekenen', { plan: 'basis' }, token);
+r = await api('POST', '/api/afrekenen', { plan: 'regelmatig' }, token);
 const af = aanroepen.filter(a => a.url.includes('checkout/sessions')).pop();
 const velden = new URLSearchParams(af.opt.body);
 check('Afrekenen → Stripe Checkout-link', r.status === 200 && r.data.url.startsWith('https://checkout.stripe.com/'));
@@ -208,14 +208,14 @@ check('Webhook met oude tijd → 400', r.status === 400);
 r = await webhook({ type: 'checkout.session.completed', data: { object: { mode: 'subscription', subscription: 'sub_1', client_reference_id: '1', customer: 'cus_1' } } });
 check('Webhook checkout → 200', r.status === 200);
 r = await api('GET', '/api/account', null, token);
-check('Na betaling: plan Basis, limiet 100, periode-einde uit abonnementsitem', r.data.plan === 'basis' && r.data.limiet === 100 && r.data.periode_einde === 1800000000000, r.data);
+check('Na betaling: plan Regelmatig, limiet 120, periode-einde uit abonnementsitem', r.data.plan === 'regelmatig' && r.data.limiet === 120 && r.data.periode_einde === 1800000000000, r.data);
 r = await api('POST', '/api/analyse', { url: 'https://www.testveiling.nl/kavel/4711' }, token);
-check('Na upgrade kan weer geanalyseerd worden', r.status === 200 && r.data.verbruik.limiet === 100);
+check('Na upgrade kan weer geanalyseerd worden', r.status === 200 && r.data.verbruik.limiet === 120);
 r = await api('POST', '/api/portaal', null, token);
 check('Portaal-link voor abonnement beheren', r.status === 200 && r.data.url.startsWith('https://billing.stripe.com/'));
 r = await webhook({ type: 'customer.subscription.updated', data: { object: { id: 'sub_1', customer: 'cus_1', status: 'active', items: { data: [{ price: { id: 'price_pro' } }] }, current_period_end: 1810000000 } } });
 r = await api('GET', '/api/account', null, token);
-check('Wijziging naar Pro verwerkt', r.data.plan === 'pro' && r.data.limiet === 500);
+check('Wijziging naar Handelaar verwerkt', r.data.plan === 'handelaar' && r.data.limiet === 500);
 r = await webhook({ type: 'customer.subscription.deleted', data: { object: { id: 'sub_1', customer: 'cus_1', status: 'canceled', items: { data: [{ price: { id: 'price_pro' } }] } } } });
 r = await api('GET', '/api/account', null, token);
 check('Opzegging → terug naar Gratis', r.data.plan === 'gratis' && r.data.abonnement_status === 'canceled');
@@ -264,9 +264,9 @@ globalThis.fetch = (orig => async (url, opt) => {
 anthropicAntwoord = (b) => b.system.startsWith('Je leest veilingkavels')
   ? { content: [{ type: 'text', text: JSON.stringify(STAP1) }], stop_reason: 'end_turn', usage: { input_tokens: 8000, output_tokens: 400 } }
   : { content: [{ type: 'text', text: JSON.stringify(STAP2) }], stop_reason: 'end_turn', usage: { input_tokens: 40000, output_tokens: 900 } };
-delete env.STRIPE_SECRET_KEY; env.UITNODIGINGSCODE = 'Veiling2026'; env.LIMIET_GRATIS = '1';
+delete env.STRIPE_SECRET_KEY; env.UITNODIGINGSCODE = 'Veiling2026'; env.WELKOM_TEGOED = '1';
 r = await api('GET', '/api/gezondheid');
-check('Serverinfo: geen betalen, wel uitnodiging, limiet 1', r.data.betalen === false && r.data.uitnodiging === true && r.data.limiet_gratis === 1, r.data);
+check('Serverinfo: geen betalen, wel uitnodiging, welkomstbundel 1', r.data.betalen === false && r.data.uitnodiging === true && r.data.welkom === 1, r.data);
 r = await api('POST', '/api/registreer', { email: 'zonder@code.nl', wachtwoord: 'geheim123' });
 check('Zonder code geen account → 403', r.status === 403 && r.data.code === 'code');
 r = await api('POST', '/api/registreer', { email: 'zonder@code.nl', wachtwoord: 'geheim123', code: 'fout' });
@@ -283,7 +283,7 @@ r = await api('POST', '/api/afrekenen', { plan: 'basis' }, tk);
 check('Afrekenen zonder Stripe → 501', r.status === 501);
 
 // ── 10. Limieten tegen misbruik ──
-env.STRIPE_SECRET_KEY = 'sk_test_1'; delete env.UITNODIGINGSCODE; env.LIMIET_GRATIS = '2';
+env.STRIPE_SECRET_KEY = 'sk_test_1'; delete env.UITNODIGINGSCODE; env.WELKOM_TEGOED = '2';
 const ipKop = (ip) => ({ 'CF-Connecting-IP': ip });
 const mails0 = aanroepen.filter(a => a.url.includes('resend')).length;
 let statussen = [];
@@ -327,7 +327,7 @@ check('Geen e-mailadres meer in de database', !JSON.stringify(db.prepare('SELECT
 r = await api('GET', '/api/account', null, tkWeg);
 check('Oude sessie werkt niet meer', r.status === 401);
 rd = await api('POST', '/api/registreer', { email: 'weg@voorbeeld.nl', wachtwoord: 'geheim123' });
-check('Opnieuw aanmelden kan, maar het verbruik van deze maand telt mee', rd.status === 201 && rd.data.account.gebruikt === 1, rd.data.account);
+check('Opnieuw aanmelden kan, maar zonder nieuwe welkomstbundel en met het verbruik van deze maand', rd.status === 201 && rd.data.account.gebruikt === 1 && rd.data.account.tegoed === 0, rd.data.account);
 
 // ── 12. Dagelijks opruimen ──
 const { opruimen } = await import('../src/index.js');
@@ -346,6 +346,114 @@ check('Oude prijscache en pogingen weg', !db.prepare("SELECT 1 FROM prijscache W
 check('Links in verbruik na 90 dagen gewist, regels na 400 dagen weg', !db.prepare("SELECT 1 FROM verbruik WHERE url = 'https://oud.test/kavel'").get() && db.prepare('SELECT COUNT(*) AS n FROM verbruik WHERE tijd = ?').get(oud).n === 1 && !db.prepare('SELECT 1 FROM verbruik WHERE tijd < ?').get(Date.now() - 400 * 864e5));
 check('Onbevestigd account > 7 dagen weg, recent blijft', !db.prepare("SELECT 1 FROM gebruikers WHERE email = 'nooit@voorbeeld.nl'").get() && !!db.prepare("SELECT 1 FROM gebruikers WHERE email = 'net@voorbeeld.nl'").get());
 check('Bevestigde accounts blijven', !!db.prepare("SELECT 1 FROM gebruikers WHERE email = 'jan@voorbeeld.nl'").get() && !Object.values(v).includes('fout'), v);
+
+// ── 13. Kavels per regel ──
+const rk = await api('POST', '/api/registreer', { email: 'kavels@voorbeeld.nl', wachtwoord: 'geheim123' });
+const tkK = rk.data.token, idK = db.prepare("SELECT id FROM gebruikers WHERE email = 'kavels@voorbeeld.nl'").get().id;
+// Oude opslag: één regel met de hele lijst
+db.prepare('INSERT INTO kavels (gebruiker_id, data, bijgewerkt) VALUES (?, ?, ?)').run(idK, JSON.stringify([{ id: 11, titel: 'Oud A' }, { id: 12, titel: 'Oud B' }]), Date.now());
+r = await api('GET', '/api/kavels', null, tkK);
+check('Oude kavels worden overgezet naar één regel per kavel', r.data.kavels.length === 2 && db.prepare('SELECT COUNT(*) AS n FROM kavel_items WHERE gebruiker_id = ?').get(idK).n === 2 && !db.prepare('SELECT 1 FROM kavels WHERE gebruiker_id = ?').get(idK));
+r = await api('PUT', '/api/kavels', { wijzig: [{ id: 12, titel: 'Oud B bijgewerkt' }, { id: 13, titel: 'Nieuw C' }], verwijder: [11] }, tkK);
+const titels = db.prepare('SELECT data FROM kavel_items WHERE gebruiker_id = ? ORDER BY id').all(idK).map(x => JSON.parse(x.data).titel);
+check('Alleen wijzigingen sturen: bijwerken, toevoegen en verwijderen', r.status === 200 && r.data.aantal === 2 && JSON.stringify(titels) === '["Oud B bijgewerkt","Nieuw C"]', titels);
+r = await api('PUT', '/api/kavels', { wijzig: [{ id: 14, titel: 'x'.repeat(120000) }] }, tkK);
+check('Te groot kavel → 413 met uitleg', r.status === 413 && r.data.code === 'kavel_groot');
+const groot = Array.from({ length: 600 }, (_, i) => ({ id: 'g' + i, titel: 'Kavel ' + i, thumb: 'data:image/jpeg;base64,' + 'A'.repeat(4000), prijzen: { tweedehands: [{ titel: 'advertentie', prijs: 10 }] } }));
+r = await api('PUT', '/api/kavels', { wijzig: groot.slice(0, 300) }, tkK);
+const r2b = await api('PUT', '/api/kavels', { wijzig: groot.slice(300) }, tkK);
+r = await api('GET', '/api/kavels', null, tkK);
+check('600 kavels met foto (ruim 2 MB samen) opslaan en lezen', r2b.status === 200 && r.data.kavels.length === 602 && r.data.aantal === 602, r.data.aantal);
+r = await api('PUT', '/api/kavels', { kavels: [{ id: 13, titel: 'Nieuw C' }] }, tkK);
+check('Oudere app-versie (hele lijst) blijft werken', r.status === 200 && r.data.aantal === 1);
+db.prepare('UPDATE kavel_items SET bijgewerkt = ?, data = ? WHERE gebruiker_id = ?').run(Date.now() - 400 * 864e5, JSON.stringify({ id: 13, titel: 'Nieuw C', mp_gemiddeld: 80, prijzen: { marktplaats: { gemiddeld: 80 }, tweedehands: [{ prijs: 1 }] }, pagina: { titel: 't', opmerkingen: ['lang'] } }), idK);
+await opruimen(env);
+const verkleind = JSON.parse(db.prepare('SELECT data FROM kavel_items WHERE gebruiker_id = ?').get(idK).data);
+check('Na een jaar: advertentielijst eruit, resultaat blijft', verkleind.verkleind === true && !verkleind.prijzen.tweedehands && verkleind.prijzen.marktplaats.gemiddeld === 80 && verkleind.mp_gemiddeld === 80 && !verkleind.pagina.opmerkingen, verkleind);
+
+// ── 14. Tegoed: bundels, abonnement eerst, limiet per uur, dagbudget ──
+await bevestig(tkK, 'kavels@voorbeeld.nl');
+r = await api('POST', '/api/afrekenen', { bundel: 'b25' }, tkK);
+const afB = new URLSearchParams(aanroepen.filter(a => a.url.includes('checkout/sessions')).pop().opt.body);
+check('Bundel kopen → eenmalige betaling met bundel in metadata', r.status === 200 && afB.get('mode') === 'payment' && afB.get('line_items[0][price]') === 'price_b25' && afB.get('metadata[bundel]') === 'b25');
+r = await api('POST', '/api/afrekenen', { bundel: 'b60' }, tkK);
+check('Bundel zonder Stripe-prijs is niet te koop → 400', r.status === 400);
+const evB = { type: 'checkout.session.completed', data: { object: { id: 'cs_bundel_1', mode: 'payment', payment_status: 'paid', client_reference_id: String(idK), metadata: { bundel: 'b25', gebruiker_id: String(idK) } } } };
+await webhook(evB); await webhook(evB);
+r = await api('GET', '/api/account', null, tkK);
+check('Bundel bijgeschreven, ook bij dubbele webhook maar één keer (2 welkom + 25)', r.data.tegoed === 27 && r.data.beschikbaar === 27, r.data.tegoed);
+db.prepare("UPDATE gebruikers SET plan = 'af_en_toe' WHERE id = ?").run(idK);
+r = await api('POST', '/api/analyse', { url: 'https://www.testveiling.nl/kavel/1300' }, tkK);
+check('Met abonnement: eerst de maandanalyses, tegoed blijft staan', r.status === 200 && r.data.verbruik.tegoed === 27 && r.data.verbruik.beschikbaar === 29 + 27, r.data.verbruik);
+for (let i = 0; i < 29; i++) db.prepare('INSERT INTO verbruik (gebruiker_id, tijd, usd) VALUES (?, ?, 0)').run(idK, Date.now() - 2 * 3600000);
+r = await api('POST', '/api/analyse', { url: 'https://www.testveiling.nl/kavel/1301' }, tkK);
+check('Maand op: daarna uit het tegoed', r.status === 200 && r.data.verbruik.tegoed === 26, r.data.verbruik);
+for (let i = 0; i < 58; i++) db.prepare('INSERT INTO verbruik (gebruiker_id, tijd, usd) VALUES (?, ?, 0)').run(idK, Date.now() - 60000);
+r = await api('POST', '/api/analyse', { url: 'https://www.testveiling.nl/kavel/1302' }, tkK);
+check('Standaard 60 per uur → 429', r.status === 429 && /60 per uur/.test(r.data.fout), r.data);
+db.prepare("UPDATE gebruikers SET plan = 'handelaar' WHERE id = ?").run(idK);
+r = await api('POST', '/api/analyse', { url: 'https://www.testveiling.nl/kavel/1303' }, tkK);
+check('Handelaar mag 120 per uur', r.status === 200, r.data && r.data.fout);
+db.prepare('DELETE FROM verbruik WHERE gebruiker_id = ? AND tijd > ?').run(idK, Date.now() - 3600000 + 1000);
+const betalend = db.prepare("SELECT (SELECT COUNT(*) FROM gebruikers WHERE plan != 'gratis') + (SELECT COUNT(DISTINCT gebruiker_id) FROM aankopen WHERE tijd > ?) AS n").get(Date.now() - 30 * 864e5).n;
+db.prepare('INSERT INTO verbruik (gebruiker_id, tijd, usd) VALUES (98, ?, ?)').run(Date.now(), 20 + betalend - 0.5);
+const mails1 = aanroepen.filter(a => a.url.includes('resend') && JSON.parse(a.opt.body).to[0] === 'eigenaar@test.nl').length;
+env.EIGENAAR_EMAIL = 'eigenaar@test.nl';
+r = await api('POST', '/api/analyse', { url: 'https://www.testveiling.nl/kavel/1304' }, tkK);
+check('Dagbudget groeit mee met betalende klanten ($20 + $1 per klant)', r.status === 200, r.data && r.data.fout);
+const naarEigenaar = () => aanroepen.filter(a => a.url.includes('resend') && JSON.parse(a.opt.body).to[0] === 'eigenaar@test.nl');
+check('Bijna vol dagbudget → e-mail aan de eigenaar', naarEigenaar().length === mails1 + 1 && /bijna/i.test(JSON.parse(naarEigenaar().pop().opt.body).subject));
+db.prepare('UPDATE verbruik SET usd = usd + 5 WHERE gebruiker_id = 98').run();
+r = await api('POST', '/api/analyse', { url: 'https://www.testveiling.nl/kavel/1305' }, tkK);
+await api('POST', '/api/analyse', { url: 'https://www.testveiling.nl/kavel/1306' }, tkK);
+check('Vol dagbudget → 503, en hooguit één e-mail per 6 uur', r.status === 503 && naarEigenaar().length === mails1 + 2, naarEigenaar().length - mails1);
+db.prepare('DELETE FROM verbruik WHERE gebruiker_id = 98').run();
+r = await api('GET', '/api/mijn-gegevens', null, tkK);
+check('Download bevat tegoed en aankopen', r.data.account.tegoed === 26 && r.data.aankopen.length === 1 && r.data.aankopen[0].analyses === 25, r.data.account);
+
+// ── 15. Foto's en Marktplaats ──
+db.prepare("UPDATE gebruikers SET plan = 'handelaar' WHERE id = ?").run(idK);
+r = await api('POST', '/api/analyse', { url: 'https://www.marktplaats.nl/v/audio/m123-speaker' }, tkK);
+check('Marktplaats-link als kavel → 400 met uitleg', r.status === 400 && r.data.code === 'marktplaats');
+anthropicBodies.length = 0;
+const foto = { media_type: 'image/jpeg', data: Buffer.from('nepfoto'.repeat(40)).toString('base64') };
+anthropicAntwoord = (b) => {
+  anthropicBodies.push(b);
+  if (b.system.startsWith('Je leest veilingkavels')) return { content: [{ type: 'text', text: JSON.stringify(Object.assign({}, STAP1, { foto: { herkend: 'iPhone 13 blauw', gebreken: ['kras op het scherm'] } })) }], stop_reason: 'end_turn', usage: { input_tokens: 9000, output_tokens: 400 } };
+  return { content: [{ type: 'text', text: JSON.stringify(STAP2) }], stop_reason: 'end_turn', usage: { input_tokens: 40000, output_tokens: 900 } };
+};
+r = await api('POST', '/api/analyse', { url: 'https://www.testveiling.nl/kavel/2000', fotos: [foto, foto, { media_type: 'text/html', data: 'x' }], hergebruik: false }, tkK);
+const s1 = anthropicBodies[0], s2 = anthropicBodies[1];
+check('Foto\'s gaan als afbeelding mee naar stap 1 (ongeldige eruit)', r.status === 200 && Array.isArray(s1.messages[0].content) && s1.messages[0].content.filter(c => c.type === 'image').length === 2, r.data && r.data.fout);
+check('Gezien op de foto\'s komt terug in de uitslag', r.data.pagina.foto && r.data.pagina.foto.gebreken[0] === 'kras op het scherm' && r.data.pagina.foto.aantal === 2, r.data.pagina.foto);
+check('Marktplaats en 2dehands staan op de blokkadelijst van web_fetch (stap 1 en 2)', s1.tools[0].blocked_domains.includes('marktplaats.nl') && s2.tools[0].blocked_domains.includes('2dehands.be'));
+check('Stap 2 noemt geen Marktplaats-pagina om te openen, wel eBay en bol.com', !/marktplaats\.nl\/q\//.test(s2.messages[0].content) && /ebay\.nl/.test(s2.messages[0].content) && /bol\.com/.test(s2.messages[0].content));
+anthropicBodies.length = 0;
+r = await api('POST', '/api/analyse', { fotos: [foto] }, tkK);
+check('Alleen foto\'s, zonder link: analyse lukt zonder webtools in stap 1', r.status === 200 && !anthropicBodies[0].tools, r.data && r.data.fout);
+
+// ── 16. Feedback en reviews ──
+const fbMails = naarEigenaar().length;
+r = await api('POST', '/api/feedback', { soort: 'prijs', tekst: 'Marktplaats-prijs veel te hoog', kavel_url: 'https://www.testveiling.nl/kavel/2000', product: 'iPhone 13' }, tkK);
+check('Feedback opgeslagen en eigenaar krijgt een e-mail', r.status === 200 && db.prepare('SELECT COUNT(*) AS n FROM feedback WHERE gebruiker_id = ?').get(idK).n === 1 && naarEigenaar().length === fbMails + 1);
+await api('POST', '/api/feedback', { soort: 'product', tekst: 'tweede' }, tkK);
+check('Tweede feedback binnen 6 uur: wel opgeslagen, geen extra e-mail', db.prepare('SELECT COUNT(*) AS n FROM feedback WHERE gebruiker_id = ?').get(idK).n === 2 && naarEigenaar().length === fbMails + 1);
+const rNieuw = await api('POST', '/api/registreer', { email: 'nogniks@voorbeeld.nl', wachtwoord: 'geheim123' });
+await bevestig(rNieuw.data.token, 'nogniks@voorbeeld.nl');
+r = await api('POST', '/api/review', { sterren: 5, tekst: 'Super app, echt waar!', naam: 'Nep' }, rNieuw.data.token);
+check('Review zonder analyse → 403', r.status === 403 && r.data.code === 'geen_analyse');
+r = await api('POST', '/api/review', { sterren: 9, tekst: 'Goed', naam: 'Kees' }, tkK);
+check('Ongeldige sterren of te korte tekst → 400', r.status === 400);
+r = await api('POST', '/api/review', { sterren: 4, tekst: 'Handig om snel te zien tot hoeveel ik kan bieden.', naam: 'Kees uit Tilburg' }, tkK);
+await api('POST', '/api/review', { sterren: 2, tekst: 'Toch maar 2 sterren, prijzen soms te hoog.', naam: 'Kees uit Tilburg' }, tkK);
+r = await api('GET', '/api/reviews');
+check('Eén review per account (bijwerken), negatief blijft zichtbaar, gemiddelde klopt', r.data.aantal === 1 && r.data.reviews[0].sterren === 2 && r.data.gemiddelde === 2 && /beloning/.test(r.data.uitleg), r.data);
+db.prepare('UPDATE reviews SET zichtbaar = 0 WHERE gebruiker_id = ?').run(idK);
+check('Verborgen review telt niet mee', (await api('GET', '/api/reviews')).data.aantal === 0);
+r = await api('GET', '/api/mijn-gegevens', null, tkK);
+check('Download bevat feedback en review', r.data.feedback.length === 2 && r.data.review && r.data.review.sterren === 2);
+await api('POST', '/api/review-verwijderen', null, tkK);
+check('Eigen review verwijderen', !db.prepare('SELECT 1 FROM reviews WHERE gebruiker_id = ?').get(idK));
 
 console.log('\n' + (aantal - fouten) + ' van ' + aantal + ' controles OK' + (fouten ? ' — ' + fouten + ' FOUT(EN)' : ''));
 process.exit(fouten ? 1 : 0);

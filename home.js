@@ -64,8 +64,7 @@ function renderHome() {
     '</header>';
 
   if (ingelogdNodig) {
-    h += '<div class="home-grid"><div class="card home-snel"><h2>Begin gratis</h2><p class="help" style="margin:0 0 16px">Maak een account en analyseer elke maand ' +
-      (serverInfo && serverInfo.limiet_gratis ? serverInfo.limiet_gratis + ' kavels' : 'een aantal kavels') + ' gratis.</p>' +
+    h += '<div class="home-grid"><div class="card home-snel"><h2>Begin gratis</h2><p class="help" style="margin:0 0 16px">Maak een account. ' + esc(welkomTekst()) + '</p>' +
       '<ul class="voordelen"><li>' + ic('check') + 'Echte prijzen van vandaag, met links naar de advertenties</li><li>' + ic('check') + 'Opgeld, vaste kosten en btw van de veiling doorgerekend</li><li>' + ic('check') + 'Je kavels op telefoon en computer</li></ul>' +
       '<div class="btns" id="welkom-knoppen"><button class="btn btn-primary btn-lg" onclick="vraagInloggen(\'registreren\')">Account maken</button><button class="btn btn-secondary btn-lg" onclick="vraagInloggen(\'inloggen\')">Inloggen</button></div></div>' +
       voorbeeldKaartje() + '</div>' + zoWerktHet();
@@ -91,8 +90,8 @@ function renderHome() {
       '<button type="button" class="tegel" onclick="switchTab(\'overzicht\')"><span>Sluiten binnen 24 uur</span><b>' + vandaag + '</b></button>' +
       '<button type="button" class="tegel" onclick="switchTab(\'gewonnen\')"><span>Winst op verkochte kavels</span><b class="' + (winst > 0 ? 'pos' : '') + '">' + (nVerkocht ? fmtS(winst) : '-') + '</b></button>';
     if (serverModus() && account) {
-      var pct = Math.min(100, Math.round(account.gebruikt / Math.max(1, account.limiet) * 100));
-      h += '<button type="button" class="tegel" onclick="toonAccount()"><span>Analyses deze maand</span><b>' + account.gebruikt + ' van ' + account.limiet + '</b><span class="acc-meter' + (pct >= 100 ? ' vol' : '') + '" style="margin:6px 0 0"><i style="width:' + pct + '%"></i></span></button>';
+      var nog = beschikbaar();
+      h += '<button type="button" class="tegel" onclick="toonAccount()"><span>Analyses te gebruiken</span><b class="' + (nog <= 0 ? 'neg' : '') + '">' + nog + '</b></button>';
     }
     h += '</div>';
   }

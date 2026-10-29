@@ -18,10 +18,10 @@ function stmt(sql, args = []) {
   };
 }
 const env = { DB: { prepare: s => stmt(s), batch: async l => { for (const s of l) await s.run(); } },
-  ANTHROPIC_API_KEY: 'sk-ant-lokaal', STRIPE_SECRET_KEY: 'sk_test_lokaal', STRIPE_PRICE_BASIS: 'price_b', STRIPE_PRICE_PRO: 'price_p', APP_URL: herkomst + '/app.html', APP_ORIGIN: herkomst, LIMIET_GRATIS: '3' };
+  ANTHROPIC_API_KEY: 'sk-ant-lokaal', STRIPE_SECRET_KEY: 'sk_test_lokaal', STRIPE_PRICE_REGELMATIG: 'price_b', STRIPE_PRICE_HANDELAAR: 'price_p', STRIPE_PRICE_BUNDEL_25: 'price_b25', APP_URL: herkomst + '/app.html', APP_ORIGIN: herkomst, WELKOM_TEGOED: '3' };
 
 // Gratis opzet testen: ZONDER_BETALEN=1 en/of UITNODIGINGSCODE=... meegeven
-if (process.env.ZONDER_BETALEN) { delete env.STRIPE_SECRET_KEY; delete env.STRIPE_PRICE_BASIS; delete env.STRIPE_PRICE_PRO; }
+if (process.env.ZONDER_BETALEN) { delete env.STRIPE_SECRET_KEY; delete env.STRIPE_PRICE_REGELMATIG; delete env.STRIPE_PRICE_HANDELAAR; delete env.STRIPE_PRICE_BUNDEL_25; }
 if (process.env.UITNODIGINGSCODE) env.UITNODIGINGSCODE = process.env.UITNODIGINGSCODE;
 // MET_EMAIL=1: e-mailcontrole aan; de laatst verstuurde code is op te vragen via /__test/laatste-code
 let laatsteCode = null;

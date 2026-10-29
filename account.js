@@ -33,13 +33,13 @@ async function apiCall(pad, opt) {
 }
 
 function werkAccountBij() {
-  var tekst = !account ? 'Niet ingelogd' : !account.email_geverifieerd ? 'E-mailadres nog bevestigen' : account.plan_naam + ': ' + account.gebruikt + ' van ' + account.limiet + ' deze maand';
+  var tekst = !account ? 'Niet ingelogd' : !account.email_geverifieerd ? 'E-mailadres nog bevestigen' : account.plan_naam + ': nog ' + beschikbaar() + ' ' + (beschikbaar() === 1 ? 'analyse' : 'analyses');
   var balk = document.getElementById('bevestig-bar');
   if (balk) balk.style.display = account && !account.email_geverifieerd ? 'flex' : 'none';
   if (typeof renderHome === 'function') renderHome();
   document.querySelectorAll('.js-acc-sub').forEach(function(e) {
     e.textContent = tekst;
-    e.className = 'sub js-acc-sub' + (account ? (account.gebruikt >= account.limiet ? ' err' : ' ok') : '');
+    e.className = 'sub js-acc-sub' + (account ? (beschikbaar() <= 0 ? ' err' : ' ok') : '');
   });
   var w = document.getElementById('welkom-knoppen');
   if (w && serverModus()) {
@@ -48,9 +48,17 @@ function werkAccountBij() {
       : '<button class="btn btn-primary btn-lg" onclick="vraagInloggen(\'registreren\')">Account maken</button><button class="btn btn-secondary btn-lg" onclick="vraagInloggen(\'inloggen\')">Inloggen</button>';
   }
 }
+// Nog te gebruiken: de rest van de maand (abonnement) plus het tegoed dat niet verloopt
+function beschikbaar() {
+  if (!account) return 0;
+  if (typeof account.beschikbaar === 'number') return account.beschikbaar;
+  return Math.max(0, (account.limiet || 0) - (account.gebruikt || 0)) + (account.tegoed || 0);
+}
 function toonVerbruik(v) {
   if (!account || !v) return;
   account.gebruikt = v.gebruikt; account.limiet = v.limiet;
+  if (typeof v.tegoed === 'number') account.tegoed = v.tegoed;
+  if (typeof v.beschikbaar === 'number') account.beschikbaar = v.beschikbaar;
   werkAccountBij();
 }
 async function laadAccount() {
@@ -69,7 +77,7 @@ function vraagInloggen(modus) {
       '<button type="button" role="tab" class="' + (modus === 'inloggen' ? 'active' : '') + '" onclick="vraagInloggen(\'inloggen\')">Inloggen</button>' +
       '<button type="button" role="tab" class="' + (modus === 'registreren' ? 'active' : '') + '" onclick="vraagInloggen(\'registreren\')">Account maken</button></div>';
   }
-  if (modus === 'registreren') h += '<p class="help" style="margin:0 0 12px">Je krijgt elke maand ' + (serverInfo && serverInfo.limiet_gratis ? serverInfo.limiet_gratis + ' analyses' : 'een aantal analyses') + ' gratis.' + (serverInfo && serverInfo.betalen ? ' Een abonnement kies je later, als je wilt.' : '') + '</p>';
+  if (modus === 'registreren') h += '<p class="help" style="margin:0 0 12px">' + welkomTekst() + (serverInfo && serverInfo.betalen ? ' Een bundel of abonnement kies je later, als je wilt.' : '') + '</p>';
   if (modus === 'vergeten') h += '<p class="help" style="margin:0 0 12px">Vul je e-mailadres in. Je krijgt een link om een nieuw wachtwoord te kiezen.</p>';
   h += '<div class="form-rij"><label for="li-email">E-mailadres</label><input class="input" id="li-email" type="email" autocomplete="email" onkeydown="if(event.key===\'Enter\')inlogVerstuur(\'' + modus + '\')"></div>';
   if (modus !== 'vergeten') {
@@ -177,29 +185,50 @@ function vraagNieuwWachtwoord(token) {
     } }]);
 }
 
-// ── Accountoverzicht en abonnement ──
+function welkomTekst() {
+  var n = serverInfo && serverInfo.welkom;
+  return n ? 'Je krijgt ' + n + ' analyses cadeau. Ze verlopen niet: je gebruikt ze wanneer je wilt.' : 'Je krijgt een aantal analyses cadeau.';
+}
+
+// ── Accountoverzicht, tegoed, bundels en abonnement ──
 function toonAccount() {
   if (!account) { vraagInloggen('inloggen'); return; }
-  var a = account, vol = a.gebruikt >= a.limiet;
+  var a = account, nog = beschikbaar(), vol = nog <= 0;
   var prijzen = (window.VA_CONFIG && window.VA_CONFIG.prijzen) || {};
   var h = '<div class="acc-plan"><b>' + esc(a.plan_naam) + '</b><span class="kc-meta">' + esc(a.email) + '</span></div>';
-  h += '<div class="acc-meter' + (vol ? ' vol' : '') + '"><i style="width:' + Math.min(100, Math.round(a.gebruikt / Math.max(1, a.limiet) * 100)) + '%"></i></div>';
-  h += '<div class="help" style="margin:0">' + a.gebruikt + ' van ' + a.limiet + ' analyses gebruikt deze maand.' + (vol && !a.kan_betalen ? ' Vanaf de 1e van volgende maand kun je weer verder.' : '') +
-    (a.periode_einde && a.plan !== 'gratis' ? ' Je abonnement loopt tot ' + new Date(a.periode_einde).toLocaleDateString('nl-NL') + ' en wordt automatisch verlengd.' : '') + '</div>';
+  h += '<div class="acc-saldo"><b class="' + (vol ? 'neg' : '') + '">' + nog + '</b><span>' + (nog === 1 ? 'analyse' : 'analyses') + ' te gebruiken</span></div>';
+  var uitleg = [];
+  if (a.limiet > 0) uitleg.push(Math.max(0, a.limiet - a.gebruikt) + ' van de ' + a.limiet + ' van je abonnement deze maand');
+  if (a.tegoed > 0 || a.limiet === 0) uitleg.push((a.tegoed || 0) + ' tegoed dat niet verloopt');
+  h += '<div class="help" style="margin:0">' + esc(uitleg.join(' en ')) + '.' +
+    (a.periode_einde && a.plan !== 'gratis' ? ' Je abonnement loopt tot ' + new Date(a.periode_einde).toLocaleDateString('nl-NL') + ' en wordt automatisch verlengd.' : '') +
+    (vol && !a.kan_betalen ? ' Een ander bod doorrekenen kan wel gewoon.' : '') + '</div>';
   if (a.abonnement_status === 'past_due') h += '<div class="note">' + ic('alert') + '<span>De laatste betaling is niet gelukt. Werk je betaalgegevens bij via Abonnement beheren.</span></div>';
   if (a.kan_betalen) {
-    h += '<div class="plan-grid">';
-    a.plannen.filter(function(p) { return p.te_koop || p.id === a.plan; }).forEach(function(p) {
-      var huidig = p.id === a.plan;
-      var inhoud = '<b>' + esc(p.naam) + '</b><span>' + p.limiet + ' analyses per maand' + (prijzen[p.id] ? ', ' + esc(prijzen[p.id]) : '') + '</span>' + (huidig ? '<span>Je huidige abonnement</span>' : '');
-      h += huidig || a.plan !== 'gratis'
-        ? '<div class="plan-k' + (huidig ? ' huidig' : '') + '">' + inhoud + '</div>'
-        : '<button type="button" class="plan-k" onclick="afrekenen(\'' + p.id + '\')">' + inhoud + '<span style="color:var(--link);font-weight:600">Kies ' + esc(p.naam) + '</span></button>';
-    });
-    h += '</div>';
-    if (a.plan !== 'gratis') h += '<p class="help">Overstappen of opzeggen doe je via Abonnement beheren.</p>';
+    var bund = (a.bundels || []).filter(function(b) { return b.te_koop; });
+    if (bund.length) {
+      h += '<h3 class="acc-kop">Losse bundel</h3><p class="help" style="margin:0 0 8px">Eén keer betalen, verloopt niet.</p><div class="plan-grid">';
+      bund.forEach(function(b) {
+        h += '<button type="button" class="plan-k" onclick="koopBundel(\'' + b.id + '\')"><b>' + esc(b.naam) + '</b><span>' + (prijzen[b.id] ? esc(prijzen[b.id]) : '') + '</span><span style="color:var(--link);font-weight:600">Koop bundel</span></button>';
+      });
+      h += '</div>';
+    }
+    var abos = a.plannen.filter(function(p) { return p.id !== 'gratis' && (p.te_koop || p.id === a.plan); });
+    if (abos.length) {
+      h += '<h3 class="acc-kop">Abonnement</h3><p class="help" style="margin:0 0 8px">Elke maand nieuwe analyses. Maandelijks opzegbaar.</p><div class="plan-grid">';
+      abos.forEach(function(p) {
+        var huidig = p.id === a.plan;
+        var inhoud = '<b>' + esc(p.naam) + '</b><span>' + p.limiet + ' analyses per maand' + (prijzen[p.id] ? ', ' + esc(prijzen[p.id]) : '') + '</span>' + (huidig ? '<span>Je huidige abonnement</span>' : '');
+        h += huidig || a.plan !== 'gratis'
+          ? '<div class="plan-k' + (huidig ? ' huidig' : '') + '">' + inhoud + '</div>'
+          : '<button type="button" class="plan-k" onclick="afrekenen(\'' + p.id + '\')">' + inhoud + '<span style="color:var(--link);font-weight:600">Kies ' + esc(p.naam) + '</span></button>';
+      });
+      h += '</div>';
+      if (a.plan !== 'gratis') h += '<p class="help">Overstappen of opzeggen doe je via Abonnement beheren.</p>';
+    }
+    h += '<p class="help betaalmiddelen">Betalen kan met iDEAL, Bancontact of creditcard. Alle prijzen zijn inclusief btw.</p>';
   }
-  h += '<div class="acc-privacy"><button type="button" class="linkje" onclick="downloadGegevens()">' + ic('download') + 'Mijn gegevens downloaden</button>' +
+  h += '<div class="acc-privacy"><button type="button" class="linkje" onclick="vraagReview()">' + ic('star') + 'Review schrijven</button><button type="button" class="linkje" onclick="downloadGegevens()">' + ic('download') + 'Mijn gegevens downloaden</button>' +
     '<button type="button" class="linkje gevaar" onclick="vraagVerwijderen()">Account verwijderen</button></div>';
   var acties = [{ label: 'Uitloggen', cls: 'btn-ghost', fn: uitloggen }];
   if (a.plan !== 'gratis' || a.abonnement_status) acties.push({ label: 'Abonnement beheren', cls: 'btn-secondary', keepOpen: true, fn: openPortaal });
@@ -210,10 +239,64 @@ async function afrekenen(plan) {
   try { var d = await apiCall('/api/afrekenen', { method: 'POST', body: { plan: plan } }); location.href = d.url; }
   catch (e) { toast(e.message, null, true); }
 }
+async function koopBundel(bundel) {
+  try { var d = await apiCall('/api/afrekenen', { method: 'POST', body: { bundel: bundel } }); location.href = d.url; }
+  catch (e) { toast(e.message, null, true); }
+}
 async function openPortaal() {
   try { var d = await apiCall('/api/portaal', { method: 'POST' }); location.href = d.url; }
   catch (e) { toast(e.message, null, true); }
 }
+// ── "Klopt er iets niet?" bij een analyse ──
+function vraagFeedback(idx) {
+  var k = kavels[idx]; if (!k) return;
+  var h = '<p style="margin:0 0 12px">Wat klopt er niet aan de analyse van <strong>' + esc(k.titel || 'dit kavel') + '</strong>? Hiermee maken we de app beter.</p>' +
+    '<div class="form-rij"><label for="fb-soort">Wat is er mis?</label><select class="input" id="fb-soort">' +
+    '<option value="prijs">De prijzen kloppen niet</option><option value="product">Verkeerd product herkend</option><option value="kosten">De veilingkosten kloppen niet</option><option value="anders">Iets anders</option></select></div>' +
+    '<div class="form-rij"><label for="fb-tekst">Toelichting <span class="opt">(optioneel)</span></label><textarea class="input" id="fb-tekst" rows="4" maxlength="1000" placeholder="Bijvoorbeeld: dit model verkoopt eerder voor €60"></textarea></div>' +
+    '<div class="msg err" id="fb-err" role="alert"></div>';
+  openModal('Klopt er iets niet?', h, [
+    { label: 'Annuleren', cls: 'btn-secondary' },
+    { label: 'Versturen', cls: 'btn-primary', keepOpen: true, fn: async function() {
+      try {
+        await apiCall('/api/feedback', { method: 'POST', body: { soort: document.getElementById('fb-soort').value, tekst: document.getElementById('fb-tekst').value, kavel_url: k.url || '', product: k.titel || '' } });
+        closeModal(); toast('Dank je wel! We kijken ernaar.');
+      } catch (e) { toonMsg('fb-err', e.message); }
+    } }
+  ]);
+}
+
+// ── Review schrijven ──
+var reviewSterren = 0;
+async function vraagReview() {
+  var bestaand = null;
+  try { bestaand = (await apiCall('/api/mijn-review')).review; } catch (e) {}
+  reviewSterren = bestaand ? bestaand.sterren : 0;
+  var h = '<p style="margin:0 0 12px">Hoe bevalt Veiling Analyser? Je review komt op de website, ook als hij kritisch is.</p>' +
+    '<fieldset class="sterren"><legend>Aantal sterren</legend>' + [1, 2, 3, 4, 5].map(function(n) {
+      return '<button type="button" class="ster" data-n="' + n + '" aria-label="' + n + (n === 1 ? ' ster' : ' sterren') + '" onclick="kiesSterren(' + n + ')">' + ic('star') + '</button>';
+    }).join('') + '</fieldset>' +
+    '<div class="form-rij"><label for="rv-tekst">Je ervaring</label><textarea class="input" id="rv-tekst" rows="4" maxlength="600"></textarea></div>' +
+    '<div class="form-rij"><label for="rv-naam">Naam op de website <span class="opt">(bijv. voornaam en woonplaats)</span></label><input class="input" id="rv-naam" maxlength="40" autocomplete="off"></div>' +
+    '<p class="help">Zet geen achternaam, e-mailadres of telefoonnummer in je review.</p><div class="msg err" id="rv-err" role="alert"></div>';
+  var acties = [{ label: 'Annuleren', cls: 'btn-secondary' }];
+  if (bestaand) acties.unshift({ label: 'Review verwijderen', cls: 'btn-ghost', fn: async function() { try { await apiCall('/api/review-verwijderen', { method: 'POST' }); toast('Je review is verwijderd.'); } catch (e) { toast(e.message, null, true); } } });
+  acties.push({ label: 'Plaatsen', cls: 'btn-primary', keepOpen: true, fn: async function() {
+    if (!reviewSterren) { toonMsg('rv-err', 'Kies eerst het aantal sterren.'); return; }
+    try {
+      await apiCall('/api/review', { method: 'POST', body: { sterren: reviewSterren, tekst: document.getElementById('rv-tekst').value, naam: document.getElementById('rv-naam').value } });
+      closeModal(); toast('Dank je wel voor je review!');
+    } catch (e) { toonMsg('rv-err', e.message); }
+  } });
+  openModal(bestaand ? 'Je review aanpassen' : 'Review schrijven', h, acties);
+  if (bestaand) { document.getElementById('rv-tekst').value = bestaand.tekst; document.getElementById('rv-naam').value = bestaand.naam; }
+  kiesSterren(reviewSterren);
+}
+function kiesSterren(n) {
+  reviewSterren = n;
+  document.querySelectorAll('.sterren .ster').forEach(function(b) { var aan = Number(b.getAttribute('data-n')) <= n; b.classList.toggle('aan', aan); b.setAttribute('aria-pressed', aan ? 'true' : 'false'); });
+}
+
 // ── Eigen gegevens (AVG) ──
 async function downloadGegevens() {
   try {
@@ -245,25 +328,61 @@ async function verwijderAccount() {
   if (verwijderBezig) return; verwijderBezig = true;
   try {
     await apiCall('/api/account-verwijderen', { method: 'POST', body: { wachtwoord: ww } });
-    zetSessie(''); account = null; werkAccountBij(); closeModal();
+    zetSessie(''); account = null; syncStand = {}; bewaarSyncStand(); werkAccountBij(); closeModal();
     toast('Je account is verwijderd.');
   } catch (e) { toonMsg('vw-err', e.message); }
   finally { verwijderBezig = false; }
 }
 async function uitloggen() {
   try { await apiCall('/api/uitloggen', { method: 'POST' }); } catch (e) {}
-  zetSessie(''); account = null; werkAccountBij();
+  zetSessie(''); account = null; syncStand = {}; bewaarSyncStand(); werkAccountBij();
   toast('Uitgelogd. Je kavels blijven op dit apparaat staan.');
 }
 
 // ── Kavels synchroniseren met de server ──
-var syncTimer = null;
+// Alleen wat veranderd is gaat naar de server: per kavel wordt de laatst verstuurde versie onthouden.
+var syncTimer = null, syncBezig = false, syncNogEens = false;
+var syncStand = {}; // kavel-id → JSON zoals de server hem heeft
+function laadSyncStand() { try { syncStand = JSON.parse(localStorage.getItem('va_sync_stand') || '{}') || {}; } catch (e) { syncStand = {}; } }
+function bewaarSyncStand() { try { localStorage.setItem('va_sync_stand', JSON.stringify(syncStand)); } catch (e) {} }
+laadSyncStand();
 function syncNaarServer() {
   if (!serverModus() || !account) return;
   clearTimeout(syncTimer);
-  syncTimer = setTimeout(function() {
-    apiCall('/api/kavels', { method: 'PUT', body: { kavels: kavels } }).catch(function(e) { console.error('Synchroniseren mislukt', e); });
-  }, 1200);
+  syncTimer = setTimeout(stuurWijzigingen, 1200);
+}
+async function stuurWijzigingen() {
+  if (!serverModus() || !account) return;
+  if (syncBezig) { syncNogEens = true; return; }
+  syncBezig = true;
+  try {
+    var nu = {}, wijzig = [], verwijder = [];
+    kavels.forEach(function(k) { if (k && k.id != null) { var s = JSON.stringify(k); nu[k.id] = s; if (syncStand[k.id] !== s) wijzig.push(k); } });
+    Object.keys(syncStand).forEach(function(id) { if (!(id in nu)) verwijder.push(id); });
+    // In stukken van hooguit ~900 kB per verzoek
+    var stuk = [], grootte = 0, stukken = [];
+    wijzig.forEach(function(k) { var n = nu[k.id].length; if (stuk.length && grootte + n > 900000) { stukken.push(stuk); stuk = []; grootte = 0; } stuk.push(k); grootte += n; });
+    if (stuk.length || verwijder.length) stukken.push(stuk);
+    for (var i = 0; i < stukken.length; i++) {
+      var body = { wijzig: stukken[i] };
+      if (i === 0 && verwijder.length) body.verwijder = verwijder;
+      var d = await apiCall('/api/kavels', { method: 'PUT', body: body });
+      stukken[i].forEach(function(k) { syncStand[k.id] = nu[k.id]; });
+      if (i === 0) verwijder.forEach(function(id) { delete syncStand[id]; });
+      toonKavelWaarschuwing(d);
+    }
+    bewaarSyncStand();
+  } catch (e) {
+    console.error('Synchroniseren mislukt', e);
+    if (e.status === 413) toast(e.message, null, true);
+  } finally {
+    syncBezig = false;
+    if (syncNogEens) { syncNogEens = false; syncNaarServer(); }
+  }
+}
+var kavelWaarschuwingGetoond = false;
+function toonKavelWaarschuwing(d) {
+  if (d && d.waarschuwing && !kavelWaarschuwingGetoond) { kavelWaarschuwingGetoond = true; toast(d.waarschuwing, null, true); }
 }
 // Na inloggen: kavels van de server en van dit apparaat samenvoegen (niets gaat verloren)
 async function haalKavelsVanServer() {
@@ -271,11 +390,14 @@ async function haalKavelsVanServer() {
   try {
     var d = await apiCall('/api/kavels');
     var opServer = {};
-    (d.kavels || []).forEach(function(k) { opServer[k.id] = 1; });
+    syncStand = {};
+    (d.kavels || []).forEach(function(k) { opServer[k.id] = 1; syncStand[k.id] = JSON.stringify(k); });
+    bewaarSyncStand();
     var alleenHier = kavels.filter(function(k) { return !opServer[k.id]; });
     kavels = (d.kavels || []).concat(alleenHier);
     try { localStorage.setItem('hnvi_kavels', JSON.stringify(kavels)); } catch (e) {}
     if (alleenHier.length) syncNaarServer();
+    toonKavelWaarschuwing(d);
     updateBadge(); renderOverzicht(); renderGewonnen();
   } catch (e) { console.error(e); }
 }

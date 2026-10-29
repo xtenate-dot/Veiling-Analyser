@@ -9,17 +9,38 @@ const SESSIE_DAGEN = 60;
 const CACHE_DAGEN = 3;
 
 // ── Abonnementen ─────────────────────────────────────────────────────────────
+// limiet = analyses per kalendermaand; perUur = maximaal aantal per uur (tegen misbruik)
 function plannen(env) {
+  const uur = Number(env.MAX_PER_UUR || 60);
   return {
-    gratis: { naam: 'Gratis', limiet: Number(env.LIMIET_GRATIS || 10) },
-    basis: { naam: 'Basis', limiet: Number(env.LIMIET_BASIS || 100), prijs: env.STRIPE_PRICE_BASIS },
-    pro: { naam: 'Pro', limiet: Number(env.LIMIET_PRO || 500), prijs: env.STRIPE_PRICE_PRO }
+    gratis: { naam: 'Gratis', limiet: Number(env.LIMIET_GRATIS || 0), perUur: uur },
+    af_en_toe: { naam: 'Af en toe', limiet: Number(env.LIMIET_AF_EN_TOE || 30), perUur: uur, prijs: env.STRIPE_PRICE_AF_EN_TOE },
+    regelmatig: { naam: 'Regelmatig', limiet: Number(env.LIMIET_REGELMATIG || 120), perUur: uur, prijs: env.STRIPE_PRICE_REGELMATIG },
+    handelaar: { naam: 'Handelaar', limiet: Number(env.LIMIET_HANDELAAR || 500), perUur: Math.max(uur, 120), prijs: env.STRIPE_PRICE_HANDELAAR },
+    handelaar_plus: { naam: 'Handelaar Plus', limiet: Number(env.LIMIET_HANDELAAR_PLUS || 1500), perUur: Math.max(uur, 200), prijs: env.STRIPE_PRICE_HANDELAAR_PLUS }
   };
 }
+// Losse bundels: eenmalig betalen, tegoed verloopt niet
+function bundels(env) {
+  return {
+    b25: { naam: '25 analyses', analyses: 25, prijs: env.STRIPE_PRICE_BUNDEL_25 },
+    b60: { naam: '60 analyses', analyses: 60, prijs: env.STRIPE_PRICE_BUNDEL_60 }
+  };
+}
+const WELKOM = env => Number(env.WELKOM_TEGOED != null ? env.WELKOM_TEGOED : 10);
 function planVanPrijs(env, prijsId) {
   const p = plannen(env);
   for (const k of Object.keys(p)) if (p[k].prijs && p[k].prijs === prijsId) return k;
   return null;
+}
+function planVan(env, g) { const p = plannen(env); return p[g.plan] ? g.plan : 'gratis'; }
+async function saldoVan(env, id) {
+  const r = await env.DB.prepare('SELECT saldo FROM tegoed WHERE gebruiker_id = ?').bind(id).first();
+  return r ? r.saldo : 0;
+}
+async function tegoedErbij(env, id, n) {
+  await env.DB.prepare('INSERT INTO tegoed (gebruiker_id, saldo, bijgewerkt) VALUES (?, ?, ?) ON CONFLICT(gebruiker_id) DO UPDATE SET saldo = saldo + excluded.saldo, bijgewerkt = excluded.bijgewerkt')
+    .bind(id, n, Date.now()).run();
 }
 
 // ── HTTP-hulpjes ─────────────────────────────────────────────────────────────
@@ -177,16 +198,21 @@ async function controleerTurnstile(env, token, ip) {
   if (!d.success) throw new Fout(403, 'bot', 'De controle of je een mens bent is niet gelukt. Ververs de pagina en probeer het opnieuw.');
 }
 
+// Wat iemand nog kan: eerst de analyses van het abonnement deze maand, daarna het tegoed
+function beschikbaarVan(limiet, gebruikt, saldo) { return Math.max(0, limiet - gebruikt) + Math.max(0, saldo); }
 async function accountInfo(env, g) {
-  const p = plannen(env);
-  const plan = p[g.plan] ? g.plan : 'gratis';
+  const p = plannen(env), b = bundels(env);
+  const plan = planVan(env, g);
+  const gebruikt = await verbruikDezeMaand(env, g.id), saldo = await saldoVan(env, g.id);
+  const kanBetalen = !!env.STRIPE_SECRET_KEY;
   return {
     email: g.email, plan: plan, plan_naam: p[plan].naam,
-    gebruikt: await verbruikDezeMaand(env, g.id), limiet: p[plan].limiet,
+    gebruikt: gebruikt, limiet: p[plan].limiet, tegoed: saldo, beschikbaar: beschikbaarVan(p[plan].limiet, gebruikt, saldo),
     abonnement_status: g.abonnement_status || null, periode_einde: g.periode_einde || null,
-    kan_betalen: !!env.STRIPE_SECRET_KEY,
+    kan_betalen: kanBetalen,
     email_geverifieerd: !!g.email_geverifieerd || !emailControle(env),
-    plannen: Object.keys(p).map(k => ({ id: k, naam: p[k].naam, limiet: p[k].limiet, te_koop: !!p[k].prijs }))
+    plannen: Object.keys(p).map(k => ({ id: k, naam: p[k].naam, limiet: p[k].limiet, te_koop: kanBetalen && !!p[k].prijs })),
+    bundels: Object.keys(b).map(k => ({ id: k, naam: b[k].naam, analyses: b[k].analyses, te_koop: kanBetalen && !!b[k].prijs }))
   };
 }
 
@@ -211,11 +237,14 @@ async function registreer(request, env) {
   const res = await env.DB.prepare('INSERT INTO gebruikers (email, email_kanon, wachtwoord_hash, zout, plan, aangemaakt) VALUES (?, ?, ?, ?, ?, ?)')
     .bind(email, kanon, await hashWachtwoord(ww, zout), zout, 'gratis', Date.now()).run();
   const id = res.meta.last_row_id;
-  // Wie zijn account verwijdert en direct een nieuw maakt, houdt het verbruik van deze maand (anders is de gratis limiet te omzeilen)
+  // Welkomstbundel, maar niet opnieuw voor wie zijn account verwijdert en direct een nieuw maakt.
+  // Diegene houdt ook het verbruik van deze maand, anders is de maandlimiet te omzeilen.
+  let eerder = null;
   try {
-    const oud = await env.DB.prepare('SELECT oud_id FROM verwijderd WHERE kanon_hash = ? AND tijd >= ?').bind(await sha256('kanon:' + kanon), maandBegin()).first();
-    if (oud) await env.DB.prepare('UPDATE verbruik SET gebruiker_id = ? WHERE gebruiker_id = ? AND tijd >= ?').bind(id, -oud.oud_id, maandBegin()).run();
+    eerder = await env.DB.prepare('SELECT oud_id, tijd FROM verwijderd WHERE kanon_hash = ?').bind(await sha256('kanon:' + kanon)).first();
+    if (eerder && eerder.tijd >= maandBegin()) await env.DB.prepare('UPDATE verbruik SET gebruiker_id = ? WHERE gebruiker_id = ? AND tijd >= ?').bind(id, -eerder.oud_id, maandBegin()).run();
   } catch (e) { console.error('verwijderd-controle', e); }
+  if (!eerder && WELKOM(env) > 0) await tegoedErbij(env, id, WELKOM(env));
   const g = await env.DB.prepare('SELECT * FROM gebruikers WHERE id = ?').bind(id).first();
   let mailFout = null;
   try { await stuurCode(env, g); } catch (e) { mailFout = e.message; }
@@ -291,18 +320,25 @@ async function wachtwoordHerstellen(request, env) {
 // ── Eigen gegevens (AVG): inzien en verwijderen ──────────────────────────────
 async function mijnGegevens(request, env) {
   const g = await huidigeGebruiker(request, env);
+  await zetOudeKavelsOver(env, g.id);
+  const iso = t => t ? new Date(t).toISOString() : null;
   const verbruik = await env.DB.prepare('SELECT tijd, url FROM verbruik WHERE gebruiker_id = ? ORDER BY tijd').bind(g.id).all();
-  const k = await env.DB.prepare('SELECT data, bijgewerkt FROM kavels WHERE gebruiker_id = ?').bind(g.id).first();
+  const kv = await env.DB.prepare('SELECT data, bijgewerkt FROM kavel_items WHERE gebruiker_id = ? ORDER BY bijgewerkt').bind(g.id).all();
+  const aankopen = await env.DB.prepare('SELECT bundel, analyses, tijd FROM aankopen WHERE gebruiker_id = ? ORDER BY tijd').bind(g.id).all();
+  const fb = await env.DB.prepare('SELECT tijd, soort, tekst, kavel_url, product FROM feedback WHERE gebruiker_id = ? ORDER BY tijd').bind(g.id).all();
+  const rv = await env.DB.prepare('SELECT sterren, tekst, naam, tijd FROM reviews WHERE gebruiker_id = ?').bind(g.id).first();
   return json({
     gemaakt_op: new Date().toISOString(),
     account: {
-      email: g.email, aangemaakt: new Date(g.aangemaakt).toISOString(), email_bevestigd: !!g.email_geverifieerd,
-      abonnement: g.plan, abonnement_status: g.abonnement_status || null,
-      abonnement_loopt_tot: g.periode_einde ? new Date(g.periode_einde).toISOString() : null
+      email: g.email, aangemaakt: iso(g.aangemaakt), email_bevestigd: !!g.email_geverifieerd,
+      abonnement: g.plan, abonnement_status: g.abonnement_status || null, abonnement_loopt_tot: iso(g.periode_einde),
+      tegoed: await saldoVan(env, g.id)
     },
-    analyses: (verbruik.results || []).map(v => ({ tijd: new Date(v.tijd).toISOString(), link: v.url || null })),
-    kavels: k ? JSON.parse(k.data) : [],
-    kavels_bijgewerkt: k ? new Date(k.bijgewerkt).toISOString() : null
+    analyses: (verbruik.results || []).map(v => ({ tijd: iso(v.tijd), link: v.url || null })),
+    aankopen: (aankopen.results || []).map(a => ({ bundel: a.bundel, analyses: a.analyses, tijd: iso(a.tijd) })),
+    kavels: (kv.results || []).map(x => { try { return JSON.parse(x.data); } catch (e) { return null; } }).filter(Boolean),
+    feedback: (fb.results || []).map(f => ({ tijd: iso(f.tijd), soort: f.soort, tekst: f.tekst, link: f.kavel_url, product: f.product })),
+    review: rv ? { sterren: rv.sterren, tekst: rv.tekst, naam: rv.naam, tijd: iso(rv.tijd) } : null
   }, 200, { 'Content-Disposition': 'attachment; filename="veiling-analyser-gegevens.json"' });
 }
 async function accountVerwijderen(request, env) {
@@ -324,6 +360,12 @@ async function accountVerwijderen(request, env) {
     // Verbruik blijft anoniem bestaan voor het dagbudget en de maandlimiet; de links gaan weg
     env.DB.prepare('UPDATE verbruik SET gebruiker_id = ?, url = NULL WHERE gebruiker_id = ?').bind(-g.id, g.id),
     env.DB.prepare('DELETE FROM kavels WHERE gebruiker_id = ?').bind(g.id),
+    env.DB.prepare('DELETE FROM kavel_items WHERE gebruiker_id = ?').bind(g.id),
+    env.DB.prepare('DELETE FROM tegoed WHERE gebruiker_id = ?').bind(g.id),
+    env.DB.prepare('DELETE FROM feedback WHERE gebruiker_id = ?').bind(g.id),
+    env.DB.prepare('DELETE FROM reviews WHERE gebruiker_id = ?').bind(g.id),
+    // Aankopen blijven voor de boekhouding (7 jaar), maar zonder koppeling aan een account
+    env.DB.prepare('UPDATE aankopen SET gebruiker_id = ? WHERE gebruiker_id = ?').bind(-g.id, g.id),
     env.DB.prepare('DELETE FROM sessies WHERE gebruiker_id = ?').bind(g.id),
     env.DB.prepare('DELETE FROM herstel WHERE gebruiker_id = ?').bind(g.id),
     env.DB.prepare('DELETE FROM verificatie WHERE gebruiker_id = ?').bind(g.id),
@@ -344,7 +386,11 @@ export async function opruimen(env, nu = Date.now()) {
     ['prijscache', 'DELETE FROM prijscache WHERE tijd < ?', [nu - CACHE_DAGEN * dag]],
     ['links', 'UPDATE verbruik SET url = NULL WHERE url IS NOT NULL AND tijd < ?', [nu - 90 * dag]],
     ['verbruik', 'DELETE FROM verbruik WHERE tijd < ?', [nu - 400 * dag]],
-    ['verwijderd', 'DELETE FROM verwijderd WHERE tijd < ?', [nu - 40 * dag]]
+    ['verwijderd', 'DELETE FROM verwijderd WHERE tijd < ?', [nu - 365 * dag]],
+    ['meldingen', 'DELETE FROM meldingen WHERE tijd < ?', [nu - 30 * dag]],
+    ['feedback', 'DELETE FROM feedback WHERE tijd < ?', [nu - 730 * dag]],
+    // Kavels die een jaar niet zijn aangeraakt: de lijst met gevonden advertenties en de opmerkingen eruit, het resultaat blijft
+    ['kavels-verkleind', "UPDATE kavel_items SET data = json_set(json_remove(data, '$.prijzen.tweedehands', '$.pagina.opmerkingen', '$.waarschuwingen'), '$.verkleind', json('true')) WHERE bijgewerkt < ? AND json_extract(data, '$.verkleind') IS NULL", [nu - 365 * dag]]
   ];
   // Nooit bevestigde accounts na 7 dagen weg (alleen als de e-mailcontrole aanstaat)
   if (emailControle(env)) {
@@ -353,6 +399,8 @@ export async function opruimen(env, nu = Date.now()) {
     stappen.push(['onbevestigd-sessies', 'DELETE FROM sessies WHERE gebruiker_id IN (' + sub + ')', []]);
     stappen.push(['onbevestigd-kavels', 'DELETE FROM kavels WHERE gebruiker_id IN (' + sub + ')', []]);
     stappen.push(['onbevestigd-codes', 'DELETE FROM verificatie WHERE gebruiker_id IN (' + sub + ')', []]);
+    stappen.push(['onbevestigd-items', 'DELETE FROM kavel_items WHERE gebruiker_id IN (' + sub + ')', []]);
+    stappen.push(['onbevestigd-tegoed', 'DELETE FROM tegoed WHERE gebruiker_id IN (' + sub + ')', []]);
     stappen.push(['onbevestigd', 'DELETE FROM gebruikers WHERE email_geverifieerd = 0 AND aangemaakt < ?', [grens]]);
   }
   const verslag = {};
@@ -362,6 +410,103 @@ export async function opruimen(env, nu = Date.now()) {
   }
   console.log('Opgeruimd', JSON.stringify(verslag));
   return verslag;
+}
+
+// ── Feedback en reviews ──────────────────────────────────────────────────────
+const FEEDBACK_SOORTEN = { prijs: 'De prijzen kloppen niet', product: 'Verkeerd product herkend', kosten: 'De veilingkosten kloppen niet', anders: 'Iets anders' };
+async function feedbackGeven(request, env) {
+  const g = await huidigeGebruiker(request, env);
+  const b = await leesJson(request);
+  const soort = FEEDBACK_SOORTEN[b.soort] ? b.soort : 'anders';
+  const tekst = String(b.tekst || '').trim().slice(0, 1000);
+  if (!tekst && soort === 'anders') throw new Fout(400, 'leeg', 'Schrijf kort wat er niet klopt.');
+  await limiet(env, 'feedback:' + g.id, 20, 864e5, 'Je hebt vandaag al veel feedback gestuurd. Dank je wel! Probeer het morgen opnieuw.');
+  const link = String(b.kavel_url || '').slice(0, 500), product = String(b.product || '').slice(0, 200);
+  await env.DB.prepare('INSERT INTO feedback (gebruiker_id, tijd, soort, tekst, kavel_url, product) VALUES (?, ?, ?, ?, ?, ?)')
+    .bind(g.id, Date.now(), soort, tekst || null, link && veiligAdres(link) ? link : null, product || null).run();
+  await meldEigenaar(env, 'feedback', 'Nieuwe feedback', 'Soort: ' + FEEDBACK_SOORTEN[soort] + '\nProduct: ' + (product || '-') + '\nLink: ' + (link || '-') + '\n\n' + (tekst || '(geen toelichting)') +
+    '\n\nAlle feedback staat in de database (tabel feedback). Je krijgt hooguit één e-mail per 6 uur.');
+  return json({ ok: true });
+}
+async function reviewsLijst(request, env) {
+  const r = await env.DB.prepare('SELECT sterren, tekst, naam, tijd FROM reviews WHERE zichtbaar = 1 ORDER BY tijd DESC LIMIT 50').all();
+  const s = await env.DB.prepare('SELECT COUNT(*) AS n, AVG(sterren) AS gem FROM reviews WHERE zichtbaar = 1').first();
+  return json({
+    aantal: s ? s.n : 0, gemiddelde: s && s.n ? Math.round(s.gem * 10) / 10 : null,
+    reviews: (r.results || []).map(x => ({ sterren: x.sterren, tekst: x.tekst, naam: x.naam, datum: new Date(x.tijd).toISOString().slice(0, 10) })),
+    uitleg: 'Alleen gebruikers met een bevestigd e-mailadres die minstens één analyse hebben gedaan, kunnen een review schrijven, één per account. We plaatsen positieve en negatieve reviews; we verwijderen alleen reviews met beledigingen, persoonsgegevens of reclame. Niemand krijgt een beloning voor een review. Het gemiddelde is het gewone gemiddelde van alle geplaatste reviews.'
+  }, 200, { 'Cache-Control': 'public, max-age=300' });
+}
+async function reviewSchrijven(request, env) {
+  const g = await huidigeGebruiker(request, env);
+  const b = await leesJson(request);
+  if (emailControle(env) && !g.email_geverifieerd) throw new Fout(403, 'niet_geverifieerd', 'Bevestig eerst je e-mailadres.');
+  const n = await env.DB.prepare('SELECT COUNT(*) AS n FROM verbruik WHERE gebruiker_id = ?').bind(g.id).first();
+  if (!n || n.n < 1) throw new Fout(403, 'geen_analyse', 'Je kunt een review schrijven nadat je minstens één kavel hebt laten analyseren.');
+  const sterren = Math.round(Number(b.sterren));
+  if (!(sterren >= 1 && sterren <= 5)) throw new Fout(400, 'sterren', 'Kies 1 tot 5 sterren.');
+  const tekst = String(b.tekst || '').trim();
+  if (tekst.length < 10 || tekst.length > 600) throw new Fout(400, 'tekst', 'Schrijf tussen de 10 en 600 tekens.');
+  const naam = String(b.naam || '').trim().slice(0, 40) || 'Anonieme gebruiker';
+  await env.DB.prepare('INSERT OR REPLACE INTO reviews (gebruiker_id, sterren, tekst, naam, analyses, tijd, zichtbaar) VALUES (?, ?, ?, ?, ?, ?, 1)')
+    .bind(g.id, sterren, tekst, naam, n.n, Date.now()).run();
+  await meldEigenaar(env, 'review', 'Nieuwe review', sterren + ' sterren van ' + naam + ':\n\n' + tekst + '\n\nOngepast? Zet in de database (tabel reviews) zichtbaar op 0. Je krijgt hooguit één e-mail per 6 uur.');
+  return json({ ok: true });
+}
+async function mijnReview(request, env) {
+  const g = await huidigeGebruiker(request, env);
+  const r = await env.DB.prepare('SELECT sterren, tekst, naam, tijd FROM reviews WHERE gebruiker_id = ?').bind(g.id).first();
+  return json({ review: r || null });
+}
+async function reviewVerwijderen(request, env) {
+  const g = await huidigeGebruiker(request, env);
+  await env.DB.prepare('DELETE FROM reviews WHERE gebruiker_id = ?').bind(g.id).run();
+  return json({ ok: true });
+}
+
+// ── Meldingen aan de eigenaar ────────────────────────────────────────────────
+// Per soort hooguit één e-mail per 6 uur. Werkt alleen met Resend en EIGENAAR_EMAIL.
+async function meldEigenaar(env, soort, onderwerp, tekst) {
+  if (!env.RESEND_API_KEY || !env.EMAIL_VAN || !env.EIGENAAR_EMAIL) return false;
+  try {
+    const nu = Date.now();
+    const r = await env.DB.prepare('SELECT tijd FROM meldingen WHERE soort = ?').bind(soort).first();
+    if (r && nu - r.tijd < 6 * 3600000) return false;
+    await env.DB.prepare('INSERT OR REPLACE INTO meldingen (soort, tijd) VALUES (?, ?)').bind(soort, nu).run();
+    const resp = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + env.RESEND_API_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from: env.EMAIL_VAN, to: [env.EIGENAAR_EMAIL], subject: 'Veiling Analyser: ' + onderwerp,
+        text: tekst + '\n\nTijd: ' + new Date(nu).toLocaleString('nl-NL', { timeZone: 'Europe/Amsterdam' }) + '\nKijk voor details in Cloudflare: Workers & Pages → veiling-analyser → Observability (logboeken).' })
+    });
+    return resp.ok;
+  } catch (e) { console.error('melding mislukt', e); return false; }
+}
+// Dagbudget groeit mee met het aantal betalende klanten
+async function dagbudget(env) {
+  const basis = Number(env.DAGBUDGET_USD || 20), perKlant = Number(env.DAGBUDGET_PER_KLANT_USD != null ? env.DAGBUDGET_PER_KLANT_USD : 1);
+  let klanten = 0;
+  try {
+    const r = await env.DB.prepare("SELECT (SELECT COUNT(*) FROM gebruikers WHERE plan != 'gratis') + (SELECT COUNT(DISTINCT gebruiker_id) FROM aankopen WHERE tijd > ?) AS n").bind(Date.now() - MAAND_MS).first();
+    klanten = r ? r.n : 0;
+  } catch (e) { console.error('dagbudget', e); }
+  return basis + perKlant * klanten;
+}
+async function dagbudgetOp(env) {
+  const dag = await env.DB.prepare('SELECT COALESCE(SUM(usd), 0) AS usd FROM verbruik WHERE tijd > ?').bind(Date.now() - 864e5).first();
+  const besteed = dag ? dag.usd : 0, budget = await dagbudget(env);
+  if (besteed >= budget * 0.8 && besteed < budget) {
+    await meldEigenaar(env, 'budget-bijna', 'Dagbudget bijna bereikt', 'In de afgelopen 24 uur is $' + besteed.toFixed(2) + ' van het dagbudget van $' + budget.toFixed(2) + ' aan AI-kosten gebruikt.');
+  }
+  return besteed >= budget;
+}
+// Mislukte analyses tellen; bij 10 of meer in een uur een e-mail
+async function telFout(env, bericht) {
+  try {
+    await env.DB.prepare('INSERT INTO pogingen (email, tijd) VALUES (?, ?)').bind('fout-analyse', Date.now()).run();
+    const r = await env.DB.prepare("SELECT COUNT(*) AS n FROM pogingen WHERE email = 'fout-analyse' AND tijd > ?").bind(Date.now() - 3600000).first();
+    if (r && r.n >= 10) await meldEigenaar(env, 'fouten', 'Veel mislukte analyses', r.n + ' analyses zijn in het afgelopen uur mislukt. Laatste fout: ' + String(bericht || '').slice(0, 300));
+  } catch (e) { console.error('telFout', e); }
 }
 
 // ── Analyse ──────────────────────────────────────────────────────────────────
@@ -375,7 +520,7 @@ function veiligAdres(url) {
 }
 // Haalt de kavelpagina zelf op (gratis) zodat het model alleen een compacte versie hoeft te lezen
 async function haalPagina(url) {
-  if (!veiligAdres(url)) return null;
+  if (!veiligAdres(url) || K.nietOpenen(url)) return null;
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 10000);
   try {
@@ -414,27 +559,37 @@ function anthropicVia(env) {
 }
 async function analyse(request, env) {
   const g = await huidigeGebruiker(request, env);
-  const b = await leesJson(request, 20000);
+  const b = await leesJson(request, 6500000);
   const url = String(b.url || '').trim();
   const extra = String(b.extra || '').trim().slice(0, 500);
-  if (!url && !extra) throw new Fout(400, 'leeg', 'Plak de link naar het kavel of vul een productnaam in.');
+  // Foto's: hooguit 4, elk hooguit ~1,1 MB (de app verkleint ze vooraf)
+  const fotos = (Array.isArray(b.fotos) ? b.fotos : []).slice(0, K.MAX_FOTOS)
+    .filter(f => f && /^image\/(jpeg|png|webp|gif)$/.test(f.media_type) && typeof f.data === 'string' && /^[A-Za-z0-9+/=]+$/.test(f.data) && f.data.length < 1500000)
+    .map(f => ({ media_type: f.media_type, data: f.data }));
+  if (!url && !extra && !fotos.length) throw new Fout(400, 'leeg', 'Plak de link naar het kavel, vul een productnaam in of voeg foto\'s toe.');
   if (url && (!veiligAdres(url) || url.length > 1000)) throw new Fout(400, 'link', 'Deze link kan niet worden gelezen. Gebruik de gewone https-link van het kavel.');
+  if (url && K.nietOpenen(url)) throw new Fout(400, 'marktplaats', 'Links van Marktplaats en 2dehands lezen we niet. Plak de link van een veilingkavel, of vul de productnaam in.');
 
   if (emailControle(env) && !g.email_geverifieerd) throw new Fout(403, 'niet_geverifieerd', 'Bevestig eerst je e-mailadres met de code die we je hebben gestuurd.');
   const p = plannen(env);
-  const plan = p[g.plan] ? g.plan : 'gratis';
+  const plan = planVan(env, g);
   const gebruikt = await verbruikDezeMaand(env, g.id);
-  if (gebruikt >= p[plan].limiet) {
-    throw new Fout(402, 'limiet', env.STRIPE_SECRET_KEY
-      ? 'Je hebt deze maand alle ' + p[plan].limiet + ' analyses van je abonnement gebruikt. Kies een groter abonnement of wacht tot volgende maand.'
-      : 'Je hebt deze maand ' + (p[plan].limiet === 1 ? 'je gratis analyse' : 'alle ' + p[plan].limiet + ' gratis analyses') + ' gebruikt. Vanaf de 1e van volgende maand kun je weer verder. Een ander bod doorrekenen kan wel gewoon.');
+  const saldo = await saldoVan(env, g.id);
+  const uitTegoed = gebruikt >= p[plan].limiet;
+  if (uitTegoed && saldo <= 0) {
+    const betalen = !!env.STRIPE_SECRET_KEY;
+    throw new Fout(402, 'limiet', plan === 'gratis'
+      ? (betalen ? 'Je gratis analyses zijn op. Koop een losse bundel of kies een abonnement om verder te gaan.' : 'Je gratis analyses zijn op. Een ander bod doorrekenen kan wel gewoon.')
+      : 'Je hebt deze maand alle ' + p[plan].limiet + ' analyses van je abonnement gebruikt. Koop een losse bundel, kies een groter abonnement of wacht tot de 1e van volgende maand.');
   }
   const uur = await env.DB.prepare('SELECT COUNT(*) AS n FROM verbruik WHERE gebruiker_id = ? AND tijd > ?').bind(g.id, Date.now() - 3600000).first();
-  if (uur && uur.n >= Number(env.MAX_PER_UUR || 40)) throw new Fout(429, 'te_snel', 'Je doet veel analyses kort na elkaar. Wacht een paar minuten.');
-  const dag = await env.DB.prepare('SELECT COALESCE(SUM(usd), 0) AS usd FROM verbruik WHERE tijd > ?').bind(Date.now() - 864e5).first();
-  if (dag && dag.usd >= Number(env.DAGBUDGET_USD || 20)) throw new Fout(503, 'budget', 'De analyseservice heeft het dagbudget bereikt. Probeer het later opnieuw.');
+  if (uur && uur.n >= p[plan].perUur) throw new Fout(429, 'te_snel', 'Je doet veel analyses kort na elkaar (meer dan ' + p[plan].perUur + ' per uur). Wacht een paar minuten.');
+  if (await dagbudgetOp(env)) {
+    await meldEigenaar(env, 'budget', 'Dagbudget bereikt', 'De server heeft het dagbudget voor AI-kosten bereikt. Analyses worden geweigerd tot het budget weer vrij is. Verhoog DAGBUDGET_USD in wrangler.toml als dit door echte klanten komt.');
+    throw new Fout(503, 'budget', 'De analyseservice is voor vandaag even vol. Probeer het later opnieuw.');
+  }
 
-  const res = await K.analyseer({ url, extra, hergebruik: b.hergebruik !== false }, {
+  const res = await K.analyseer({ url, extra, fotos, hergebruik: b.hergebruik !== false }, {
     anthropic: anthropicVia(env),
     haalPagina: haalPagina,
     modelPagina: env.MODEL_PAGINA || 'claude-haiku-5-5',
@@ -449,7 +604,12 @@ async function analyse(request, env) {
     }
   });
   await env.DB.prepare('INSERT INTO verbruik (gebruiker_id, tijd, usd, url) VALUES (?, ?, ?, ?)').bind(g.id, Date.now(), res.usd || 0, url.slice(0, 500)).run();
-  res.verbruik = { gebruikt: gebruikt + 1, limiet: p[plan].limiet, plan: plan };
+  let nieuwSaldo = saldo;
+  if (uitTegoed) {
+    await env.DB.prepare('UPDATE tegoed SET saldo = saldo - 1, bijgewerkt = ? WHERE gebruiker_id = ? AND saldo > 0').bind(Date.now(), g.id).run();
+    nieuwSaldo = Math.max(0, saldo - 1);
+  }
+  res.verbruik = { gebruikt: gebruikt + 1, limiet: p[plan].limiet, plan: plan, tegoed: nieuwSaldo, beschikbaar: beschikbaarVan(p[plan].limiet, gebruikt + 1, nieuwSaldo) };
   // De kosten zijn een zaak van de app-eigenaar, niet van de klant
   delete res.usd;
   if (res.pagina) delete res.pagina.usd;
@@ -458,18 +618,69 @@ async function analyse(request, env) {
 }
 
 // ── Kavels synchroniseren ────────────────────────────────────────────────────
+// Eén regel per kavel. De app stuurt alleen wat veranderd is ({ wijzig: [...], verwijder: [id, ...] }).
+// Alles gebeurt met json_each in een paar queries, zodat ook grote lijsten binnen de limieten van D1 blijven.
+const MAX_KAVELS = 5000, WAARSCHUW_KAVELS = 4000, MAX_KAVEL_BYTES = 100000;
+function kavelId(k) { const id = k && k.id; return (typeof id === 'string' || typeof id === 'number') && String(id).length <= 64 ? String(id) : null; }
+// Oude opslag (één regel per gebruiker) eenmalig overzetten
+async function zetOudeKavelsOver(env, gebruikerId) {
+  let oud = null;
+  try { oud = await env.DB.prepare('SELECT data FROM kavels WHERE gebruiker_id = ?').bind(gebruikerId).first(); } catch (e) { return; }
+  if (!oud) return;
+  const lijst = (JSON.parse(oud.data) || []).filter(k => kavelId(k));
+  if (lijst.length) {
+    await env.DB.prepare("INSERT OR IGNORE INTO kavel_items (gebruiker_id, id, data, bijgewerkt) SELECT ?, CAST(json_extract(value, '$.id') AS TEXT), value, ? FROM json_each(?)")
+      .bind(gebruikerId, Date.now(), JSON.stringify(lijst)).run();
+  }
+  await env.DB.prepare('DELETE FROM kavels WHERE gebruiker_id = ?').bind(gebruikerId).run();
+}
+async function aantalKavels(env, id) {
+  const r = await env.DB.prepare('SELECT COUNT(*) AS n FROM kavel_items WHERE gebruiker_id = ?').bind(id).first();
+  return r ? r.n : 0;
+}
+function kavelStatus(n) {
+  return { aantal: n, max: MAX_KAVELS, waarschuwing: n >= WAARSCHUW_KAVELS ? 'Je hebt ' + n + ' kavels opgeslagen; het maximum is ' + MAX_KAVELS + '. Verwijder kavels die je niet meer nodig hebt.' : null };
+}
 async function kavelsLezen(request, env) {
   const g = await huidigeGebruiker(request, env);
-  const r = await env.DB.prepare('SELECT data, bijgewerkt FROM kavels WHERE gebruiker_id = ?').bind(g.id).first();
-  return json({ kavels: r ? JSON.parse(r.data) : [], bijgewerkt: r ? r.bijgewerkt : 0 });
+  await zetOudeKavelsOver(env, g.id);
+  const r = await env.DB.prepare('SELECT data, bijgewerkt FROM kavel_items WHERE gebruiker_id = ? ORDER BY bijgewerkt DESC').bind(g.id).all();
+  const rijen = r.results || [];
+  const kavels = [];
+  for (const x of rijen) { try { kavels.push(JSON.parse(x.data)); } catch (e) {} }
+  return json(Object.assign({ kavels, bijgewerkt: rijen.reduce((m, x) => Math.max(m, x.bijgewerkt), 0) }, kavelStatus(kavels.length)));
 }
 async function kavelsOpslaan(request, env) {
   const g = await huidigeGebruiker(request, env);
-  const b = await leesJson(request, 5000000);
-  if (!Array.isArray(b.kavels) || b.kavels.length > 5000) throw new Fout(400, 'ongeldig', 'Ongeldige kavellijst.');
+  const b = await leesJson(request, 1500000);
+  await zetOudeKavelsOver(env, g.id);
   const nu = Date.now();
-  await env.DB.prepare('INSERT OR REPLACE INTO kavels (gebruiker_id, data, bijgewerkt) VALUES (?, ?, ?)').bind(g.id, JSON.stringify(b.kavels), nu).run();
-  return json({ ok: true, bijgewerkt: nu });
+  let wijzig = b.wijzig, verwijder = b.verwijder, alles = false;
+  if (Array.isArray(b.kavels)) { wijzig = b.kavels; alles = true; } // oudere app-versies sturen de hele lijst
+  if (!Array.isArray(wijzig)) wijzig = [];
+  if (!Array.isArray(verwijder)) verwijder = [];
+  if (wijzig.length > MAX_KAVELS || verwijder.length > MAX_KAVELS) throw new Fout(400, 'ongeldig', 'Ongeldige kavellijst.');
+  const goed = [];
+  for (const k of wijzig) {
+    const id = kavelId(k);
+    if (!id || typeof k !== 'object') throw new Fout(400, 'ongeldig', 'Ongeldige kavellijst.');
+    if (JSON.stringify(k).length > MAX_KAVEL_BYTES) throw new Fout(413, 'kavel_groot', 'Eén kavel is te groot om op te slaan. Verwijder een paar foto’s of notities.');
+    goed.push(Object.assign({}, k, { id: k.id }));
+  }
+  const ids = verwijder.map(x => String(x)).filter(x => x.length <= 64);
+  if (alles) {
+    await env.DB.prepare("DELETE FROM kavel_items WHERE gebruiker_id = ? AND id NOT IN (SELECT CAST(json_extract(value, '$.id') AS TEXT) FROM json_each(?))")
+      .bind(g.id, JSON.stringify(goed)).run();
+  }
+  if (ids.length) await env.DB.prepare('DELETE FROM kavel_items WHERE gebruiker_id = ? AND id IN (SELECT value FROM json_each(?))').bind(g.id, JSON.stringify(ids)).run();
+  if (goed.length) {
+    const nieuw = await env.DB.prepare("SELECT COUNT(*) AS n FROM json_each(?) WHERE CAST(json_extract(value, '$.id') AS TEXT) NOT IN (SELECT id FROM kavel_items WHERE gebruiker_id = ?)")
+      .bind(JSON.stringify(goed), g.id).first();
+    if ((await aantalKavels(env, g.id)) + (nieuw ? nieuw.n : 0) > MAX_KAVELS) throw new Fout(413, 'te_veel', 'Je hebt het maximum van ' + MAX_KAVELS + ' opgeslagen kavels bereikt. Verwijder kavels die je niet meer nodig hebt.');
+    await env.DB.prepare("INSERT OR REPLACE INTO kavel_items (gebruiker_id, id, data, bijgewerkt) SELECT ?, CAST(json_extract(value, '$.id') AS TEXT), value, ? FROM json_each(?)")
+      .bind(g.id, nu, JSON.stringify(goed)).run();
+  }
+  return json(Object.assign({ ok: true, bijgewerkt: nu }, kavelStatus(await aantalKavels(env, g.id))));
 }
 
 // ── Stripe ───────────────────────────────────────────────────────────────────
@@ -487,20 +698,38 @@ async function afrekenen(request, env) {
   const g = await huidigeGebruiker(request, env);
   if (!env.STRIPE_SECRET_KEY) throw new Fout(501, 'geen_betaling', 'Betalen is nog niet ingesteld.');
   const b = await leesJson(request);
-  const plan = plannen(env)[b.plan];
-  if (!plan || !plan.prijs) throw new Fout(400, 'plan', 'Onbekend abonnement.');
   const terug = String(env.APP_URL || '').replace(/[?#].*$/, '');
-  const velden = {
-    'mode': 'subscription',
-    'line_items[0][price]': plan.prijs,
-    'line_items[0][quantity]': '1',
-    'success_url': terug + '?betaald=1',
-    'cancel_url': terug + '?betaald=0',
-    'client_reference_id': String(g.id),
-    'subscription_data[metadata][gebruiker_id]': String(g.id),
-    'allow_promotion_codes': 'true',
-    'locale': 'nl'
-  };
+  const bundel = b.bundel ? bundels(env)[b.bundel] : null;
+  const plan = b.plan ? plannen(env)[b.plan] : null;
+  let velden;
+  if (bundel) {
+    if (!bundel.prijs) throw new Fout(400, 'bundel', 'Deze bundel is niet te koop.');
+    // Losse bundel: eenmalige betaling; het tegoed komt erbij via de webhook
+    velden = {
+      'mode': 'payment',
+      'line_items[0][price]': bundel.prijs,
+      'line_items[0][quantity]': '1',
+      'success_url': terug + '?betaald=bundel',
+      'cancel_url': terug + '?betaald=0',
+      'client_reference_id': String(g.id),
+      'metadata[gebruiker_id]': String(g.id),
+      'metadata[bundel]': String(b.bundel),
+      'locale': 'nl'
+    };
+  } else {
+    if (!plan || !plan.prijs) throw new Fout(400, 'plan', 'Onbekend abonnement.');
+    velden = {
+      'mode': 'subscription',
+      'line_items[0][price]': plan.prijs,
+      'line_items[0][quantity]': '1',
+      'success_url': terug + '?betaald=1',
+      'cancel_url': terug + '?betaald=0',
+      'client_reference_id': String(g.id),
+      'subscription_data[metadata][gebruiker_id]': String(g.id),
+      'allow_promotion_codes': 'true',
+      'locale': 'nl'
+    };
+  }
   if (g.stripe_klant) velden.customer = g.stripe_klant; else velden.customer_email = g.email;
   const sessie = await stripe(env, 'POST', 'checkout/sessions', velden);
   return json({ url: sessie.url });
@@ -536,7 +765,16 @@ async function stripeWebhook(request, env) {
   if (!(delen.v1 || []).some(v => gelijk(v, verwacht))) throw new Fout(400, 'handtekening', 'Ongeldige handtekening.');
   const ev = JSON.parse(ruw);
   const o = ev.data && ev.data.object;
-  if (ev.type === 'checkout.session.completed' && o.mode === 'subscription' && o.subscription) {
+  if (ev.type === 'checkout.session.completed' && o.mode === 'payment' && o.metadata && o.metadata.bundel) {
+    const bundel = bundels(env)[o.metadata.bundel];
+    const id = Number(o.client_reference_id || o.metadata.gebruiker_id) || 0;
+    if (bundel && id > 0 && o.payment_status === 'paid') {
+      // INSERT OR IGNORE: Stripe kan dezelfde webhook vaker sturen; dan maar één keer bijschrijven
+      const r = await env.DB.prepare('INSERT OR IGNORE INTO aankopen (stripe_sessie, gebruiker_id, bundel, analyses, tijd) VALUES (?, ?, ?, ?, ?)')
+        .bind(String(o.id), id, o.metadata.bundel, bundel.analyses, Date.now()).run();
+      if (r.meta && r.meta.changes) await tegoedErbij(env, id, bundel.analyses);
+    }
+  } else if (ev.type === 'checkout.session.completed' && o.mode === 'subscription' && o.subscription) {
     const sub = await stripe(env, 'GET', 'subscriptions/' + o.subscription);
     await verwerkAbonnement(env, sub, Number(o.client_reference_id) || null);
   } else if (ev.type === 'customer.subscription.created' || ev.type === 'customer.subscription.updated' || ev.type === 'customer.subscription.deleted') {
@@ -549,7 +787,7 @@ async function stripeWebhook(request, env) {
 // ── Router ───────────────────────────────────────────────────────────────────
 const ROUTES = {
   // Openbare informatie voor de app: is betalen ingesteld, is een uitnodigingscode nodig
-  'GET /api/gezondheid': async (req, env) => json({ ok: true, betalen: !!env.STRIPE_SECRET_KEY, uitnodiging: !!env.UITNODIGINGSCODE, limiet_gratis: plannen(env).gratis.limiet,
+  'GET /api/gezondheid': async (req, env) => json({ ok: true, betalen: !!env.STRIPE_SECRET_KEY, uitnodiging: !!env.UITNODIGINGSCODE, welkom: WELKOM(env), limiet_gratis: plannen(env).gratis.limiet,
     emailcontrole: emailControle(env), turnstile_sitekey: env.TURNSTILE_SECRET && env.TURNSTILE_SITEKEY ? env.TURNSTILE_SITEKEY : null }),
   'POST /api/registreer': registreer,
   'POST /api/inloggen': inloggen,
@@ -561,6 +799,11 @@ const ROUTES = {
   'GET /api/account': async (req, env) => json(await accountInfo(env, await huidigeGebruiker(req, env))),
   'GET /api/mijn-gegevens': mijnGegevens,
   'POST /api/account-verwijderen': accountVerwijderen,
+  'POST /api/feedback': feedbackGeven,
+  'GET /api/reviews': reviewsLijst,
+  'GET /api/mijn-review': mijnReview,
+  'POST /api/review': reviewSchrijven,
+  'POST /api/review-verwijderen': reviewVerwijderen,
   'POST /api/analyse': analyse,
   'GET /api/kavels': kavelsLezen,
   'PUT /api/kavels': kavelsOpslaan,
@@ -582,6 +825,7 @@ export async function verwerk(request, env) {
     if (e instanceof Fout) resp = json({ fout: e.message, code: e.code }, e.status);
     else {
       console.error(e && e.stack || e);
+      if (pad === '/api/analyse') await telFout(env, e && e.message);
       // Fouten van de AI-dienst doorgeven in begrijpelijke vorm, zonder interne details
       const t = e && e.apiType;
       const bericht = t === 'overloaded_error' ? 'De analyseservice is even druk. Probeer het over een paar seconden opnieuw.'

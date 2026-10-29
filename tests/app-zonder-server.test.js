@@ -115,7 +115,7 @@ const STAP2_JSON = { productnaam: 'Apple iPhone 13 128GB', categorie: 'Telefoons
   check('Kosten: $0,00225 + $0,0131 + $0,0625 (>100k = hoog tarief) = $0,07785', Math.abs(k.api_usd - 0.07785) < 1e-12, k.api_usd);
   check('Tools: web_fetch_20250910 + web_search_20250305', verzoeken[0].tools.map(t => t.type).join() === 'web_fetch_20250910,web_search_20250305');
   check('Kavel-URL staat in het gebruikersbericht (nodig voor web_fetch)', verzoeken[0].messages[0].content.indexOf('https://www.testveiling.nl/kavel/4711') !== -1);
-  check('Zoek-URL\'s staan in het gebruikersbericht', verzoeken[1].messages[0].content.indexOf('https://www.marktplaats.nl/q/iPhone+13+128GB/') !== -1);
+  check('eBay- en bol.com-pagina\'s staan in het bericht, Marktplaats niet (alleen via zoeken)', verzoeken[1].messages[0].content.indexOf('ebay.nl/sch/') !== -1 && verzoeken[1].messages[0].content.indexOf('marktplaats.nl/q/') === -1 && verzoeken[1].tools[0].blocked_domains.indexOf('marktplaats.nl') !== -1);
   check('Bod van de pagina gelezen (€300)', k.huidig_bod === 300 && k.bod_van_pagina === true, k.huidig_bod);
   check('Kosten van de pagina: 18% + €2,50, volledig', k.tarief_bron === 'pagina' && k.veiling_tarief.opgeld === 0.18 && k.veiling_tarief.vast === 2.5 && k.veiling_tarief.regeling === 'volledig', k.veiling_tarief);
   check('Totale kosten €431,365', Math.abs(k.kosten.totaal - 431.365) < 1e-9, k.kosten.totaal);

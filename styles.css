@@ -512,6 +512,12 @@ button.plan-k:hover{border-color:var(--accent)}
 .acc-privacy .linkje{display:inline-flex;align-items:center;gap:6px;min-height:32px}
 .acc-privacy .linkje svg{width:16px;height:16px}
 .linkje.gevaar{color:var(--neg)}
+.acc-saldo{display:flex;align-items:baseline;gap:8px;margin:12px 0 4px}
+.acc-saldo b{font-family:var(--ff-d);font-size:34px;line-height:1}
+.acc-saldo b.neg,.tegel b.neg{color:var(--neg)}
+.acc-saldo span{color:var(--ink-2)}
+.acc-kop{font-family:var(--ff-d);font-size:17px;margin:18px 0 2px}
+.betaalmiddelen{margin-top:12px}
 .home-voet{display:flex;gap:10px;justify-content:center;margin:28px 0 8px;font-size:13.5px;color:var(--ink-3)}
 .home-voet a{color:var(--ink-3)}
 
@@ -619,3 +625,16 @@ html{-webkit-tap-highlight-color:transparent}
 .voordelen{list-style:none;display:flex;flex-direction:column;gap:8px;margin:0 0 18px}
 .voordelen li{display:flex;gap:10px;align-items:flex-start;font-size:14.5px;color:var(--ink-2)}
 .voordelen .ico{color:var(--pos);margin-top:2px}
+/* Zelf kijken, feedback, reviews */
+.zelf-kijken{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:14px;font-size:14px;color:var(--ink-2)}
+.zelf-kijken .btn svg{width:15px;height:15px}
+.feedback-rij{margin:6px 0 24px;text-align:center}
+.feedback-rij .linkje{display:inline-flex;align-items:center;gap:6px;min-height:40px}
+.feedback-rij .linkje svg,.acc-privacy .linkje svg{width:16px;height:16px}
+.sterren{border:none;padding:0;margin:0 0 12px;display:flex;gap:4px}
+.sterren legend{font-weight:600;font-size:14px;margin-bottom:6px}
+.sterren .ster{width:44px;height:44px;display:inline-flex;align-items:center;justify-content:center;border-radius:10px;color:var(--line-2)}
+.sterren .ster svg{width:30px;height:30px;fill:none;stroke:currentColor}
+.sterren .ster.aan{color:var(--brass)}
+.sterren .ster.aan svg{fill:currentColor}
+.sterren .ster:focus-visible{outline:2px solid var(--accent);outline-offset:2px}

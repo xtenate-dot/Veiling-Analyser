@@ -37,9 +37,9 @@ function check(naam, ok, extra) { console.log((ok ? 'OK   ' : 'FOUT ') + naam + 
   await page.waitForTimeout(1800);
 
   await page.evaluate(() => toonAccount());
-  check('Account toont downloaden en verwijderen', await page.locator('.acc-privacy .linkje').count() === 2);
+  check('Account toont review, downloaden en verwijderen', await page.locator('.acc-privacy .linkje').count() === 3);
   await page.screenshot({ path: OUT + '/account-privacy.png' });
-  const [dl] = await Promise.all([page.waitForEvent('download'), page.locator('.acc-privacy .linkje').first().click()]);
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.locator('.acc-privacy .linkje', { hasText: 'downloaden' }).click()]);
   const inhoud = JSON.parse(fs.readFileSync(await dl.path(), 'utf8'));
   check('Download: juist bestand met account en kavel', dl.suggestedFilename() === 'veiling-analyser-gegevens.json' && inhoud.account.email === email && inhoud.kavels.some(k => k.titel === 'Testkavel privacy'), inhoud.account);
 

@@ -49,6 +49,8 @@ var ICONS = {
   x: '<path d="M6 6l12 12M18 6L6 18"/>',
   alert: '<path d="M12 4l9 16H3L12 4z"/><path d="M12 10v4M12 17.5v.01"/>',
   info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8v.01"/>',
+  flag: '<path d="M5 21V4M5 4h11l-2 4 2 4H5"/>',
+  star: '<path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8L3.5 9.7l5.9-.9z"/>',
   trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
   external: '<path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
   refresh: '<path d="M20 11a8 8 0 0 0-14.5-4M4 4v4h4M4 13a8 8 0 0 0 14.5 4M20 20v-4h-4"/>',
@@ -1026,7 +1028,8 @@ function bouwKavel(res, inv) {
     ebay_gemiddeld: prijzen.ebay ? prijzen.ebay.gemiddeld : null,
     nieuwprijs: prijzen.nieuwprijs, prijzen: prijzen, live: prijzen.live,
     pagina: pagina ? { titel: pagina.titel, staat: pagina.staat, staat_toelichting: pagina.staat_toelichting, aantal_stuks: pagina.aantal_stuks,
-      aantal_biedingen: pagina.aantal_biedingen, sluit: pagina.sluit, sluit_iso: pagina.sluit_iso, locatie: pagina.locatie, opmerkingen: pagina.opmerkingen } : null,
+      aantal_biedingen: pagina.aantal_biedingen, sluit: pagina.sluit, sluit_iso: pagina.sluit_iso, locatie: pagina.locatie, opmerkingen: pagina.opmerkingen, foto: pagina.foto || null } : null,
+    zoekterm: (pagina && pagina.zoekterm) || null,
     waarschuwingen: res.waarschuwingen || [],
     api_usd: typeof res.usd === 'number' ? res.usd : null,
     eigen_bod: type === 'eigen', toegevoegd: Date.now(), status: 'klaar'
@@ -1049,13 +1052,35 @@ function leesLink(veld) {
   return url;
 }
 
+var FOTO_GRENS = 'De app bekijkt de foto\'s om het product te herkennen, maar ziet niet elk detail. Controleer zelf of er geen schade of defecte onderdelen zijn, het liefst op de kijkdag.';
+// Foto verkleinen tot hooguit 1024 pixels (JPEG), zodat het versturen snel gaat en weinig kost
+function verkleinFoto(img) {
+  return new Promise(function(resolve) {
+    var el = new Image();
+    el.onload = function() {
+      try {
+        var max = 1024, sc = Math.min(1, max / Math.max(el.width, el.height));
+        var c = document.createElement('canvas'); c.width = Math.round(el.width * sc); c.height = Math.round(el.height * sc);
+        c.getContext('2d').drawImage(el, 0, 0, c.width, c.height);
+        resolve({ media_type: 'image/jpeg', data: c.toDataURL('image/jpeg', 0.82).split(',')[1] });
+      } catch (e) { resolve(null); }
+    };
+    el.onerror = function() { resolve(null); };
+    el.src = 'data:' + img.mediaType + ';base64,' + img.base64;
+  });
+}
+async function fotosVoorAnalyse() {
+  var lijst = await Promise.all(imgs.slice(0, K.MAX_FOTOS).map(verkleinFoto));
+  return lijst.filter(Boolean);
+}
 async function analyseer() {
   var url = leesLink('kavel-url');
   var bodStr = document.getElementById('huidig-bod').value.trim();
   var extra = document.getElementById('extra-txt').value.trim();
 
-  if (!url && !extra) { toonMsg('analyse-err', 'Plak de link naar het kavel of vul een productnaam in.'); return; }
+  if (!url && !extra && !imgs.length) { toonMsg('analyse-err', 'Plak de link naar het kavel, vul een productnaam in of voeg foto\'s toe.'); return; }
   if (url && !/^https?:\/\/[^\s/]+\.[^\s]+/i.test(url)) { toonMsg('analyse-err', 'De link moet beginnen met https:// en naar een webpagina wijzen.'); return; }
+  if (url && K.nietOpenen(url)) { toonMsg('analyse-err', 'Links van Marktplaats en 2dehands lezen we niet. Plak de link van een veilingkavel, of vul de productnaam in.'); return; }
   var bod = null;
   if (bodStr) {
     bod = /^[\d.,\s€]+$/.test(bodStr) ? parseBedrag(bodStr) : NaN;
@@ -1073,7 +1098,8 @@ async function analyseer() {
   setFase('bezig');
   setStap(1);
   try {
-    var res = await voerAnalyseUit({ url: url, extra: extra, hergebruik: document.getElementById('prijs-hergebruik').checked });
+    var fotos = imgs.length ? await fotosVoorAnalyse() : [];
+    var res = await voerAnalyseUit({ url: url, extra: extra, fotos: fotos.length ? fotos : undefined, hergebruik: document.getElementById('prijs-hergebruik').checked });
     var k = bouwKavel(res, inv);
     if (thumb) k.thumb = thumb;
     slaKavelsOp();
@@ -1487,6 +1513,8 @@ function toonAnalyseResultaat(d, behoudScroll) {
       h += '</tbody></table>';
       if (pr.mediaan_advertenties) h += '<div class="help">Mediaan van deze advertenties: ' + fmt(pr.mediaan_advertenties) + '. Vraagprijzen liggen meestal hoger dan wat er echt betaald wordt.</div>';
     }
+    var zl = K.marktplaatsLinks(d.zoekterm || pr.productnaam || d.titel);
+    if (zl) h += '<div class="zelf-kijken"><span>Zelf kijken:</span><a class="btn btn-secondary btn-sm" href="' + esc(zl.marktplaats) + '" target="_blank" rel="noopener">' + ic('external') + 'Marktplaats</a><a class="btn btn-secondary btn-sm" href="' + esc(zl.tweedehands) + '" target="_blank" rel="noopener">' + ic('external') + '2dehands</a></div>';
     h += '</div>';
     h += '<div class="pgrid">';
     if (mp) h += platformKaart('Tweedehands NL/BE', mp, 'Zoekwoorden', mp.zoekwoorden, d.controle);
@@ -1509,6 +1537,17 @@ function toonAnalyseResultaat(d, behoudScroll) {
       h += '</div></details>';
     }
   }
+
+  // Wat de app op de foto's zag, met de grens daarvan
+  if (pg.foto) {
+    h += '<div class="card"><div class="card-h"><h2>Gezien op je foto\'s</h2><span class="kc-meta">' + pg.foto.aantal + (pg.foto.aantal === 1 ? ' foto' : ' foto\'s') + '</span></div>';
+    if (pg.foto.herkend) h += '<p style="margin:0 0 8px">' + esc(pg.foto.herkend) + '</p>';
+    h += pg.foto.gebreken && pg.foto.gebreken.length
+      ? '<ul class="attn">' + pg.foto.gebreken.map(function(g) { return '<li>' + esc(g) + '</li>'; }).join('') + '</ul>'
+      : '<p class="help" style="margin:0 0 8px">Geen duidelijke gebreken gezien.</p>';
+    h += '<div class="note">' + ic('alert') + '<span>' + FOTO_GRENS + '</span></div></div>';
+  }
+  if (idx >= 0 && serverModus() && account) h += '<div class="feedback-rij"><button type="button" class="linkje" onclick="vraagFeedback(' + idx + ')">' + ic('flag') + 'Klopt er iets niet aan deze analyse?</button></div>';
 
   var box = document.getElementById('analyse-result');
   box.innerHTML = h;
