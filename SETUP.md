@@ -7,6 +7,15 @@ De app bestaat uit twee delen:
 
 Zonder server werkt de app ook: dan vraagt hij elke gebruiker om een eigen Anthropic API-sleutel. Voor verkoop heb je de server nodig.
 
+## Dagelijks beheer (voor de eigenaar)
+
+- **Back-up:** Cloudflare D1 Time Travel staat altijd aan. Je kunt de database terugzetten naar elk moment in de afgelopen 7 dagen (gratis plan) of 30 dagen (Workers Paid). In de D1-console: `/bookmark 2026-10-29T18:00:00.000Z` geeft een herstelpunt, `/restore <bookmark>` zet hem terug. Of in een terminal: `npx wrangler d1 time-travel restore veiling-analyser --timestamp=<unix-tijd>`. Terugzetten overschrijft de huidige gegevens; je krijgt een bookmark terug waarmee je het weer ongedaan maakt.
+- **Feedback lezen** (D1 → Console): `SELECT datetime(tijd/1000,'unixepoch') AS wanneer, soort, product, tekst, kavel_url FROM feedback ORDER BY tijd DESC LIMIT 50;`
+- **Review verbergen** die beledigend is of persoonsgegevens bevat: `UPDATE reviews SET zichtbaar = 0 WHERE naam = '...';` (kritische reviews laat je staan; dat is ook de regel van de ACM).
+- **Meldingen:** bij veel mislukte analyses, een (bijna) vol dagbudget, nieuwe feedback of een nieuwe review krijg je een e-mail op `EIGENAAR_EMAIL`, per soort hooguit één per 6 uur. Werkt zodra `RESEND_API_KEY` is gezet.
+- **Logboeken bij fouten:** Workers & Pages → veiling-analyser → Observability.
+- **Website aanpassen:** de teksten staan in `site/maak.mjs`. Bij elke deploy wordt de site opnieuw gebouwd.
+
 ## Afspraken en nog te doen
 
 - **Rondleiding Cloudflare (afgesproken 29 oktober 2026):** als de app af is, krijgt de eigenaar een rondleiding door het Cloudflare-dashboard. Onderdelen: de Worker en Deployments (versies terugzetten), Variables and Secrets, logboeken bij fouten, de D1-database, de nachtelijke opruimtaak, Turnstile, het domein en de DNS, en de kosten en limieten. Doel: vragen van klanten zelf kunnen beantwoorden.
