@@ -587,10 +587,25 @@ function anthropicVia(env, teller) {
     });
     let data = null;
     try { data = await r.json(); } catch (e) {}
-    if (data && data.usage && teller) teller.usd += K.apiKostenVan(body.model, data.usage);
+    if (data && data.usage && teller) {
+      const u = data.usage, st = u.server_tool_use || {};
+      teller.usd += K.apiKostenVan(body.model, u);
+      // Exacte aantallen tokens en zoekopdrachten per analyse, voor de kostenadministratie
+      const t = teller.tokens || (teller.tokens = { in: 0, cache_schrijf: 0, cache_lees: 0, uit: 0, zoek: 0, ophalen: 0, aanroepen: 0 });
+      t.in += u.input_tokens || 0; t.cache_schrijf += u.cache_creation_input_tokens || 0; t.cache_lees += u.cache_read_input_tokens || 0;
+      t.uit += u.output_tokens || 0; t.zoek += st.web_search_requests || 0; t.ophalen += st.web_fetch_requests || 0; t.aanroepen++;
+    }
     if (!r.ok || !data || data.error) throw K.apiFout(data, r.status);
     return data;
   };
+}
+// Kosten van één analyse bewaren, met de tokens erbij (kolom tokens; werkt ook als die kolom nog niet bestaat)
+async function bewaarVerbruik(env, gebruikerId, usd, url, tokens) {
+  try {
+    await env.DB.prepare('INSERT INTO verbruik (gebruiker_id, tijd, usd, url, tokens) VALUES (?, ?, ?, ?, ?)').bind(gebruikerId, Date.now(), usd, url, tokens ? JSON.stringify(tokens) : null).run();
+  } catch (e) {
+    await env.DB.prepare('INSERT INTO verbruik (gebruiker_id, tijd, usd, url) VALUES (?, ?, ?, ?)').bind(gebruikerId, Date.now(), usd, url).run();
+  }
 }
 async function analyse(request, env) {
   const g = await huidigeGebruiker(request, env);
@@ -653,12 +668,12 @@ async function analyse(request, env) {
   } catch (e) {
     // Mislukt: geen tegoed kwijt, maar de gemaakte AI-kosten tellen wel mee voor het dagbudget (gebruiker 0 = geen klant)
     if (uitTegoed) await tegoedErbij(env, g.id, 1);
-    if (teller.usd > 0) await env.DB.prepare('INSERT INTO verbruik (gebruiker_id, tijd, usd, url) VALUES (0, ?, ?, NULL)').bind(Date.now(), teller.usd).run();
+    if (teller.usd > 0) await bewaarVerbruik(env, 0, teller.usd, null, teller.tokens);
     throw e;
   } finally {
     await env.DB.prepare('DELETE FROM pogingen WHERE email = ? AND tijd = ?').bind('lopend:' + g.id, lopendTijd).run();
   }
-  await env.DB.prepare('INSERT INTO verbruik (gebruiker_id, tijd, usd, url) VALUES (?, ?, ?, ?)').bind(g.id, Date.now(), Math.max(teller.usd, res.usd || 0), url.slice(0, 500)).run();
+  await bewaarVerbruik(env, g.id, Math.max(teller.usd, res.usd || 0), url.slice(0, 500), teller.tokens);
   const nieuwSaldo = uitTegoed ? Math.max(0, saldo - 1) : saldo;
   res.verbruik = { gebruikt: gebruikt + 1, limiet: p[plan].limiet, plan: plan, tegoed: nieuwSaldo, beschikbaar: beschikbaarVan(p[plan].limiet, gebruikt + 1, nieuwSaldo) };
   // De kosten zijn een zaak van de app-eigenaar, niet van de klant

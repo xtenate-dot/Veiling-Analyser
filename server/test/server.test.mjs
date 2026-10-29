@@ -552,6 +552,8 @@ check('Auto: catalogusprijs RDW als nieuwprijs (niet bol.com)', r.data.prijzen.n
 check('Auto: vraagprijzen autobedrijven apart', r.data.prijzen.voertuig === true && r.data.prijzen.handelaar && r.data.prijzen.handelaar.laag === 32495 && r.data.prijzen.marktplaats.gemiddeld === 30000);
 const zoek = v2 && v2.tools.find(t => t.name === 'web_search');
 check('Auto: 3 zoekopdrachten, geen eBay/bol.com, autosites niet openen', zoek && zoek.max_uses === 3 && !/bol\.com|ebay\.nl/.test(v2.messages[0].content) && v2.tools[0].blocked_domains.includes('autoscout24.nl') && /RDW/.test(v2.messages[0].content) && /38000 km/.test(v2.messages[0].content));
+const tokRij = JSON.parse(db.prepare('SELECT tokens FROM verbruik WHERE gebruiker_id = ? ORDER BY id DESC LIMIT 1').get(idK).tokens || 'null');
+check('Tokens per analyse bewaard (in, uit, aanroepen)', tokRij && tokRij.in === 49000 && tokRij.uit === 1300 && tokRij.aanroepen === 2, tokRij);
 check('Auto: prijzen alleen gedeeld per kenteken', db.prepare("SELECT COUNT(*) AS n FROM prijscache WHERE sleutel LIKE 'voertuig:HGJ13B|%'").get().n === 1);
 AUTO1.kenteken = 'ZZ-99-ZZ'; AUTO1.titel = 'Auto zonder bekend kenteken';
 r = await api('POST', '/api/analyse', { url: 'https://www.testveiling.nl/kavel/auto-2', hergebruik: false }, tkK);

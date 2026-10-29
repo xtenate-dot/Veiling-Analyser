@@ -32,8 +32,10 @@ CREATE TABLE IF NOT EXISTS verbruik (
   gebruiker_id INTEGER NOT NULL,
   tijd INTEGER NOT NULL,
   usd REAL NOT NULL DEFAULT 0,
-  url TEXT
+  url TEXT,
+  tokens TEXT   -- JSON: in, cache_schrijf, cache_lees, uit, zoek, ophalen, aanroepen
 );
+-- Bestaande database: ALTER TABLE verbruik ADD COLUMN tokens TEXT;
 CREATE INDEX IF NOT EXISTS idx_verbruik_gebruiker ON verbruik(gebruiker_id, tijd);
 CREATE INDEX IF NOT EXISTS idx_verbruik_tijd ON verbruik(tijd);
 

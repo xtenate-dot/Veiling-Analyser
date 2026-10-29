@@ -9,6 +9,15 @@ Zonder server werkt de app ook: dan vraagt hij elke gebruiker om een eigen Anthr
 
 ## Dagelijks beheer (voor de eigenaar)
 
+**Wat kost een analyse precies?** Cloudflare → D1 → veiling-analyser → Console:
+
+```sql
+SELECT datetime(tijd/1000,'unixepoch','localtime') AS wanneer, round(usd,4) AS dollar, tokens, substr(url,1,60) AS kavel
+FROM verbruik ORDER BY tijd DESC LIMIT 20;
+```
+
+`tokens` toont per analyse: `in` (tokens naar Claude), `uit` (tokens van Claude), `zoek` (zoekopdrachten, $0,01 per stuk), `ophalen` (pagina's gelezen) en `aanroepen`. Gebruiker 0 = een mislukte analyse (kosten wel gemaakt, klant betaalt niets). Waarom een analyse mislukte: `SELECT email FROM pogingen WHERE email LIKE 'foutlog:%' ORDER BY tijd DESC;`
+
 - **Back-up:** Cloudflare D1 Time Travel staat altijd aan. Je kunt de database terugzetten naar elk moment in de afgelopen 7 dagen (gratis plan) of 30 dagen (Workers Paid). In de D1-console: `/bookmark 2026-10-29T18:00:00.000Z` geeft een herstelpunt, `/restore <bookmark>` zet hem terug. Of in een terminal: `npx wrangler d1 time-travel restore veiling-analyser --timestamp=<unix-tijd>`. Terugzetten overschrijft de huidige gegevens; je krijgt een bookmark terug waarmee je het weer ongedaan maakt.
 - **Feedback lezen** (D1 → Console): `SELECT datetime(tijd/1000,'unixepoch') AS wanneer, soort, product, tekst, kavel_url FROM feedback ORDER BY tijd DESC LIMIT 50;`
 - **Review verbergen** die beledigend is of persoonsgegevens bevat: `UPDATE reviews SET zichtbaar = 0 WHERE naam = '...';` (kritische reviews laat je staan; dat is ook de regel van de ACM).
