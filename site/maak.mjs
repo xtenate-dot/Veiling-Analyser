@@ -27,7 +27,7 @@ function voet(taal) {
   const nl = taal === 'nl';
   return `<footer class="voet"><div class="wrap raster">
   <div><b>Veiling Analyser</b>${nl ? 'Veiling Analyser is een handelsnaam van' : 'Veiling Analyser is a trade name of'} ${BEDRIJF.naam}.<br>${BEDRIJF.adres}<br>KvK ${BEDRIJF.kvk} · ${nl ? 'btw' : 'VAT'} ${BEDRIJF.btw}<br><a href="mailto:${BEDRIJF.email}">${BEDRIJF.email}</a></div>
-  <div><b>${nl ? 'Website' : 'Website'}</b><ul><li><a href="${nl ? '/prijzen' : '/en/pricing'}">${nl ? 'Prijzen' : 'Pricing'}</a></li><li><a href="/veilinggids/">${nl ? 'Veilinggids' : 'Auction guide (Dutch)'}</a></li>${nl ? '<li><a href="/verhalen/">Verhalen</a></li><li><a href="/over">Over ons en contact</a></li>' : ''}</ul></div>
+  <div><b>${nl ? 'Website' : 'Website'}</b><ul><li><a href="${nl ? '/prijzen' : '/en/pricing'}">${nl ? 'Prijzen' : 'Pricing'}</a></li><li><a href="/veilinggids/">${nl ? 'Veilinggids' : 'Auction guide (Dutch)'}</a></li>${nl ? '<li><a href="/verhalen/">Verhalen</a></li><li><a href="/hoe-we-rekenen">Zo rekent de app</a></li><li><a href="/over">Over ons en contact</a></li>' : ''}</ul></div>
   <div><b>${nl ? 'Juridisch' : 'Legal'}</b><ul><li><a href="/privacy">${nl ? 'Privacybeleid' : 'Privacy policy (Dutch)'}</a></li><li><a href="/voorwaarden">${nl ? 'Voorwaarden' : 'Terms (Dutch)'}</a></li><li>${nl ? 'Geen samenwerking met de genoemde veilinghuizen.' : 'Not affiliated with the auction houses mentioned.'}</li></ul></div>
   <div><b>${nl ? 'De app' : 'The app'}</b><ul><li><a href="/app">${nl ? 'Naar de app' : 'Open the app'}</a></li><li>© 2026 ${BEDRIJF.naam}</li></ul></div>
 </div></footer>`;
@@ -153,7 +153,8 @@ const HOME_NL = pagina({
 <section class="sectie"><div class="wrap smal">
   <h2>Veelgestelde vragen</h2>
   <details class="vraag"><summary>Werkt het met elke veilingsite?</summary><p>Met de meeste: de app leest de openbare kavelpagina. Voor bekende veilinghuizen staat in de <a href="/veilinggids/">veilinggids</a> wat je bovenop je bod betaalt. Links van Marktplaats en 2dehands zelf kun je niet laten analyseren: dat zijn geen veilingen.</p></details>
-  <details class="vraag"><summary>Hoe kloppen de prijzen?</summary><p>Het zijn echte vraagprijzen en verkochte items, met links. De verwachte verkoopprijs is een berekening op basis daarvan, geen garantie. Vind je dat er iets niet klopt, dan meld je dat met één tik bij de analyse.</p></details>
+  <details class="vraag"><summary>Hoe kloppen de prijzen?</summary><p>Het zijn echte vraagprijzen en verkochte items, met links. De verwachte verkoopprijs is een berekening op basis daarvan, geen garantie. Vind je dat er iets niet klopt, dan meld je dat met één tik bij de analyse. <a href="/hoe-we-rekenen">Zo rekent de app precies.</a></p></details>
+  <details class="vraag"><summary>Haalt een handelaar niet meer dan een particulier?</summary><p>Vaak wel. De app rekent met wat een particulier krijgt bij verkoop aan een particulier. Haal jij meer of minder, pas de verkoopprijs dan zelf aan. <a href="/hoe-we-rekenen">Lees hoe de app rekent.</a></p></details>
   <details class="vraag"><summary>Gaan mijn gratis analyses verloren?</summary><p>Nee. De 10 analyses bij je account en losse bundels blijven staan tot je ze gebruikt.</p></details>
   <details class="vraag"><summary>Kan ik opzeggen?</summary><p>Altijd, per maand. Je abonnement loopt door tot het einde van de betaalde maand.</p></details>
   <details class="vraag"><summary>Werken jullie samen met veilinghuizen?</summary><p>Nee. Veiling Analyser is onafhankelijk. We noemen veilinghuizen alleen om uit te leggen hoe hun kosten werken.</p></details>
@@ -380,6 +381,57 @@ const OVER = pagina({
 </div></section>`
 });
 
+// ── Zo rekent de app ──
+const REKENEN = pagina({
+  titel: 'Zo rekent de app – Veiling Analyser', beschrijving: 'Wat Veiling Analyser meerekent in het maximale bod, wat niet, en waarom een particulier en een handelaar een andere opbrengst halen.', pad: '/hoe-we-rekenen', actief: '',
+  inhoud: `<section class="sectie"><div class="wrap smal artikel">
+  <h1 style="font-size:clamp(34px,4.6vw,52px)">Zo rekent de app</h1>
+  <p class="intro" style="margin:14px 0 8px">Het maximale bod is een rekensom met twee kanten: wat het kavel je kost, en wat je er later voor krijgt. Hier staat precies wat erin zit, wat niet, en waar de uitkomst voor jou anders kan uitvallen.</p>
+
+  <h2>1. Wat het kavel je kost</h2>
+  <ul class="lijst">
+    <li><b>Je bod</b>, of het huidige bod als je zelf niets invult.</li>
+    <li><b>Opgeld</b>: het percentage dat het veilinghuis bovenop je bod rekent.</li>
+    <li><b>Vaste kosten per kavel</b>, zoals kavelkosten of administratiekosten, als de veiling die heeft.</li>
+    <li><b>Btw</b> volgens de regeling van het kavel: over bod en opgeld, alleen over het opgeld (margeregeling), of niet.</li>
+    <li><b>Je eigen verkoopkosten</b> per kavel, als je die in de instellingen invult (bijvoorbeeld verzending of platformkosten).</li>
+  </ul>
+  <p>De kosten leest de app van de kavelpagina. Staan ze daar niet, dan gebruikt de app jouw instelling voor dat veilinghuis of een standaardwaarde, en zegt dat erbij. De voorwaarden van het veilinghuis gaan altijd voor.</p>
+
+  <h2>2. Wat je er later voor krijgt</h2>
+  <p>De <b>verwachte verkoopprijs</b> is wat een particulier er in Nederland of België realistisch voor krijgt als hij het binnen een paar weken verkoopt aan een andere particulier. De app baseert dat op advertenties van hetzelfde product in een vergelijkbare staat en, waar die er zijn, op verkochte items. Vraagprijzen liggen meestal hoger dan wat er echt betaald wordt; daar corrigeert de app voor.</p>
+  <p>Bij <b>auto's en andere voertuigen</b> met een Nederlands kenteken haalt de app het exacte model, de eerste toelating, de catalogusprijs en het oordeel over de tellerstand uit de open data van de RDW. Vraagprijzen van autobedrijven staan apart: die zijn inclusief garantie, afleveringskosten en hun marge. Als particulier krijg je meestal 8 tot 15% minder dan zo'n vraagprijs.</p>
+
+  <h2>3. Het maximale bod</h2>
+  <p>De app zoekt het hoogste bod waarbij na alle kosten jouw <b>gewenste marge</b> overblijft (standaard 20% van de verkoopprijs; je kunt die zelf instellen). Het <b>break-evenbod</b> is het bod waarbij je precies quitte speelt.</p>
+  <div class="tabel-box"><table class="tabel"><caption>Voorbeeld: verwachte verkoop €1.000, 20% marge, 17% opgeld, btw over bod en opgeld</caption><tbody>
+    <tr><td>Verwachte verkoopprijs</td><td>€1.000</td></tr>
+    <tr><td>Daarvan wil je overhouden (20%)</td><td>€200</td></tr>
+    <tr><td>Mag het kavel in totaal kosten</td><td>€800</td></tr>
+    <tr class="totaal"><td>Maximaal bod (€800 ÷ 1,17 ÷ 1,21)</td><td>€565</td></tr>
+  </tbody></table></div>
+
+  <h2>4. Wat de app niet meerekent</h2>
+  <ul class="lijst">
+    <li>Transport, ophalen en eventuele kosten als je te laat ophaalt</li>
+    <li>Reparatie, onderdelen, schoonmaken en keuring (zoals APK)</li>
+    <li>Garantie die jij aan je koper geeft</li>
+    <li>Onderhandelen: kopers bieden vaak minder dan je vraagt</li>
+    <li>Jouw eigen btw of belasting over de winst als je zakelijk doorverkoopt</li>
+    <li>Opslag, je tijd en het risico dat iets langer blijft staan of niet verkoopt</li>
+    <li>Schade of gebreken die niet op de pagina of de foto's staan</li>
+  </ul>
+  <p>Wil je die toch meetellen, vul ze dan in als verkoopkosten of kies een hogere gewenste marge.</p>
+
+  <h2>5. Particulier of handelaar: wie verkoopt maakt uit</h2>
+  <p>Hetzelfde kavel levert niet voor iedereen hetzelfde op. Een handelaar met een vaste klantenkring, een showroom of garantie kan vaak meer vragen dan een particulier. Verkoop je juist aan een handelaar, opkoper of als inruil, dan krijg je meestal minder. De app rekent met de verkoop van particulier aan particulier, omdat dat voor iedereen het eerlijkste vergelijkingspunt is.</p>
+  <p>Weet je uit ervaring dat jij meer of minder haalt? Pas de verwachte verkoopprijs bij het kavel dan zelf aan. Het maximale bod rekent direct mee.</p>
+
+  <h2>6. Een hulpmiddel, geen garantie</h2>
+  <p>De prijzen komen van advertenties en verkochte items van anderen. Die kunnen onvolledig of verouderd zijn of over een net iets ander product gaan. Bij weinig vergelijkbaar aanbod zegt de app dat erbij. Jij beslist of en hoeveel je biedt. Zie ook artikel 3 van de <a href="/voorwaarden">voorwaarden</a>.</p>
+</div></section>`
+});
+
 // ── Engels ──
 const HOME_EN = pagina({
   taal: 'en', titel: 'Veiling Analyser – know how much to bid',
@@ -427,7 +479,7 @@ const PRIJZEN_EN = pagina({ taal: 'en', titel: 'Pricing – Veiling Analyser', b
 
 // ── Wegschrijven ──
 const BESTANDEN = {
-  'index.html': HOME_NL, 'prijzen.html': PRIJZEN_NL, 'over.html': OVER,
+  'index.html': HOME_NL, 'prijzen.html': PRIJZEN_NL, 'over.html': OVER, 'hoe-we-rekenen.html': REKENEN,
   'veilinggids/index.html': GIDS_INDEX, 'verhalen/index.html': VERHALEN_INDEX,
   'en/index.html': HOME_EN, 'en/pricing.html': PRIJZEN_EN
 };

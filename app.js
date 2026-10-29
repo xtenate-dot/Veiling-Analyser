@@ -992,6 +992,7 @@ async function voerAnalyseUit(input) {
     anthropic: anthropicDirect,
     modelPagina: MODEL_PAGINA,
     modelPrijzen: getInst().model,
+    rdw: function(k) { return K.rdwOpzoeken(k, function(u, o) { return fetch(u, o); }); },
     cacheLees: function(sl) { return leesPrijsCache(sl); },
     cacheSchrijf: function(sl, pr) { bewaarPrijsCache(sl, pr); },
     opStap: setStap
@@ -1028,7 +1029,8 @@ function bouwKavel(res, inv) {
     ebay_gemiddeld: prijzen.ebay ? prijzen.ebay.gemiddeld : null,
     nieuwprijs: prijzen.nieuwprijs, prijzen: prijzen, live: prijzen.live,
     pagina: pagina ? { titel: pagina.titel, staat: pagina.staat, staat_toelichting: pagina.staat_toelichting, aantal_stuks: pagina.aantal_stuks,
-      aantal_biedingen: pagina.aantal_biedingen, sluit: pagina.sluit, sluit_iso: pagina.sluit_iso, locatie: pagina.locatie, opmerkingen: pagina.opmerkingen, foto: pagina.foto || null } : null,
+      aantal_biedingen: pagina.aantal_biedingen, sluit: pagina.sluit, sluit_iso: pagina.sluit_iso, locatie: pagina.locatie, opmerkingen: pagina.opmerkingen, foto: pagina.foto || null,
+      voertuig: !!pagina.voertuig, kenteken: pagina.kenteken || null, kilometerstand: pagina.kilometerstand || null, bouwjaar: pagina.bouwjaar || null, rdw: pagina.rdw || null } : null,
     zoekterm: (pagina && pagina.zoekterm) || null,
     waarschuwingen: res.waarschuwingen || [],
     api_usd: typeof res.usd === 'number' ? res.usd : null,
@@ -1500,10 +1502,13 @@ function toonAnalyseResultaat(d, behoudScroll) {
     h += '<div class="prices-strip">';
     h += '<div class="ps"><div class="ps-l">Nieuwprijs</div><div class="ps-v">' + (pr.nieuwprijs ? fmt(pr.nieuwprijs) : '-') + '</div><div class="ps-s">' +
       (pr.nieuwprijs_url ? bronLink(pr.nieuwprijs_url, pr.nieuwprijs_bron || domeinVan(pr.nieuwprijs_url), pr.live ? pr.nieuwprijs_bevestigd : undefined) : esc(pr.nieuwprijs_bron || '')) + '</div></div>';
-    if (mp) h += '<div class="ps"><div class="ps-l">Tweedehands (Marktplaats / 2dehands)</div><div class="ps-v">' + fmt(mp.gemiddeld) + '</div><div class="ps-s">' + (d.controle ? 'Door jou gecontroleerd' : (mp.laag ? fmt(mp.laag) + ' tot ' + fmt(mp.hoog) : 'Verwachte verkoopprijs')) + '</div></div>';
+    if (mp) h += '<div class="ps"><div class="ps-l">' + (pr.voertuig ? 'Verkoop aan particulier' : 'Tweedehands (Marktplaats / 2dehands)') + '</div><div class="ps-v">' + fmt(mp.gemiddeld) + '</div><div class="ps-s">' + (d.controle ? 'Door jou gecontroleerd' : (mp.laag ? fmt(mp.laag) + ' tot ' + fmt(mp.hoog) : 'Verwachte verkoopprijs')) + '</div></div>';
+    if (pr.handelaar) h += '<div class="ps"><div class="ps-l">Vraagprijs autobedrijven</div><div class="ps-v">' + fmt(pr.handelaar.laag) + (pr.handelaar.hoog > pr.handelaar.laag ? ' – ' + fmt(pr.handelaar.hoog) : '') + '</div><div class="ps-s">Incl. garantie en afleverkosten' + (pr.handelaar.aantal ? ' &middot; ' + pr.handelaar.aantal + ' gevonden' : '') + '</div></div>';
     if (eb) h += '<div class="ps"><div class="ps-l">eBay</div><div class="ps-v">' + fmt(eb.gemiddeld) + '</div><div class="ps-s">' + (eb.laag ? fmt(eb.laag) + ' tot ' + fmt(eb.hoog) : '') + '</div></div>';
     h += '</div>';
     if (pr.toelichting) h += '<div class="tip">' + esc(pr.toelichting) + '</div>';
+    if (pr.voertuig) h += '<div class="note" style="margin:12px 0 0">' + ic('info') + '<span>Een autobedrijf vraagt meer omdat het garantie, aflevering en onderhoud meelevert. Verkoop je zelf aan een particulier, dan krijg je meestal 8 tot 15% minder dan de vraagprijs bij een autobedrijf. Verkoop je aan een handelaar of als inruil, dan nog minder. Het advies rekent met de verkoop aan een particulier.</span></div>';
+    h += '<div class="help" style="margin-top:10px"><a href="https://veilinganalyser.nl/hoe-we-rekenen" target="_blank" rel="noopener">Zo rekent de app: wat wel en niet is meegerekend</a></div>';
     if (pr.tweedehands && pr.tweedehands.length) {
       h += '<h3 style="font-size:15px;margin:18px 0 6px">Gevonden advertenties</h3><table class="ctable adv"><tbody>';
       pr.tweedehands.forEach(function(x) {
@@ -1517,7 +1522,7 @@ function toonAnalyseResultaat(d, behoudScroll) {
     if (zl) h += '<div class="zelf-kijken"><span>Zelf kijken:</span><a class="btn btn-secondary btn-sm" href="' + esc(zl.marktplaats) + '" target="_blank" rel="noopener">' + ic('external') + 'Marktplaats</a><a class="btn btn-secondary btn-sm" href="' + esc(zl.tweedehands) + '" target="_blank" rel="noopener">' + ic('external') + '2dehands</a></div>';
     h += '</div>';
     h += '<div class="pgrid">';
-    if (mp) h += platformKaart('Tweedehands NL/BE', mp, 'Zoekwoorden', mp.zoekwoorden, d.controle);
+    if (mp) h += platformKaart(pr.voertuig ? 'Verkoop aan particulier' : 'Tweedehands NL/BE', mp, 'Zoekwoorden', mp.zoekwoorden, d.controle);
     if (eb) h += platformKaart('eBay', eb, 'Keywords', eb.keywords);
     h += '</div>';
     var punten = (pr.aandachtspunten || []).concat(pg.opmerkingen || []);
@@ -1536,6 +1541,21 @@ function toonAnalyseResultaat(d, behoudScroll) {
       }
       h += '</div></details>';
     }
+  }
+
+  // Voertuiggegevens uit de RDW (open data)
+  if (pg.rdw) {
+    var rd = pg.rdw, rij = [];
+    var rr = function(l, v) { if (v) rij.push('<tr><td>' + l + '</td><td>' + esc(String(v)) + '</td></tr>'); };
+    rr('Kenteken', rd.kenteken); rr('Merk en model', [rd.merk, rd.model && rd.model.toUpperCase().indexOf((rd.merk || '').toUpperCase()) === 0 ? rd.model.slice((rd.merk || '').length).trim() : rd.model].filter(Boolean).join(' '));
+    rr('Aandrijving', rd.aandrijving); rr('Carrosserie', rd.inrichting); rr('Kleur', rd.kleur && rd.kleur.charAt(0) + rd.kleur.slice(1).toLowerCase());
+    rr('Eerste toelating', rd.eerste_toelating && new Date(rd.eerste_toelating).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' }));
+    rr('Catalogusprijs (nieuw)', rd.catalogusprijs && fmt(rd.catalogusprijs));
+    rr('Kilometerstand (veiling)', pg.kilometerstand && pg.kilometerstand.toLocaleString('nl-NL') + ' km');
+    rr('Oordeel tellerstand', rd.tellerstand && rd.tellerstand + (rd.tellerstand_jaar ? ' (laatst geregistreerd ' + rd.tellerstand_jaar + ')' : ''));
+    rr('APK geldig tot', rd.apk_tot && new Date(rd.apk_tot).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' }));
+    h += '<div class="card"><div class="card-h"><h2>Voertuig volgens de RDW</h2><span class="kc-meta">open data RDW</span></div><table class="ctable"><tbody>' + rij.join('') + '</tbody></table>' +
+      '<div class="note">' + ic('info') + '<span>Dit komt uit het kentekenregister. Schade, onderhoud en de echte staat staan daar niet in: kijk dat zelf na of vraag het de veiling.</span></div></div>';
   }
 
   // Wat de app op de foto's zag, met de grens daarvan

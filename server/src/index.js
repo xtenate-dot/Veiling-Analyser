@@ -635,6 +635,8 @@ async function analyse(request, env) {
     res = await K.analyseer({ url, extra, fotos, hergebruik: b.hergebruik !== false }, {
       anthropic: anthropicVia(env, teller),
       haalPagina: haalPagina,
+      // Open data van de RDW: gratis, zonder sleutel. Hooguit 6 seconden, anders zonder RDW verder
+      rdw: (k) => K.rdwOpzoeken(k, (u, o) => fetch(u, Object.assign({}, o, { signal: AbortSignal.timeout(6000) }))),
       modelPagina: env.MODEL_PAGINA || 'claude-haiku-5-5',
       modelPrijzen: env.MODEL_PRIJZEN || 'claude-haiku-5-5',
       maxZoek: env.ZOEKOPDRACHTEN != null ? Number(env.ZOEKOPDRACHTEN) : 1,

@@ -4,7 +4,7 @@ const { chromium } = require('playwright');
 (async () => {
   const b = await chromium.launch();
   const out = process.argv[2];
-  const paginas = ['index.html', 'prijzen.html', 'veilinggids/index.html', 'veilinggids/troostwijk.html', 'verhalen/margeregeling-of-btw.html', 'over.html', 'en/index.html'];
+  const paginas = ['index.html', 'prijzen.html', 'veilinggids/index.html', 'veilinggids/troostwijk.html', 'verhalen/margeregeling-of-btw.html', 'over.html', 'hoe-we-rekenen.html', 'en/index.html'];
   let fout = 0;
   for (const [w, h, tag] of [[390, 844, 'tel'], [1280, 900, 'pc']]) {
     const p = await b.newPage({ viewport: { width: w, height: h } });

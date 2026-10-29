@@ -5,6 +5,8 @@ import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 import { createHmac } from 'node:crypto';
 import { verwerk } from '../src/index.js';
+import '../../kern.js';
+const K = globalThis.VAKern;
 
 let fouten = 0, aantal = 0;
 function check(naam, ok, extra) { aantal++; console.log((ok ? 'OK   ' : 'FOUT ') + naam + (extra !== undefined ? '  → ' + JSON.stringify(extra) : '')); if (!ok) fouten++; }
@@ -519,6 +521,41 @@ const gok = await Promise.all(Array.from({ length: 12 }, (_, i) => api('POST', '
 check('12 gelijktijdige gokken: hooguit 5 tellen als poging', gok.filter(x => x.data && x.data.code === 'onjuist').length <= 5 && db.prepare("SELECT pogingen FROM verificatie v JOIN gebruikers g ON g.id = v.gebruiker_id WHERE g.email = 'gokker@voorbeeld.nl'").get().pogingen === 5);
 r = await verwerk(new Request('https://server.test/api/inloggen', { method: 'POST', headers: { 'Content-Length': '9999999', 'Content-Type': 'application/json' }, body: '{}' }), env);
 check('Te groot verzoek volgens Content-Length → 413', r.status === 413);
+
+// ── 18. Voertuigen: kenteken, RDW en ruimer zoeken ──
+check('Kenteken herkennen en controleren', K.normKenteken('hgj-13-b') === 'HGJ13B' && K.kentekenMetStreepjes('HGJ13B') === 'HGJ-13-B' && K.kentekenMetStreepjes('12abc3') === '12-ABC-3' && K.normKenteken('ABCDEF') === null && K.normKenteken('123456') === null);
+check('Kenteken uit de link van een kavel', K.vindKenteken('https://www.hnvi.nl/veiling-kavel/mg-e-hs-plug-in-hybride-met-kenteken-hgj-13-b-luxury/197287') === 'HGJ13B' && K.vindKenteken('model 2023, 12 34 x') === null);
+const RDW_AUTO = [{ kenteken: 'HGJ13B', voertuigsoort: 'Personenauto', merk: 'MG', handelsbenaming: 'MG HS', vervaldatum_apk: '20290321', inrichting: 'hatchback', eerste_kleur: 'GRIJS', datum_eerste_toelating: '20250321', catalogusprijs: '42891', tellerstandoordeel: 'Logisch', jaar_laatste_registratie_tellerstand: '2025', export_indicator: 'Nee', openstaande_terugroepactie_indicator: 'Nee', taxi_indicator: 'Nee', wam_verzekerd: 'Ja' }];
+const RDW_BRANDSTOF = [{ kenteken: 'HGJ13B', brandstof_omschrijving: 'Elektriciteit', klasse_hybride_elektrisch_voertuig: 'OVC-HEV' }, { kenteken: 'HGJ13B', brandstof_omschrijving: 'Benzine', klasse_hybride_elektrisch_voertuig: 'OVC-HEV' }];
+const rdwN = K.normRdw(RDW_AUTO, RDW_BRANDSTOF);
+check('RDW-gegevens omzetten', rdwN.kenteken === 'HGJ-13-B' && rdwN.aandrijving === 'plug-in hybride' && rdwN.bouwjaar === 2025 && rdwN.catalogusprijs === 42891 && rdwN.eerste_toelating === '2025-03-21' && rdwN.apk_tot === '2029-03-21', rdwN);
+globalThis.fetch = (orig => async (url, opt) => {
+  url = String(url);
+  if (url.startsWith('https://opendata.rdw.nl/resource/m9d7-ebf2.json?kenteken=HGJ13B')) { aanroepen.push({ url, opt }); return new Response(JSON.stringify(RDW_AUTO), { status: 200 }); }
+  if (url.startsWith('https://opendata.rdw.nl/resource/8ys7-d773.json?kenteken=HGJ13B')) { aanroepen.push({ url, opt }); return new Response(JSON.stringify(RDW_BRANDSTOF), { status: 200 }); }
+  if (url.startsWith('https://opendata.rdw.nl/')) { aanroepen.push({ url, opt }); return new Response('[]', { status: 200 }); }
+  return orig(url, opt);
+})(globalThis.fetch);
+const AUTO1 = Object.assign({}, STAP1, { titel: 'MG eHS Plug-in Hybride met kenteken HGJ-13-B', voertuig: true, kenteken: 'HGJ-13-B', kilometerstand: 38000, product: { merk: 'MG', model: 'eHS', variant: 'Luxury', zoekterm: 'MG eHS PHEV Luxury' } });
+const AUTO2 = Object.assign({}, STAP2, { nieuwprijs: 99, nieuwprijs_bron: 'bol.com', marktplaats: { laag: 28500, gemiddeld: 30000, hoog: 31500, vertrouwen: 'middel', aantal_vergelijkbaar: 4 }, handelaar: { laag: 32495, hoog: 34495, aantal: 3 } });
+anthropicBodies.length = 0;
+anthropicAntwoord = (b) => {
+  anthropicBodies.push(b);
+  if (b.system.startsWith('Je leest veilingkavels')) return { content: [{ type: 'text', text: JSON.stringify(AUTO1) }], stop_reason: 'end_turn', usage: { input_tokens: 9000, output_tokens: 400 } };
+  return { content: [{ type: 'text', text: JSON.stringify(AUTO2) }], stop_reason: 'end_turn', usage: { input_tokens: 40000, output_tokens: 900 } };
+};
+db.prepare("UPDATE gebruikers SET plan = 'handelaar' WHERE id = ?").run(idK);
+r = await api('POST', '/api/analyse', { url: 'https://www.testveiling.nl/kavel/auto-1', hergebruik: false }, tkK);
+const v2 = anthropicBodies[1];
+check('Auto: RDW opgezocht en in de uitslag', r.status === 200 && r.data.pagina.rdw && r.data.pagina.rdw.model === 'MG HS' && r.data.pagina.voertuig === true, r.data && (r.data.fout || r.data.pagina));
+check('Auto: catalogusprijs RDW als nieuwprijs (niet bol.com)', r.data.prijzen.nieuwprijs === 42891 && /RDW/.test(r.data.prijzen.nieuwprijs_bron));
+check('Auto: vraagprijzen autobedrijven apart', r.data.prijzen.voertuig === true && r.data.prijzen.handelaar && r.data.prijzen.handelaar.laag === 32495 && r.data.prijzen.marktplaats.gemiddeld === 30000);
+const zoek = v2 && v2.tools.find(t => t.name === 'web_search');
+check('Auto: 3 zoekopdrachten, geen eBay/bol.com, autosites niet openen', zoek && zoek.max_uses === 3 && !/bol\.com|ebay\.nl/.test(v2.messages[0].content) && v2.tools[0].blocked_domains.includes('autoscout24.nl') && /RDW/.test(v2.messages[0].content) && /38000 km/.test(v2.messages[0].content));
+check('Auto: prijzen alleen gedeeld per kenteken', db.prepare("SELECT COUNT(*) AS n FROM prijscache WHERE sleutel LIKE 'voertuig:HGJ13B|%'").get().n === 1);
+AUTO1.kenteken = 'ZZ-99-ZZ'; AUTO1.titel = 'Auto zonder bekend kenteken';
+r = await api('POST', '/api/analyse', { url: 'https://www.testveiling.nl/kavel/auto-2', hergebruik: false }, tkK);
+check('Onbekend kenteken: analyse lukt wel, met waarschuwing', r.status === 200 && !r.data.pagina.rdw && r.data.waarschuwingen.some(w => /niet gevonden bij de RDW/.test(w)), r.data && r.data.waarschuwingen);
 
 console.log('\n' + (aantal - fouten) + ' van ' + aantal + ' controles OK' + (fouten ? ' — ' + fouten + ' FOUT(EN)' : ''));
 process.exit(fouten ? 1 : 0);
