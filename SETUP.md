@@ -7,6 +7,11 @@ De app bestaat uit twee delen:
 
 Zonder server werkt de app ook: dan vraagt hij elke gebruiker om een eigen Anthropic API-sleutel. Voor verkoop heb je de server nodig.
 
+## Afspraken en nog te doen
+
+- **Rondleiding Cloudflare (afgesproken 29 oktober 2026):** als de app af is, krijgt de eigenaar een rondleiding door het Cloudflare-dashboard. Onderdelen: de Worker en Deployments (versies terugzetten), Variables and Secrets, logboeken bij fouten, de D1-database, de nachtelijke opruimtaak, Turnstile, het domein en de DNS, en de kosten en limieten. Doel: vragen van klanten zelf kunnen beantwoorden.
+- **Alles via Cloudflare:** app, server en de promotiewebsite komen op Cloudflare, op veilinganalyser.nl. De DNS van het domein gaat daarvoor van Vimexx naar Cloudflare; de registratie blijft bij Vimexx.
+
 ---
 
 ## Snel starten: gratis, zonder betalen
