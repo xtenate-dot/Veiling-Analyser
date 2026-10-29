@@ -282,5 +282,70 @@ check('Limiet zonder betalen: geen verwijzing naar abonnement', r.status === 402
 r = await api('POST', '/api/afrekenen', { plan: 'basis' }, tk);
 check('Afrekenen zonder Stripe → 501', r.status === 501);
 
+// ── 10. Limieten tegen misbruik ──
+env.STRIPE_SECRET_KEY = 'sk_test_1'; delete env.UITNODIGINGSCODE; env.LIMIET_GRATIS = '2';
+const ipKop = (ip) => ({ 'CF-Connecting-IP': ip });
+const mails0 = aanroepen.filter(a => a.url.includes('resend')).length;
+let statussen = [];
+for (let i = 0; i < 4; i++) statussen.push((await api('POST', '/api/wachtwoord-vergeten', { email: 'met@code.nl' }, null, ipKop('10.0.0.' + i))).status);
+check('Herstellink: 3 per uur per adres, de 4e → 429', JSON.stringify(statussen) === '[200,200,200,429]', statussen);
+check('Na de limiet geen extra mail', aanroepen.filter(a => a.url.includes('resend')).length - mails0 === 3);
+statussen = [];
+for (let i = 0; i < 11; i++) statussen.push((await api('POST', '/api/wachtwoord-vergeten', { email: 'x' + i + '@voorbeeld.nl' }, null, ipKop('10.1.1.1'))).status);
+check('Herstellink: 10 per uur per IP, de 11e → 429', statussen.slice(0, 10).every(s => s === 200) && statussen[10] === 429, statussen);
+statussen = [];
+for (let i = 0; i < 11; i++) statussen.push((await api('POST', '/api/registreer', { email: 'ipreg' + i + '@voorbeeld.nl', wachtwoord: 'geheim123' }, null, ipKop('10.2.2.2'))).status);
+check('Aanmelden: 10 per uur per IP, de 11e → 429', statussen.slice(0, 10).every(s => s === 201) && statussen[10] === 429, statussen);
+check('Ander IP kan wel aanmelden', (await api('POST', '/api/registreer', { email: 'ander-ip@voorbeeld.nl', wachtwoord: 'geheim123' }, null, ipKop('10.3.3.3'))).status === 201);
+statussen = [];
+for (let i = 0; i < 31; i++) statussen.push((await api('POST', '/api/inloggen', { email: 'iemand' + i + '@voorbeeld.nl', wachtwoord: 'fout' }, null, ipKop('10.4.4.4'))).status);
+check('Inloggen: 30 pogingen per kwartier per IP, daarna 429', statussen.slice(0, 30).every(s => s === 401) && statussen[30] === 429, statussen.slice(-3));
+
+// ── 11. Eigen gegevens downloaden en account verwijderen ──
+let rd = await api('POST', '/api/registreer', { email: 'weg@voorbeeld.nl', wachtwoord: 'geheim123' });
+const tkWeg = rd.data.token;
+await bevestig(tkWeg, 'weg@voorbeeld.nl');
+r = await api('POST', '/api/analyse', { url: 'https://www.testveiling.nl/kavel/900' }, tkWeg);
+check('Voorbereiding: één analyse gedaan', r.status === 200 && r.data.verbruik.gebruikt === 1, r.data && r.data.fout);
+await api('PUT', '/api/kavels', { kavels: [{ id: 9, titel: 'Mijn kavel' }] }, tkWeg);
+r = await api('GET', '/api/mijn-gegevens', null, tkWeg);
+check('Gegevens downloaden: account, analyses met link, kavels', r.status === 200 && r.data.account.email === 'weg@voorbeeld.nl' && r.data.analyses.length === 1 && r.data.analyses[0].link.includes('kavel/900') && r.data.kavels[0].titel === 'Mijn kavel');
+check('Download als bestand', /attachment/.test(r.headers.get('content-disposition') || ''));
+check('Geen wachtwoord-hash of zout in de download', !JSON.stringify(r.data).match(/wachtwoord|zout|hash/));
+r = await api('POST', '/api/account-verwijderen', { wachtwoord: 'fout' }, tkWeg);
+check('Verwijderen met verkeerd wachtwoord → 403 (niet uitloggen)', r.status === 403);
+const idWeg = env.DB._db.prepare("SELECT id FROM gebruikers WHERE email = 'weg@voorbeeld.nl'").get().id;
+env.DB._db.prepare("UPDATE gebruikers SET stripe_abonnement = 'sub_weg', abonnement_status = 'active', plan = 'basis' WHERE id = ?").run(idWeg);
+stripeSub = { id: 'sub_weg', status: 'canceled' };
+r = await api('POST', '/api/account-verwijderen', { wachtwoord: 'geheim123' }, tkWeg);
+const stop = aanroepen.filter(a => a.url.includes('/subscriptions/sub_weg')).pop();
+check('Verwijderen → 200 en lopend abonnement direct gestopt bij Stripe', r.status === 200 && stop && stop.opt.method === 'DELETE', r.data);
+const db = env.DB._db;
+check('Account, sessies, kavels en codes weg', !db.prepare('SELECT 1 FROM gebruikers WHERE id = ?').get(idWeg) && !db.prepare('SELECT 1 FROM sessies WHERE gebruiker_id = ?').get(idWeg) && !db.prepare('SELECT 1 FROM kavels WHERE gebruiker_id = ?').get(idWeg));
+check('Verbruik anoniem bewaard (zonder link) voor dagbudget', db.prepare('SELECT COUNT(*) AS n FROM verbruik WHERE gebruiker_id = ? AND url IS NULL').get(-idWeg).n === 1);
+check('Geen e-mailadres meer in de database', !JSON.stringify(db.prepare('SELECT * FROM verwijderd').all()).includes('weg@') && !db.prepare("SELECT 1 FROM pogingen WHERE email LIKE '%weg@voorbeeld.nl%'").get());
+r = await api('GET', '/api/account', null, tkWeg);
+check('Oude sessie werkt niet meer', r.status === 401);
+rd = await api('POST', '/api/registreer', { email: 'weg@voorbeeld.nl', wachtwoord: 'geheim123' });
+check('Opnieuw aanmelden kan, maar het verbruik van deze maand telt mee', rd.status === 201 && rd.data.account.gebruikt === 1, rd.data.account);
+
+// ── 12. Dagelijks opruimen ──
+const { opruimen } = await import('../src/index.js');
+const oud = Date.now() - 100 * 864e5;
+db.prepare('INSERT INTO sessies (token_hash, gebruiker_id, verloopt) VALUES (?, 1, ?)').run('verlopen', Date.now() - 1000);
+db.prepare('INSERT INTO prijscache (sleutel, data, tijd) VALUES (?, ?, ?)').run('oud', '{}', Date.now() - 4 * 864e5);
+db.prepare('INSERT INTO verbruik (gebruiker_id, tijd, usd, url) VALUES (1, ?, 0, ?)').run(oud, 'https://oud.test/kavel');
+db.prepare('INSERT INTO verbruik (gebruiker_id, tijd, usd, url) VALUES (1, ?, 0, NULL)').run(Date.now() - 500 * 864e5);
+db.prepare('INSERT INTO pogingen (email, tijd) VALUES (?, ?)').run('oud@voorbeeld.nl', Date.now() - 2 * 864e5);
+db.prepare("INSERT INTO gebruikers (email, email_kanon, wachtwoord_hash, zout, plan, aangemaakt, email_geverifieerd) VALUES ('nooit@voorbeeld.nl', 'nooit@voorbeeld.nl', 'x', 'y', 'gratis', ?, 0)").run(Date.now() - 8 * 864e5);
+db.prepare("INSERT INTO gebruikers (email, email_kanon, wachtwoord_hash, zout, plan, aangemaakt, email_geverifieerd) VALUES ('net@voorbeeld.nl', 'net@voorbeeld.nl', 'x', 'y', 'gratis', ?, 0)").run(Date.now() - 2 * 864e5);
+const actieveSessies = db.prepare('SELECT COUNT(*) AS n FROM sessies WHERE verloopt > ?').get(Date.now()).n;
+const v = await opruimen(env);
+check('Verlopen sessies weg, geldige blijven', !db.prepare("SELECT 1 FROM sessies WHERE token_hash = 'verlopen'").get() && db.prepare('SELECT COUNT(*) AS n FROM sessies WHERE verloopt > ?').get(Date.now()).n === actieveSessies - (v['onbevestigd-sessies'] || 0));
+check('Oude prijscache en pogingen weg', !db.prepare("SELECT 1 FROM prijscache WHERE sleutel = 'oud'").get() && !db.prepare("SELECT 1 FROM pogingen WHERE email = 'oud@voorbeeld.nl'").get());
+check('Links in verbruik na 90 dagen gewist, regels na 400 dagen weg', !db.prepare("SELECT 1 FROM verbruik WHERE url = 'https://oud.test/kavel'").get() && db.prepare('SELECT COUNT(*) AS n FROM verbruik WHERE tijd = ?').get(oud).n === 1 && !db.prepare('SELECT 1 FROM verbruik WHERE tijd < ?').get(Date.now() - 400 * 864e5));
+check('Onbevestigd account > 7 dagen weg, recent blijft', !db.prepare("SELECT 1 FROM gebruikers WHERE email = 'nooit@voorbeeld.nl'").get() && !!db.prepare("SELECT 1 FROM gebruikers WHERE email = 'net@voorbeeld.nl'").get());
+check('Bevestigde accounts blijven', !!db.prepare("SELECT 1 FROM gebruikers WHERE email = 'jan@voorbeeld.nl'").get() && !Object.values(v).includes('fout'), v);
+
 console.log('\n' + (aantal - fouten) + ' van ' + aantal + ' controles OK' + (fouten ? ' — ' + fouten + ' FOUT(EN)' : ''));
 process.exit(fouten ? 1 : 0);

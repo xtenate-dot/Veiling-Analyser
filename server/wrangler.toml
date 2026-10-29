@@ -4,6 +4,18 @@ name = "veiling-analyser"
 main = "src/index.js"
 compatibility_date = "2026-10-01"
 
+# De Worker serveert ook de app zelf (HTML, CSS, JS), zodat app en server op één adres staan.
+# Bij elke deploy kopieert kopieer-app.mjs de app-bestanden naar public/.
+[build]
+command = "node kopieer-app.mjs"
+
+[assets]
+directory = "public"
+
+# Elke nacht om 03:23 UTC: verlopen sessies, oude codes, oude links en nooit bevestigde accounts opruimen
+[triggers]
+crons = ["23 3 * * *"]
+
 [[d1_databases]]
 binding = "DB"
 database_name = "veiling-analyser"
@@ -11,9 +23,10 @@ database_id = "17c48dc4-7c06-4fb0-8856-a06ea6b9962f"   # D1 in de EU, aangemaakt
 
 [vars]
 # Webadres van de app (voor links in e-mails en terug van de betaalpagina)
-APP_URL = "https://xtenate-dot.github.io/Veiling-Analyser/app.html"
+# Zolang veilinganalyser.nl nog niet aan de Worker hangt: het workers.dev-adres
+APP_URL = "https://veiling-analyser.xtenate.workers.dev/app.html"
 # Welke websites de server mogen aanroepen (komma-gescheiden)
-APP_ORIGIN = "https://xtenate-dot.github.io"
+APP_ORIGIN = "https://veilinganalyser.nl,https://www.veilinganalyser.nl,https://veiling-analyser.xtenate.workers.dev,https://xtenate-dot.github.io"
 # Analyses per kalendermaand per abonnement
 LIMIET_GRATIS = "10"
 LIMIET_BASIS = "100"

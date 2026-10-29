@@ -199,6 +199,8 @@ function toonAccount() {
     h += '</div>';
     if (a.plan !== 'gratis') h += '<p class="help">Overstappen of opzeggen doe je via Abonnement beheren.</p>';
   }
+  h += '<div class="acc-privacy"><button type="button" class="linkje" onclick="downloadGegevens()">' + ic('download') + 'Mijn gegevens downloaden</button>' +
+    '<button type="button" class="linkje gevaar" onclick="vraagVerwijderen()">Account verwijderen</button></div>';
   var acties = [{ label: 'Uitloggen', cls: 'btn-ghost', fn: uitloggen }];
   if (a.plan !== 'gratis' || a.abonnement_status) acties.push({ label: 'Abonnement beheren', cls: 'btn-secondary', keepOpen: true, fn: openPortaal });
   acties.push({ label: 'Sluiten', cls: 'btn-primary' });
@@ -211,6 +213,42 @@ async function afrekenen(plan) {
 async function openPortaal() {
   try { var d = await apiCall('/api/portaal', { method: 'POST' }); location.href = d.url; }
   catch (e) { toast(e.message, null, true); }
+}
+// ── Eigen gegevens (AVG) ──
+async function downloadGegevens() {
+  try {
+    var d = await apiCall('/api/mijn-gegevens');
+    var blob = new Blob([JSON.stringify(d, null, 2)], { type: 'application/json' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = 'veiling-analyser-gegevens.json';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function() { URL.revokeObjectURL(a.href); }, 2000);
+  } catch (e) { toast(e.message, null, true); }
+}
+function vraagVerwijderen() {
+  if (!account) return;
+  var abo = account.plan !== 'gratis' && account.abonnement_status && account.abonnement_status !== 'canceled';
+  var h = '<p style="margin:0 0 10px">Hiermee verwijder je je account <strong>' + esc(account.email) + '</strong> en de kavels die op de server staan. Dit kan niet ongedaan worden gemaakt.</p>' +
+    (abo ? '<div class="note">' + ic('alert') + '<span>Je abonnement stopt direct. De lopende periode wordt niet terugbetaald.</span></div>' : '') +
+    '<p class="help" style="margin:0 0 12px">De kavels op dit apparaat blijven staan. Wil je ze bewaren, download dan eerst je gegevens.</p>' +
+    '<div class="form-rij"><label for="vw-ww">Vul je wachtwoord in om te bevestigen</label><input class="input" id="vw-ww" type="password" autocomplete="current-password" onkeydown="if(event.key===\'Enter\')verwijderAccount()"></div>' +
+    '<div class="msg err" id="vw-err" role="alert"></div>';
+  openModal('Account verwijderen', h, [
+    { label: 'Annuleren', cls: 'btn-secondary' },
+    { label: 'Definitief verwijderen', cls: 'btn-danger', keepOpen: true, fn: verwijderAccount }
+  ]);
+}
+var verwijderBezig = false;
+async function verwijderAccount() {
+  var ww = (document.getElementById('vw-ww') || {}).value || '';
+  if (!ww) { toonMsg('vw-err', 'Vul je wachtwoord in.'); return; }
+  if (verwijderBezig) return; verwijderBezig = true;
+  try {
+    await apiCall('/api/account-verwijderen', { method: 'POST', body: { wachtwoord: ww } });
+    zetSessie(''); account = null; werkAccountBij(); closeModal();
+    toast('Je account is verwijderd.');
+  } catch (e) { toonMsg('vw-err', e.message); }
+  finally { verwijderBezig = false; }
 }
 async function uitloggen() {
   try { await apiCall('/api/uitloggen', { method: 'POST' }); } catch (e) {}

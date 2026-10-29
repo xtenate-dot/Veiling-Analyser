@@ -92,6 +92,17 @@ async function verbruikDezeMaand(env, gebruikerId) {
   const r = await env.DB.prepare('SELECT COUNT(*) AS n FROM verbruik WHERE gebruiker_id = ? AND tijd >= ?').bind(gebruikerId, maandBegin()).first();
   return r ? r.n : 0;
 }
+// ── Limieten tegen misbruik ──────────────────────────────────────────────────
+// Telt pogingen per sleutel (bijv. "herstel:jan@x.nl" of "ip-reg:1.2.3.4") in de tabel pogingen.
+// Sleutels met een voorvoegsel botsen niet met de gewone inlogpogingen (die gebruiken het kale adres).
+async function limiet(env, sleutel, max, vensterMs, bericht) {
+  const nu = Date.now();
+  const r = await env.DB.prepare('SELECT COUNT(*) AS n FROM pogingen WHERE email = ? AND tijd > ?').bind(sleutel, nu - vensterMs).first();
+  if (r && r.n >= max) throw new Fout(429, 'te_vaak', bericht);
+  await env.DB.prepare('INSERT INTO pogingen (email, tijd) VALUES (?, ?)').bind(sleutel, nu).run();
+}
+function ipVan(request) { return request.headers.get('CF-Connecting-IP') || ''; }
+
 // ── E-mailcontrole ───────────────────────────────────────────────────────────
 // Actief zodra de server e-mail kan versturen (Resend), tenzij EMAILCONTROLE = "uit".
 function emailControle(env) { return !!(env.RESEND_API_KEY && env.EMAIL_VAN) && env.EMAILCONTROLE !== 'uit'; }
@@ -186,7 +197,9 @@ async function registreer(request, env) {
   if (!geldigEmail(email)) throw new Fout(400, 'email', 'Vul een geldig e-mailadres in.');
   if (WEGWERP.has(email.split('@')[1])) throw new Fout(400, 'wegwerp', 'Gebruik je gewone e-mailadres; tijdelijke adressen worden niet geaccepteerd.');
   if (ww.length < 8 || ww.length > 200) throw new Fout(400, 'wachtwoord', 'Kies een wachtwoord van minstens 8 tekens.');
-  await controleerTurnstile(env, b.turnstile, request.headers.get('CF-Connecting-IP'));
+  const ip = ipVan(request);
+  if (ip) await limiet(env, 'ip-reg:' + ip, 10, 3600000, 'Er zijn vanaf dit internetadres veel accounts aangemaakt. Probeer het over een uur opnieuw.');
+  await controleerTurnstile(env, b.turnstile, ip);
   // Optioneel: alleen mensen met de uitnodigingscode kunnen een account maken
   if (env.UITNODIGINGSCODE && !gelijk(String(b.code || '').trim().toLowerCase(), String(env.UITNODIGINGSCODE).trim().toLowerCase())) {
     throw new Fout(403, 'code', 'Vul de juiste uitnodigingscode in. Die krijg je van de beheerder van de app.');
@@ -198,6 +211,11 @@ async function registreer(request, env) {
   const res = await env.DB.prepare('INSERT INTO gebruikers (email, email_kanon, wachtwoord_hash, zout, plan, aangemaakt) VALUES (?, ?, ?, ?, ?, ?)')
     .bind(email, kanon, await hashWachtwoord(ww, zout), zout, 'gratis', Date.now()).run();
   const id = res.meta.last_row_id;
+  // Wie zijn account verwijdert en direct een nieuw maakt, houdt het verbruik van deze maand (anders is de gratis limiet te omzeilen)
+  try {
+    const oud = await env.DB.prepare('SELECT oud_id FROM verwijderd WHERE kanon_hash = ? AND tijd >= ?').bind(await sha256('kanon:' + kanon), maandBegin()).first();
+    if (oud) await env.DB.prepare('UPDATE verbruik SET gebruiker_id = ? WHERE gebruiker_id = ? AND tijd >= ?').bind(id, -oud.oud_id, maandBegin()).run();
+  } catch (e) { console.error('verwijderd-controle', e); }
   const g = await env.DB.prepare('SELECT * FROM gebruikers WHERE id = ?').bind(id).first();
   let mailFout = null;
   try { await stuurCode(env, g); } catch (e) { mailFout = e.message; }
@@ -210,7 +228,9 @@ async function inloggen(request, env) {
   const kwartier = Date.now() - 15 * 60000;
   const p = await env.DB.prepare('SELECT COUNT(*) AS n FROM pogingen WHERE email = ? AND tijd > ?').bind(email, kwartier).first();
   if (p && p.n >= 10) throw new Fout(429, 'te_vaak', 'Te veel mislukte pogingen. Probeer het over een kwartier opnieuw.');
-  const g = await env.DB.prepare('SELECT * FROM gebruikers WHERE email = ?').bind(email).first();
+  const ip = ipVan(request);
+  if (ip) await limiet(env, 'ip-login:' + ip, 30, 15 * 60000, 'Te veel inlogpogingen vanaf dit internetadres. Probeer het over een kwartier opnieuw.');
+  const g =await env.DB.prepare('SELECT * FROM gebruikers WHERE email = ?').bind(email).first();
   const ok = g && gelijk(await hashWachtwoord(ww, g.zout), g.wachtwoord_hash);
   if (!ok) {
     await env.DB.prepare('INSERT INTO pogingen (email, tijd) VALUES (?, ?)').bind(email, Date.now()).run();
@@ -228,6 +248,11 @@ async function wachtwoordVergeten(request, env) {
   const b = await leesJson(request);
   const email = String(b.email || '').trim().toLowerCase();
   if (!env.RESEND_API_KEY || !env.EMAIL_VAN) throw new Fout(501, 'geen_email', 'Wachtwoord herstellen per e-mail is nog niet ingesteld. Neem contact op met de beheerder.');
+  // Zonder limiet kan iemand andermans inbox volspammen en het e-mailtegoed opmaken.
+  // De limiet geldt ook voor adressen zonder account, zodat het antwoord niets verraadt.
+  const ip = ipVan(request);
+  if (ip) await limiet(env, 'ip-herstel:' + ip, 10, 3600000, 'Er zijn vanaf dit internetadres veel herstellinks gevraagd. Probeer het over een uur opnieuw.');
+  if (geldigEmail(email)) await limiet(env, 'herstel:' + email, 3, 3600000, 'Er zijn voor dit adres al drie herstellinks gestuurd. Kijk ook bij ongewenste e-mail, of probeer het over een uur opnieuw.');
   const g = geldigEmail(email) ? await env.DB.prepare('SELECT id FROM gebruikers WHERE email = ?').bind(email).first() : null;
   if (g) {
     const token = willekeurig(24);
@@ -261,6 +286,82 @@ async function wachtwoordHerstellen(request, env) {
   ]);
   const g = await env.DB.prepare('SELECT * FROM gebruikers WHERE id = ?').bind(r.gebruiker_id).first();
   return json({ token: await maakSessie(env, g.id), account: await accountInfo(env, g) });
+}
+
+// ── Eigen gegevens (AVG): inzien en verwijderen ──────────────────────────────
+async function mijnGegevens(request, env) {
+  const g = await huidigeGebruiker(request, env);
+  const verbruik = await env.DB.prepare('SELECT tijd, url FROM verbruik WHERE gebruiker_id = ? ORDER BY tijd').bind(g.id).all();
+  const k = await env.DB.prepare('SELECT data, bijgewerkt FROM kavels WHERE gebruiker_id = ?').bind(g.id).first();
+  return json({
+    gemaakt_op: new Date().toISOString(),
+    account: {
+      email: g.email, aangemaakt: new Date(g.aangemaakt).toISOString(), email_bevestigd: !!g.email_geverifieerd,
+      abonnement: g.plan, abonnement_status: g.abonnement_status || null,
+      abonnement_loopt_tot: g.periode_einde ? new Date(g.periode_einde).toISOString() : null
+    },
+    analyses: (verbruik.results || []).map(v => ({ tijd: new Date(v.tijd).toISOString(), link: v.url || null })),
+    kavels: k ? JSON.parse(k.data) : [],
+    kavels_bijgewerkt: k ? new Date(k.bijgewerkt).toISOString() : null
+  }, 200, { 'Content-Disposition': 'attachment; filename="veiling-analyser-gegevens.json"' });
+}
+async function accountVerwijderen(request, env) {
+  const g = await huidigeGebruiker(request, env);
+  const b = await leesJson(request);
+  if (!gelijk(await hashWachtwoord(String(b.wachtwoord || ''), g.zout), g.wachtwoord_hash)) {
+    // 403 en niet 401: de app logt bij 401 uit, en dat is hier niet de bedoeling
+    await limiet(env, 'verwijder:' + g.id, 5, 15 * 60000, 'Te vaak een verkeerd wachtwoord. Probeer het over een kwartier opnieuw.');
+    throw new Fout(403, 'onjuist', 'Dit wachtwoord klopt niet.');
+  }
+  // Een lopend abonnement direct stoppen, anders betaalt de klant door zonder account
+  if (g.stripe_abonnement && env.STRIPE_SECRET_KEY && ['active', 'trialing', 'past_due', 'unpaid', 'incomplete'].includes(g.abonnement_status)) {
+    await stripe(env, 'DELETE', 'subscriptions/' + encodeURIComponent(g.stripe_abonnement));
+  }
+  const kanon = g.email_kanon || emailKanon(g.email);
+  await env.DB.batch([
+    // Alleen een onherleidbare vingerafdruk van het adres, 40 dagen, tegen het omzeilen van de maandlimiet
+    env.DB.prepare('INSERT OR REPLACE INTO verwijderd (kanon_hash, oud_id, tijd) VALUES (?, ?, ?)').bind(await sha256('kanon:' + kanon), g.id, Date.now()),
+    // Verbruik blijft anoniem bestaan voor het dagbudget en de maandlimiet; de links gaan weg
+    env.DB.prepare('UPDATE verbruik SET gebruiker_id = ?, url = NULL WHERE gebruiker_id = ?').bind(-g.id, g.id),
+    env.DB.prepare('DELETE FROM kavels WHERE gebruiker_id = ?').bind(g.id),
+    env.DB.prepare('DELETE FROM sessies WHERE gebruiker_id = ?').bind(g.id),
+    env.DB.prepare('DELETE FROM herstel WHERE gebruiker_id = ?').bind(g.id),
+    env.DB.prepare('DELETE FROM verificatie WHERE gebruiker_id = ?').bind(g.id),
+    env.DB.prepare('DELETE FROM pogingen WHERE email = ? OR email = ?').bind(g.email, 'herstel:' + g.email),
+    env.DB.prepare('DELETE FROM gebruikers WHERE id = ?').bind(g.id)
+  ]);
+  return json({ ok: true });
+}
+
+// ── Dagelijks opruimen (cron) ────────────────────────────────────────────────
+export async function opruimen(env, nu = Date.now()) {
+  const dag = 864e5;
+  const stappen = [
+    ['sessies', 'DELETE FROM sessies WHERE verloopt < ?', [nu]],
+    ['herstel', 'DELETE FROM herstel WHERE verloopt < ?', [nu]],
+    ['verificatie', 'DELETE FROM verificatie WHERE verloopt < ?', [nu - dag]],
+    ['pogingen', 'DELETE FROM pogingen WHERE tijd < ?', [nu - dag]],
+    ['prijscache', 'DELETE FROM prijscache WHERE tijd < ?', [nu - CACHE_DAGEN * dag]],
+    ['links', 'UPDATE verbruik SET url = NULL WHERE url IS NOT NULL AND tijd < ?', [nu - 90 * dag]],
+    ['verbruik', 'DELETE FROM verbruik WHERE tijd < ?', [nu - 400 * dag]],
+    ['verwijderd', 'DELETE FROM verwijderd WHERE tijd < ?', [nu - 40 * dag]]
+  ];
+  // Nooit bevestigde accounts na 7 dagen weg (alleen als de e-mailcontrole aanstaat)
+  if (emailControle(env)) {
+    const grens = nu - 7 * dag;
+    const sub = 'SELECT id FROM gebruikers WHERE email_geverifieerd = 0 AND aangemaakt < ' + Number(grens);
+    stappen.push(['onbevestigd-sessies', 'DELETE FROM sessies WHERE gebruiker_id IN (' + sub + ')', []]);
+    stappen.push(['onbevestigd-kavels', 'DELETE FROM kavels WHERE gebruiker_id IN (' + sub + ')', []]);
+    stappen.push(['onbevestigd-codes', 'DELETE FROM verificatie WHERE gebruiker_id IN (' + sub + ')', []]);
+    stappen.push(['onbevestigd', 'DELETE FROM gebruikers WHERE email_geverifieerd = 0 AND aangemaakt < ?', [grens]]);
+  }
+  const verslag = {};
+  for (const [naam, sql, args] of stappen) {
+    try { const r = await env.DB.prepare(sql).bind(...args).run(); verslag[naam] = (r.meta && r.meta.changes) || 0; }
+    catch (e) { console.error('opruimen ' + naam, e); verslag[naam] = 'fout'; }
+  }
+  console.log('Opgeruimd', JSON.stringify(verslag));
+  return verslag;
 }
 
 // ── Analyse ──────────────────────────────────────────────────────────────────
@@ -458,6 +559,8 @@ const ROUTES = {
   'POST /api/verifieer-opnieuw': codeOpnieuw,
   'POST /api/wachtwoord-herstellen': wachtwoordHerstellen,
   'GET /api/account': async (req, env) => json(await accountInfo(env, await huidigeGebruiker(req, env))),
+  'GET /api/mijn-gegevens': mijnGegevens,
+  'POST /api/account-verwijderen': accountVerwijderen,
   'POST /api/analyse': analyse,
   'GET /api/kavels': kavelsLezen,
   'PUT /api/kavels': kavelsOpslaan,
@@ -491,4 +594,7 @@ export async function verwerk(request, env) {
   return resp;
 }
 
-export default { fetch: (request, env) => verwerk(request, env) };
+export default {
+  fetch: (request, env) => verwerk(request, env),
+  scheduled: (event, env, ctx) => { ctx.waitUntil(opruimen(env)); }
+};

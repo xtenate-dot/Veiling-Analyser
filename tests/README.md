@@ -11,6 +11,8 @@ node server/test/lokaal.mjs 8787 http://localhost:8080 &
 node tests/app-met-server.test.js uitvoer                   # klantreis met betalen: account, analyse, sync, limiet, winst, export
 # Gratis opzet met e-mailcode: start de server met ZONDER_BETALEN=1 MET_EMAIL=1 UITNODIGINGSCODE=test123
 node tests/app-gratis.test.js uitvoer
+# Privacy: gegevens downloaden, account verwijderen, juridische pagina's, eigen lettertypes (server zonder extra opties)
+node tests/app-privacy.test.js uitvoer
 ```
 
 `uitvoer` is een map voor schermafbeeldingen.

@@ -33,6 +33,13 @@ function zoWerktHet() {
   return h;
 }
 
+function juridischeLinks() {
+  var c = window.VA_CONFIG || {};
+  if (!c.privacy && !c.voorwaarden) return '';
+  return '<p class="home-voet">' + (c.privacy ? '<a href="' + esc(c.privacy) + '">Privacy</a>' : '') +
+    (c.privacy && c.voorwaarden ? '<span aria-hidden="true">·</span>' : '') + (c.voorwaarden ? '<a href="' + esc(c.voorwaarden) + '">Voorwaarden</a>' : '') + '</p>';
+}
+
 function homeRij(k) {
   var a = partijOnbetrouwbaar(k) ? { key: 'wacht', label: 'Controle nodig' } : adviesInfo(k.advies);
   var idx = kavels.indexOf(k);
@@ -62,7 +69,7 @@ function renderHome() {
       '<ul class="voordelen"><li>' + ic('check') + 'Echte prijzen van vandaag, met links naar de advertenties</li><li>' + ic('check') + 'Opgeld, vaste kosten en btw van de veiling doorgerekend</li><li>' + ic('check') + 'Je kavels op telefoon en computer</li></ul>' +
       '<div class="btns" id="welkom-knoppen"><button class="btn btn-primary btn-lg" onclick="vraagInloggen(\'registreren\')">Account maken</button><button class="btn btn-secondary btn-lg" onclick="vraagInloggen(\'inloggen\')">Inloggen</button></div></div>' +
       voorbeeldKaartje() + '</div>' + zoWerktHet();
-    box.innerHTML = h + installKaart();
+    box.innerHTML = h + installKaart() + juridischeLinks();
     return;
   }
 
@@ -105,7 +112,7 @@ function renderHome() {
   }
   var oud = document.getElementById('snel-url');
   var bewaard = oud ? oud.value : '';
-  box.innerHTML = h + installKaart();
+  box.innerHTML = h + installKaart() + juridischeLinks();
   if (bewaard && document.getElementById('snel-url')) document.getElementById('snel-url').value = bewaard;
 }
 

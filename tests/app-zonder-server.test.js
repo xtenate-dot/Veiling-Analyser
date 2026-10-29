@@ -207,7 +207,7 @@ const STAP2_JSON = { productnaam: 'Apple iPhone 13 128GB', categorie: 'Telefoons
   await page.evaluate(() => switchTab('overzicht'));
   await page.screenshot({ path: OUT + '/overzicht.png' });
 
-  check('Geen JavaScript-fouten', jsFouten.filter(f => !/ERR_FAILED|status of 400/.test(f)).length === 0, jsFouten);
+  check('Geen JavaScript-fouten', jsFouten.filter(f => !/ERR_FAILED|status of 400|Access to font at 'file:/.test(f)).length === 0, jsFouten);
   await browser.close();
   console.log(fouten ? '\n' + fouten + ' FOUT(EN)' : '\nALLES OK');
   process.exit(fouten ? 1 : 0);

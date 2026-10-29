@@ -74,3 +74,11 @@ CREATE TABLE IF NOT EXISTS pogingen (
   tijd INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_pogingen ON pogingen(email, tijd);
+
+-- Verwijderde accounts: alleen een hash van het genormaliseerde adres, 40 dagen bewaard,
+-- zodat verwijderen en opnieuw aanmelden de maandlimiet niet terugzet
+CREATE TABLE IF NOT EXISTS verwijderd (
+  kanon_hash TEXT PRIMARY KEY,
+  oud_id INTEGER NOT NULL,
+  tijd INTEGER NOT NULL
+);

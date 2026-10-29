@@ -85,6 +85,16 @@ Stap 2 hieronder is daarmee al gedaan, behalve het zetten van de geheime sleutel
 
 Zodra je de app live zet, zet je de productiebranch terug op `main` (Settings → Builds → Production branch), nadat de pull request is samengevoegd.
 
+### Bijgewerkt (29 oktober 2026)
+
+- **App en server op één adres.** De Worker serveert nu ook de app zelf. Bij elke deploy kopieert `server/kopieer-app.mjs` de app-bestanden naar `server/public` (README, SETUP, tests en servercode gaan niet online). Op `https://veiling-analyser.xtenate.workers.dev/app.html`, en later op `veilinganalyser.nl`, kiest `config.js` vanzelf de server van datzelfde adres. Op GitHub Pages blijft de app werken met een eigen API-sleutel.
+- **Database bijwerken.** Er is een tabel `verwijderd` bij gekomen. Voer `schema.sql` nog één keer uit (D1 → veiling-analyser → Console, of `npx wrangler d1 execute veiling-analyser --remote --file=schema.sql`). Alle opdrachten hebben `IF NOT EXISTS`, dus bestaande gegevens blijven staan.
+- **Elke nacht opruimen** (cron 03:23 UTC): verlopen sessies, codes en herstellinks, mislukte pogingen na een dag, prijscache na 3 dagen, links van analyses na 90 dagen, verbruik na 400 dagen en accounts die na 7 dagen nog niet bevestigd zijn.
+- **Limieten tegen misbruik:** herstellinks 3 per uur per adres en 10 per uur per IP, aanmelden 10 per uur per IP, inloggen 30 pogingen per kwartier per IP.
+- **AVG:** onder Account kan een klant zijn gegevens downloaden en zijn account verwijderen. Een lopend Stripe-abonnement stopt dan direct.
+- **Privacybeleid en voorwaarden:** concepten in `privacy.html` en `voorwaarden.html`. Vul de gele velden in en laat ze controleren.
+- **Lettertypes** staan nu in `fonts/` op de eigen server in plaats van bij Google Fonts.
+
 ## Stap 2. Server op Cloudflare
 
 Open een terminal in de map `server/`:
@@ -197,7 +207,7 @@ De app laat de controle dan vanzelf zien bij Account maken.
 ## Testen
 
 ```bash
-node server/test/server.test.mjs          # 70 controles van de server (Node 22 of nieuwer)
+node server/test/server.test.mjs          # 92 controles van de server (Node 22 of nieuwer)
 node server/test/lokaal.mjs               # server lokaal op poort 8787 met nep-AI, voor handmatig testen
 ```
 
@@ -209,7 +219,7 @@ Voor handmatig testen: start ook `python3 -m http.server 8080` in de hoofdmap en
 
 Dit is geen juridisch advies; laat het nakijken.
 
-- **Algemene voorwaarden en privacybeleid.** Je verwerkt e-mailadressen en betalingen, dus je hebt een privacybeleid nodig (AVG) en voorwaarden voor het abonnement. Zet de links in `config.js` (`voorwaarden`, `privacy`); de app toont ze bij het maken van een account.
+- **Algemene voorwaarden en privacybeleid.** Concepten staan in `privacy.html` en `voorwaarden.html` en zijn al gekoppeld in `config.js`. Vul de gele velden in (bedrijfsnaam, KvK, adres, contactadres, datum), sluit verwerkersovereenkomsten met Cloudflare, Anthropic, Resend en Stripe, en haal daarna de regel met "Concept" bovenaan weg.
 - **Inschrijving en btw.** Voor verkoop heb je een KvK-inschrijving nodig en moet je btw afdragen over de abonnementen. Stripe kan btw voor je berekenen (Stripe Tax).
 - **Gebruik van andere websites.** De app leest veilingpagina's en zoekt prijzen op Marktplaats, 2dehands, eBay en bol.com. Dat gebeurt per analyse op verzoek van de gebruiker, maar de voorwaarden van die sites beperken vaak automatisch uitlezen, zeker voor commercieel gebruik. Laat dit beoordelen voordat je op grote schaal verkoopt. eBay heeft een officiële API voor productgegevens, waarop de app kan overstappen.
 - **Eerlijke verwachtingen.** Het advies is een berekening op basis van gevonden prijzen, geen garantie. De app zegt dat overal; zet het ook in je voorwaarden.

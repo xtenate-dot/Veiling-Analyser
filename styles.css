@@ -1,6 +1,9 @@
 /* ── Huisstijl ──────────────────────────────────────────────────
    Aubergine (catalogusdrukwerk van veilinghuizen) en messing (het kavelkaartje en de hamer).
    Groen, amber en rood zijn alleen voor het advies. */
+/* Lettertypes staan op de eigen server (geen Google Fonts: geen IP-adressen naar derden). Licentie: SIL OFL 1.1, zie fonts/ */
+@font-face{font-family:'Bricolage Grotesque';font-style:normal;font-display:swap;font-weight:200 800;src:url(fonts/bricolage-grotesque.woff2) format('woff2-variations'),url(fonts/bricolage-grotesque.woff2) format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:'Instrument Sans';font-style:normal;font-display:swap;font-weight:400 700;src:url(fonts/instrument-sans.woff2) format('woff2-variations'),url(fonts/instrument-sans.woff2) format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
 :root{
   --bg:#F5F4F7; --surface:#FFFFFF; --surface-2:#EFEDF2; --line:#E3E0E8; --line-2:#CCC6D4;
   --ink:#1D1A22; --ink-2:#4F4859; --ink-3:#6D6578;
@@ -505,6 +508,12 @@ button.plan-k:hover{border-color:var(--accent)}
 .form-rij{margin-bottom:12px}
 .form-rij label{display:block;font-size:13.5px;font-weight:600;margin-bottom:5px}
 .linkje{color:var(--link);text-decoration:underline;font-size:13.5px;padding:0}
+.acc-privacy{display:flex;flex-wrap:wrap;gap:8px 20px;align-items:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--line)}
+.acc-privacy .linkje{display:inline-flex;align-items:center;gap:6px;min-height:32px}
+.acc-privacy .linkje svg{width:16px;height:16px}
+.linkje.gevaar{color:var(--neg)}
+.home-voet{display:flex;gap:10px;justify-content:center;margin:28px 0 8px;font-size:13.5px;color:var(--ink-3)}
+.home-voet a{color:var(--ink-3)}
 
 /* Winst en statistiek */
 .winst-strip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:18px}
