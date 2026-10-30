@@ -247,8 +247,9 @@
     '- vaste_kosten: vast bedrag per kavel in euro vóór btw (bij btw_regeling "geen" inclusief btw). Niet gevonden: null.\n' +
     '- Partij van meerdere stuks: vul aantal_stuks in.\n' +
     '- voertuig: true bij een auto, bestelbus, motor, scooter, camper, caravan, aanhanger, tractor of boot met motor; anders false. Vul dan ook kenteken (zoals op de pagina), kilometerstand (getal, km) en bouwjaar in als ze op de pagina staan.\n' +
-    '- kosten.bron: korte letterlijke zin of vindplaats waar je de kosten zag.';
-  var PAGINA_JSON = '{"gevonden":true,"titel":"","veilinghuis":"","kavelnummer":"","product":{"merk":"","model":"","variant":"","zoekterm":"korte zoekterm om dit exacte product tweedehands te vinden"},' +
+    '- kosten.bron: korte letterlijke zin of vindplaats waar je de kosten zag.\n' +
+    '- veiling_naam: de naam van de veiling, het faillissement of de catalogus waar dit kavel bij hoort, zoals op de pagina (bijvoorbeeld "Faillissementsveiling Bouwbedrijf Jansen"). Niet het veilinghuis zelf en niet de kaveltitel. Niet gevonden: null.';
+  var PAGINA_JSON = '{"gevonden":true,"titel":"","veilinghuis":"","veiling_naam":null,"kavelnummer":"","product":{"merk":"","model":"","variant":"","zoekterm":"korte zoekterm om dit exacte product tweedehands te vinden"},' +
     '"staat":"nieuw|zo goed als nieuw|gebruikt|beschadigd|defect|onbekend","staat_toelichting":"","aantal_stuks":1,"voertuig":false,"kenteken":null,"kilometerstand":null,"bouwjaar":null,"huidig_bod":null,"aantal_biedingen":null,"sluit":null,"sluit_iso":null,"locatie":null,' +
     '"kosten":{"opgeld_pct":null,"vaste_kosten":null,"btw_pct":null,"btw_regeling":"onbekend","bron":""},"opmerkingen":[]}';
   function vandaag() { return new Date().toISOString().slice(0, 10); }
@@ -382,6 +383,7 @@
       direct_gelezen: !!bruikbaar,
       titel: kortTekst(j.titel, 200),
       veilinghuis: kortTekst(j.veilinghuis, 40),
+      veiling_naam: kortTekst(j.veiling_naam == null ? '' : String(j.veiling_naam), 120),
       kavelnummer: kortTekst(String(j.kavelnummer == null ? '' : j.kavelnummer), 20),
       zoekterm: kortTekst(p.zoekterm, 120) || kortTekst([p.merk, p.model, p.variant].filter(Boolean).join(' '), 120),
       staat: kortTekst(j.staat, 30),

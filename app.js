@@ -16,7 +16,7 @@ var huidigeThumb = null;
 var bodType = 'ander';
 var actieveFilter = 'alles';
 var zoekTerm = '';
-var sorteerOp = 'nieuw';
+var sorteerOp = (function() { try { var v = localStorage.getItem('va_sorteer'); return ['nieuw', 'veiling', 'sluit', 'advies', 'marge', 'prijs'].indexOf(v) !== -1 ? v : 'nieuw'; } catch (e) { return 'nieuw'; } })();
 var selectieModus = false;
 var geselecteerd = new Set();
 var huidigGefilterd = [];
@@ -26,6 +26,9 @@ var faseNu = 'invoer';
 
 // ── 2. UI-helpers ───────────────────────────────────────────────────────────
 var ICONS = {
+  bell: '<path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/>',
+  folder: '<path d="M3.5 7.5a1.5 1.5 0 0 1 1.5-1.5h4.5l2 2h7.5a1.5 1.5 0 0 1 1.5 1.5v8a1.5 1.5 0 0 1-1.5 1.5H5a1.5 1.5 0 0 1-1.5-1.5z"/>',
+  clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
   percent: '<path d="M19 5L5 19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/>',
   brand: '<path d="M10.5 4.5h8a1.5 1.5 0 0 1 1.5 1.5v12a1.5 1.5 0 0 1-1.5 1.5h-8L4 12z"/><circle cx="9.5" cy="12" r="1.6"/><path d="M13.5 9.5h3.5M13.5 14.5h3.5"/>',
   user: '<circle cx="12" cy="8.5" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/>',
@@ -1029,7 +1032,7 @@ function bouwKavel(res, inv) {
     ebay_gemiddeld: prijzen.ebay ? prijzen.ebay.gemiddeld : null,
     nieuwprijs: prijzen.nieuwprijs, prijzen: prijzen, live: prijzen.live,
     pagina: pagina ? { titel: pagina.titel, staat: pagina.staat, staat_toelichting: pagina.staat_toelichting, aantal_stuks: pagina.aantal_stuks,
-      aantal_biedingen: pagina.aantal_biedingen, sluit: pagina.sluit, sluit_iso: pagina.sluit_iso, locatie: pagina.locatie, opmerkingen: pagina.opmerkingen, foto: pagina.foto || null,
+      aantal_biedingen: pagina.aantal_biedingen, sluit: pagina.sluit, sluit_iso: pagina.sluit_iso, veiling_naam: pagina.veiling_naam || null, locatie: pagina.locatie, opmerkingen: pagina.opmerkingen, foto: pagina.foto || null,
       voertuig: !!pagina.voertuig, kenteken: pagina.kenteken || null, kilometerstand: pagina.kilometerstand || null, bouwjaar: pagina.bouwjaar || null, rdw: pagina.rdw || null } : null,
     zoekterm: (pagina && pagina.zoekterm) || null,
     waarschuwingen: res.waarschuwingen || [],
@@ -1040,6 +1043,8 @@ function bouwKavel(res, inv) {
     var oud = kavels[idx];
     if (typeof oud.verkoopkosten === 'number') k.verkoopkosten = oud.verkoopkosten;
     if (oud.thumb) k.thumb = oud.thumb;
+    if (oud.groep) k.groep = oud.groep;
+    if (oud.geen_melding) k.geen_melding = true;
     if (oud.notitie) k.notitie = oud.notitie;
   }
   herberekenKosten(k);
@@ -1424,6 +1429,7 @@ function toonAnalyseResultaat(d, behoudScroll) {
     '<div class="lt-v' + (rendabel ? '' : ' klein') + '">' + (ond || d.maxBod == null ? 'Nog onbekend' : rendabel ? fmt(d.maxBod) : 'Niet rendabel') + '</div>' +
     '<div class="lt-s">' + (ond || d.maxBod == null ? 'Eerst de prijs controleren' : 'voor ' + pctTxt(doelPct()) + '% marge<br>quitte bij ' + fmt(d.breakEvenBod)) + '</div></div>';
   h += '</div>';
+  h += standVanZaken(d);
   h += '<div class="hero-kpis">';
   h += '<div class="kpi"><div class="kpi-l">Handelspotentieel</div><div class="kpi-v">' + (ond ? '-' : (d.roi || 0) + '<span style="font-size:13px;font-weight:500;color:var(--ink-3)"> / 100</span>') + '</div>' + (ond ? '<div class="kpi-s">Pas beschikbaar na controle van de prijs</div>' : '<div class="meter"><i data-w="' + (d.roi || 0) + '"></i></div>') + '</div>';
   var aantalAdv = d.prijzen && d.prijzen.tweedehands ? d.prijzen.tweedehands.length : 0;
@@ -1432,7 +1438,11 @@ function toonAnalyseResultaat(d, behoudScroll) {
   h += '</div>';
   if (idx >= 0) {
     h += '<div class="kc-actions" style="margin-top:16px">';
-    if (pg.sluit_iso && Date.parse(pg.sluit_iso) > Date.now()) h += '<button class="btn btn-secondary btn-sm" onclick="zetInAgenda(' + idx + ')">' + ic('calendar') + 'Zet sluitingstijd in agenda</button>';
+    if (pg.sluit_iso && Date.parse(pg.sluit_iso) > Date.now()) {
+      h += '<button class="btn btn-secondary btn-sm" onclick="agendaKeuze(' + idx + ')">' + ic('calendar') + 'In agenda</button>';
+      if (serverModus() && account) h += '<button class="btn btn-secondary btn-sm" onclick="' + (d.geen_melding ? 'wisselKavelMelding(' + idx + ')' : 'meldingenScherm()') + '">' + ic('bell') + (d.geen_melding ? 'Meldingen aanzetten' : 'Meldingen') + '</button>';
+    }
+    h += '<button class="btn btn-secondary btn-sm" onclick="kiesGroep(' + idx + ')">' + ic('folder') + (d.groep ? esc(d.groep) : 'Groep') + '</button>';
     h += '<button class="btn btn-secondary btn-sm" onclick="deelKavel(' + idx + ')">' + ic('share') + 'Delen</button></div>';
   }
   h += '</div>';
@@ -1475,6 +1485,7 @@ function toonAnalyseResultaat(d, behoudScroll) {
     h += '<div class="empty small" style="border-style:solid"><h3>Nog geen bod bekend</h3><p>Vul een bod in om de totale kosten en de marge te zien.' + (d.maxBod > 0 ? ' Bied maximaal ' + fmt(d.maxBod) + ' voor ' + pctTxt(doelPct()) + '% marge.' : '') + '</p>' +
          (idx >= 0 ? '<button class="btn btn-primary" onclick="wijzigBod(' + idx + ')">Bod invullen</button>' : '') + '</div>';
   }
+  if (!ond) h += biedLadderHtml(d, idx);
   if (d.tarief_citaat) h += '<div class="note">' + ic('info') + '<span>Kosten op de kavelpagina: ' + esc(d.tarief_citaat) + '</span></div>';
   h += '</div>';
 
@@ -1583,7 +1594,7 @@ function toonAnalyseResultaat(d, behoudScroll) {
 // ── 6. Overzicht ────────────────────────────────────────────────────────────
 function setFilter(f) { actieveFilter = f; renderOverzicht(); }
 function setZoek(v) { zoekTerm = v.trim().toLowerCase(); renderOverzicht(); }
-function setSorteer(v) { sorteerOp = v; renderOverzicht(); }
+function setSorteer(v) { sorteerOp = v; try { localStorage.setItem('va_sorteer', v); } catch (e) {} renderOverzicht(); }
 
 function adviesVolgorde(k) { return k.advies === 'kopen' ? 0 : k.advies === 'twijfel' ? 1 : k.advies === 'skip' ? 2 : 3; }
 function sorteerKavels(lijst) {
@@ -1593,6 +1604,11 @@ function sorteerKavels(lijst) {
     var ma = a.kosten && a.kosten.marge != null ? a.kosten.marge : -Infinity;
     var mb = b.kosten && b.kosten.marge != null ? b.kosten.marge : -Infinity;
     return mb - ma;
+  });
+  else if (sorteerOp === 'sluit' || sorteerOp === 'veiling') l.sort(function(a, b) {
+    var ta = sluitMs(a), tb = sluitMs(b), nu = Date.now();
+    var va = ta && ta > nu ? ta : Infinity, vb = tb && tb > nu ? tb : Infinity;
+    return va - vb || (b.toegevoegd || 0) - (a.toegevoegd || 0);
   });
   else if (sorteerOp === 'prijs') l.sort(function(a, b) {
     var pa = a.huidig_bod != null ? a.huidig_bod : Infinity;
@@ -1623,6 +1639,8 @@ function maakKavelKaart(k, i, opts) {
   if (!opts.gewonnen) h += '<div class="selectie-col"><input type="checkbox" class="kavel-checkbox" aria-label="Selecteer kavel"' + (geselecteerd.has(i) ? ' checked' : '') + '></div>';
   h += '<div class="kc-thumb">' + thumbHtml(k) + '</div><div class="kc-head"><div class="kc-title">' + esc(k.titel || 'Onbekend') + '</div>';
   h += '<div class="kc-meta">' + esc(veilingVan(k)) + (k.kavelnummer ? ' &middot; Kavel ' + esc(k.kavelnummer) : '');
+  var kSluit = sluitMs(k);
+  if (!opts.gewonnen && kSluit) h += ' &middot; <span class="kc-sluit' + (kSluit > Date.now() && kSluit - Date.now() < 3 * 3600000 ? ' bijna' : '') + '">' + ic('clock') + (kSluit > Date.now() ? 'Sluit ' : '') + esc(sluitRelatief(kSluit)) + '</span>';
   if (opts.gewonnen) h += ' &middot; Gewonnen op ' + (k.gewonnen_op ? new Date(k.gewonnen_op).toLocaleDateString('nl-NL') : '-');
   if (url) h += ' &middot; <a href="' + esc(url) + '" target="_blank" rel="noopener" onclick="event.stopPropagation()">Bekijk kavel</a>';
   h += '</div>';
@@ -1680,6 +1698,7 @@ function maakKavelKaart(k, i, opts) {
   } else {
     knop('btn btn-ghost btn-sm', ic('trophy') + 'Gewonnen', null, function() { markeerGewonnen(echteIdx); });
     knop('btn btn-ghost btn-sm', ic('tag') + 'Bod', 'Bod wijzigen', function() { wijzigBod(echteIdx); });
+    knop('btn btn-ghost btn-sm', ic('folder') + 'Groep', 'Groep kiezen', function() { kiesGroep(echteIdx); });
     knop('btn btn-ghost btn-sm btn-icon btn-del', ic('trash'), 'Verwijderen', function() { verwijderKavel(echteIdx); });
     card.onclick = function() { if (selectieModus) selecteerRij(i); };
     var cb = card.querySelector('.kavel-checkbox');
@@ -1692,6 +1711,7 @@ function maakKavelKaart(k, i, opts) {
 function renderOverzicht() {
   var leeg = document.getElementById('ov-leeg');
   var inhoud = document.getElementById('ov-inhoud');
+  var sorteerSel = document.getElementById('sorteer'); if (sorteerSel && sorteerSel.value !== sorteerOp) sorteerSel.value = sorteerOp;
   document.getElementById('selecteer-btn').style.display = kavels.length === 0 ? 'none' : '';
   document.getElementById('export-btn').style.display = kavels.length === 0 ? 'none' : '';
   if (kavels.length === 0) { leeg.style.display = 'block'; inhoud.style.display = 'none'; return; }
@@ -1714,6 +1734,8 @@ function renderOverzicht() {
     return !zoekTerm || (k.titel || '').toLowerCase().indexOf(zoekTerm) !== -1;
   });
   gefilterd = sorteerKavels(gefilterd);
+  var groepen = sorteerOp === 'veiling' ? groepeerKavels(gefilterd) : null;
+  if (groepen) gefilterd = groepen.reduce(function(l, g) { return l.concat(g.kavels); }, []);
   huidigGefilterd = gefilterd;
 
   // Selectie ongeldig als de lijst veranderd is
@@ -1758,6 +1780,17 @@ function renderOverzicht() {
     return;
   }
 
+  if (groepen) {
+    var i = 0;
+    groepen.forEach(function(g) {
+      var kop = document.createElement('div');
+      kop.style.gridColumn = '1 / -1';
+      kop.innerHTML = groepKopHtml(g);
+      list.appendChild(kop);
+      g.kavels.forEach(function(k) { list.appendChild(maakKavelKaart(k, i++)); });
+    });
+    return;
+  }
   gefilterd.forEach(function(k, i) { list.appendChild(maakKavelKaart(k, i)); });
 }
 

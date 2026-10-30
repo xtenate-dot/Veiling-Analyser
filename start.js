@@ -34,6 +34,7 @@ var bh = document.getElementById('bladwijzer'); if (bh) bh.innerHTML = bladwijze
     if (p.get('betaald') === '0') toast('Betaling geannuleerd. Er is niets afgeschreven.');
     if (p.get('herstel')) vraagNieuwWachtwoord(p.get('herstel'));
   }
+  openKavelUitHash();
   if (gedeeld) {
     nieuwKavel();
     document.getElementById('kavel-url').value = gedeeld;
@@ -42,6 +43,16 @@ var bh = document.getElementById('bladwijzer'); if (bh) bh.innerHTML = bladwijze
   }
 })();
 setTimeout(function() { controleerTarieven(false); }, 600);
+// Een melding opent de app op /app#kavel-<id>: dan meteen dat kavel tonen
+function openKavelUitHash() {
+  var m = /^#kavel-(.+)$/.exec(location.hash || '');
+  if (!m) return;
+  history.replaceState(null, '', location.pathname + location.search);
+  var id = decodeURIComponent(m[1]);
+  var idx = kavels.findIndex(function(k) { return String(k.id) === id; });
+  if (idx >= 0) openDetail(idx);
+}
+window.addEventListener('hashchange', openKavelUitHash);
 
 // Service worker: app opent ook zonder internet en is installeerbaar
 if ('serviceWorker' in navigator && location.protocol === 'https:') {

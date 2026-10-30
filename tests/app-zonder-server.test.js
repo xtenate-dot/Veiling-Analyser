@@ -166,7 +166,9 @@ const STAP2_JSON = { productnaam: 'Apple iPhone 13 128GB', categorie: 'Telefoons
   check('Max bod bij 30% en €10: floor((420-10-3,025)/1,4278) = 285', k2.maxBod === 285, k2.maxBod);
 
   // ── 4. Kosten van één kavel aanpassen via de dialoog ──
+  await page.waitForFunction(() => !document.getElementById('modal').classList.contains('open'));
   await page.evaluate(() => { toonAnalyseResultaat(kavels[0]); pasTariefAan(0); });
+  await page.waitForSelector('#modal.open #pt-vast');
   await page.fill('#pt-opgeld', '10'); await page.selectOption('#pt-reg', 'opgeld'); await page.fill('#pt-vast', ''); await page.fill('#pt-vkst', '0');
   await page.click('#modal-actions .btn-primary');
   const k3 = await page.evaluate(() => kavels[0]);

@@ -41,7 +41,7 @@ function check(naam, ok, extra) { console.log((ok ? 'OK   ' : 'FOUT ') + naam + 
   check('Max bod bij €80 en 20%: floor(64 / 1,4157) = €45', k.maxBod === 45, k.maxBod);
   check('Klant ziet geen API-kosten', k.api_usd === null);
   check('Verbruik bijgewerkt: 1 van 3', await page.evaluate(() => account.gebruikt === 1));
-  check('Agenda-knop zichtbaar (sluitingstijd bekend)', await page.isVisible('text=Zet sluitingstijd in agenda'));
+  check('Agenda- en meldingenknop zichtbaar (sluitingstijd bekend)', await page.isVisible('button:has-text("In agenda")') && await page.isVisible('button:has-text("Meldingen")'));
   await page.screenshot({ path: OUT + '/srv-resultaat.png', fullPage: true });
 
   // Synchronisatie: nieuw apparaat ziet dezelfde kavels
@@ -92,6 +92,14 @@ function check(naam, ok, extra) { console.log((ok ? 'OK   ' : 'FOUT ') + naam + 
   const [ics] = await Promise.all([page.waitForEvent('download'), page.evaluate(i => zetInAgenda(i), idx)]);
   const icsTxt = require('fs').readFileSync(await ics.path(), 'utf8');
   check('Agenda-bestand: afspraak 15 min voor sluiting (18:00 UTC)', /DTSTART:20991031T174500Z/.test(icsTxt) && /DTEND:20991031T180000Z/.test(icsTxt), icsTxt.match(/DTSTART:\S+/)[0]);
+  // Agenda koppelen: persoonlijke link waar de agenda-app de sluittijden ophaalt
+  await page.evaluate(() => agendaKoppelen());
+  await page.waitForSelector('#ag-url');
+  const agUrl = await page.inputValue('#ag-url');
+  const agTxt = await page.evaluate(async u => (await fetch(u)).text(), agUrl);
+  check('Agenda koppelen: link geeft een agenda met de sluittijd van het kavel', /\/api\/agenda\/[0-9a-f]{48}\.ics$/.test(agUrl) && agTxt.startsWith('BEGIN:VCALENDAR') && /DTEND:20991031T180000Z/.test(agTxt), agUrl);
+  check('Agenda koppelen: knoppen voor iPhone (webcal), Google en Outlook', await page.locator('.ag-knoppen a').count() === 3 && (await page.getAttribute('.ag-knoppen a >> nth=0', 'href')).startsWith('webcal://'));
+  await page.evaluate(() => closeModal());
 
   // Gedeelde link (telefoon of bladwijzer)
   await page.goto('http://localhost:8080/app.html?text=' + encodeURIComponent('Kijk eens https://www.testveiling.nl/kavel/123 mooi'));

@@ -643,3 +643,51 @@ html{-webkit-tap-highlight-color:transparent}
 .sterren .ster.aan{color:var(--brass)}
 .sterren .ster.aan svg{fill:currentColor}
 .sterren .ster:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* Stand van zaken: bovenaan de uitslag, in één oogopslag */
+.stand{margin-top:18px}
+.sz-zin{display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border-radius:var(--r-sm);font-weight:600;font-size:15px;line-height:1.45;border:1px solid}
+.sz-zin .ico{flex:none;margin-top:1px}
+.sz-ok{background:var(--pos-soft);border-color:var(--pos-line);color:var(--pos)}
+.sz-warn{background:var(--warn-soft);border-color:var(--warn-line);color:var(--warn)}
+.sz-neg{background:var(--neg-soft);border-color:var(--neg-line);color:var(--neg)}
+.sz-zin span{color:var(--ink)}
+.sz-rij{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:10px}
+.sz-cel{background:var(--surface-2);border-radius:var(--r-sm);padding:10px 12px;min-width:0}
+.sz-l{font-size:12px;color:var(--ink-3);font-weight:600;text-transform:uppercase;letter-spacing:.03em}
+.sz-v{font-family:var(--ff-d);font-weight:800;font-size:22px;line-height:1.2;margin-top:2px;overflow-wrap:anywhere}
+.sz-v.pos{color:var(--pos)} .sz-v.neg{color:var(--neg)} .sz-v.warn{color:var(--warn)}
+.sz-s{font-size:12.5px;color:var(--ink-2);margin-top:2px}
+@media (max-width:640px){.sz-rij{grid-template-columns:repeat(2,minmax(0,1fr))}.sz-v{font-size:19px}}
+
+/* Marge bij andere biedingen */
+.ctable.bl th{font-size:12px;color:var(--ink-3);font-weight:600;text-align:right;padding:6px 0;border-bottom:1px solid var(--line)}
+.ctable.bl th:first-child{text-align:left}
+.ctable.bl td{text-align:right;font-weight:500}
+.ctable.bl td:first-child{text-align:left;font-weight:600}
+.ctable.bl td:last-child{font-weight:600}
+.ctable.bl td.pos{color:var(--pos)} .ctable.bl td.neg{color:var(--neg)}
+.ctable.bl tr.bl-max td{background:var(--accent-soft)}
+.ctable.bl tr.bl-max td:first-child{border-radius:8px 0 0 8px;padding-left:8px} .ctable.bl tr.bl-max td:last-child{border-radius:0 8px 8px 0;padding-right:8px}
+.bl-acties{margin-top:10px}
+
+/* Groepen per veiling */
+.groep-kop{display:flex;gap:10px;align-items:flex-start;margin:14px 0 2px;padding:10px 2px 6px;border-bottom:1px solid var(--line)}
+.groep-kop:first-child{margin-top:0}
+.groep-kop .ico{color:var(--ink-3);margin-top:2px}
+.gk-naam{font-family:var(--ff-d);font-weight:700;font-size:17px}
+.gk-sub{font-size:13px;color:var(--ink-2);margin-top:2px}
+.kc-sluit{display:inline-flex;align-items:center;gap:4px;white-space:nowrap}
+.kc-sluit .ico svg{width:13px;height:13px}
+.kc-sluit.bijna{color:var(--warn);font-weight:600}
+
+/* Agenda en meldingen */
+.ag-knoppen{display:flex;flex-direction:column;gap:8px}
+.ag-knoppen .btn{justify-content:flex-start}
+label.check{display:flex;gap:8px;align-items:center;font-size:14px;color:var(--ink)}
+.ag-knoppen a.btn{text-decoration:none}
+/* Op de telefoon: de stand van zaken meteen in beeld (het prijskaartje en de lange uitleg staan er al in) */
+@media (max-width:640px){
+  .hero .lot-tag,.hero .verdict p.uitleg,.hero .verdict p.reden{display:none}
+  .stand{margin-top:12px}
+}

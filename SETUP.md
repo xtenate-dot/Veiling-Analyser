@@ -32,7 +32,7 @@ FROM verbruik ORDER BY tijd DESC LIMIT 20;
   2. Homepage aanscherpen met wat ons anders maakt dan Geveild.com (zoekmachine en eindbiedingen van veilingen): "Plak één link, wij zoeken de verkoopprijs (Marktplaats, 2dehands, eBay) voor je op, met alle veilingkosten en je maximale bod." Welkomstbundel van 10 gratis analyses prominenter.
   3. Beslissen: extra functies alleen voor Handelaar en Handelaar Plus (bijvoorbeeld meerdere links tegelijk, exporteren, winst bijhouden)?
   4. Idee voor later: eindbiedingen per kavel bijhouden (privacy en techniek eerst uitzoeken).
-- **Feedback testronde (30 oktober 2026, vriendin van de eigenaar) — voor vanavond:**
+- **Feedback testronde (30 oktober 2026) — gebouwd op 30 oktober 's avonds** (stand van zaken bovenaan, marge per bod + Excel, groepen per veiling, agenda-abonnement, pushmeldingen). Meldingen draaien via een cron elke 5 minuten; de server maakt zijn eigen VAPID-sleutels en nieuwe tabellen zelf aan (geen handwerk in D1). Bij veel gebruikers: Workers Paid aanzetten (CPU-limiet en D1-daglimieten).
   1. Marge bij verschillende biedingen: in de app een korte tabel (5–6 biedingen: huidig bod, paar stappen erboven, maximaal bod, break-even) met kosten, winst en marge; volledige reeks in stappen van €5 (stap zelf te kiezen) als Excel-bestand.
   2. Eerste scherm in één oogopslag duidelijk: bovenaan meteen de stand van zaken (bieden ja/nee, tot hoeveel, huidig bod, sluit wanneer, verwachte winst); details daaronder.
   3. Groepen per veiling (bijvoorbeeld een faillissementsveiling): kavels van dezelfde veiling automatisch bij elkaar, met de naam van de veiling, het veilinghuis en de sluitdatum; de app herkent de veiling van de kavelpagina. Daarnaast eigen groepen en filters.

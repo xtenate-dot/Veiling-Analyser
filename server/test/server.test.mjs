@@ -4,7 +4,8 @@
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 import { createHmac } from 'node:crypto';
-import { verwerk } from '../src/index.js';
+import { verwerk, meldingenVersturen } from '../src/index.js';
+import { createECDH, hkdfSync, createDecipheriv, createPublicKey, verify as cryptoVerify } from 'node:crypto';
 import '../../kern.js';
 const K = globalThis.VAKern;
 
@@ -616,6 +617,99 @@ for (const n of [1, 2, 3]) await api('POST', '/api/analyse', { url: 'https://www
 const aiVoor = aanroepen.filter(a => a.url.startsWith('https://api.anthropic.com/')).length;
 r = await api('POST', '/api/analyse', { url: 'https://www.testveiling.nl/kavel/5104', hergebruik: false }, tkH);
 check('Na 3 mislukte analyses in een half uur: even wachten, geen nieuwe AI-kosten', r.status === 429 && r.data.code === 'even_wachten' && aanroepen.filter(a => a.url.startsWith('https://api.anthropic.com/')).length === aiVoor, r.data);
+
+// ── 20. Agenda-abonnement ──
+const ra = await api('POST', '/api/registreer', { email: 'agenda@voorbeeld.nl', wachtwoord: 'geheim123' });
+await bevestig(ra.data.token, 'agenda@voorbeeld.nl');
+const tkA = ra.data.token, idA = db.prepare("SELECT id FROM gebruikers WHERE email = 'agenda@voorbeeld.nl'").get().id;
+const over = m => new Date(Date.now() + m * 60000).toISOString();
+await api('PUT', '/api/kavels', { wijzig: [
+  { id: 'a1', titel: 'Boormachine, met; komma', maxBod: 120, url: 'https://www.testveiling.nl/kavel/a1', pagina: { sluit_iso: over(12) } },
+  { id: 'a2', titel: 'Gewonnen kavel', status: 'gewonnen', pagina: { sluit_iso: over(12) } },
+  { id: 'a3', titel: 'Stil kavel', geen_melding: true, pagina: { sluit_iso: over(12) } },
+  { id: 'a4', titel: 'Al gesloten', pagina: { sluit_iso: over(-3) } },
+  { id: 'a5', titel: 'Zonder sluittijd' } ] }, tkA);
+const sluitA1 = db.prepare("SELECT sluit FROM kavel_items WHERE gebruiker_id = ? AND id = 'a1'").get(idA).sluit;
+check('Sluittijd als kolom bewaard bij opslaan', Math.abs(sluitA1 - (Date.now() + 12 * 60000)) < 5000 && db.prepare("SELECT sluit FROM kavel_items WHERE gebruiker_id = ? AND id = 'a5'").get(idA).sluit === null, sluitA1);
+r = await api('POST', '/api/agenda-link', { nieuw: true }, tkA);
+const agendaUrl = r.data && r.data.url;
+check('Agendalink gemaakt (persoonlijk token, alleen de hash bewaard)', /^https:\/\/server\.test\/api\/agenda\/[0-9a-f]{48}\.ics$/.test(agendaUrl) && !db.prepare('SELECT token_hash FROM agenda WHERE gebruiker_id = ?').get(idA).token_hash.includes(agendaUrl.split('/').pop().slice(0, 48)), agendaUrl);
+const feed = await verwerk(new Request(agendaUrl), env);
+const ics = await feed.text();
+check('Agenda: geldige ics met de open kavels, herinnering, tekens ontsnapt', feed.status === 200 && /text\/calendar/.test(feed.headers.get('content-type')) && ics.startsWith('BEGIN:VCALENDAR') && ics.includes('Boormachine\\, met\\; komma') && ics.includes('TRIGGER:PT0M') && ics.includes('Stil kavel') && !ics.includes('Gewonnen kavel') && !ics.includes('Zonder sluittijd') && ics.split('\r\n').every(l => l.length <= 75), ics.slice(0, 200));
+r = await api('POST', '/api/agenda-link', { nieuw: true }, tkA);
+const oudFeed = await verwerk(new Request(agendaUrl), env);
+const nieuwFeed = await verwerk(new Request(r.data.url), env);
+check('Nieuwe agendalink: oude werkt niet meer, nieuwe wel', oudFeed.status === 404 && nieuwFeed.status === 200);
+const onzin = await verwerk(new Request('https://server.test/api/agenda/' + 'a'.repeat(48) + '.ics'), env);
+check('Onbekend agendatoken → 404', onzin.status === 404);
+
+// ── 21. Meldingen (Web Push) ──
+r = await api('GET', '/api/push-sleutel');
+const vapidPubliek = r.data.sleutel;
+check('Publieke VAPID-sleutel (65 bytes) wordt één keer gemaakt en daarna hergebruikt', Buffer.from(vapidPubliek, 'base64url').length === 65 && (await api('GET', '/api/push-sleutel')).data.sleutel === vapidPubliek);
+const ua = createECDH('prime256v1'); ua.generateKeys();
+const uaAuth = Buffer.from('0123456789abcdef');
+const abon = ep => ({ endpoint: ep, keys: { p256dh: ua.getPublicKey().toString('base64url'), auth: uaAuth.toString('base64url') } });
+for (const slecht of ['https://127.0.0.1/push', 'http://fcm.googleapis.com/x', 'https://fcm.googleapis.com.evil.test/x', 'https://evil.test/fcm.googleapis.com']) {
+  r = await api('POST', '/api/push-aan', { abonnement: abon(slecht) }, tkA);
+  if (r.status !== 400) check('Meldingsadres geweigerd: ' + slecht, false, r.status);
+}
+check('Alleen pushdiensten van browsers als meldingsadres (geen intern adres, geen nep-domein)', true);
+r = await api('POST', '/api/push-aan', { abonnement: abon('https://fcm.googleapis.com/fcm/send/abc123'), minuten: 15, bij_sluiting: true }, tkA);
+check('Meldingen aanzetten', r.status === 200 && db.prepare('SELECT COUNT(*) AS n FROM push_abonnementen WHERE gebruiker_id = ?').get(idA).n === 1);
+const pushes = [];
+let pushStatus = 201;
+globalThis.fetch = (orig => async (url, opt) => {
+  if (String(url).startsWith('https://fcm.googleapis.com/')) { pushes.push({ url: String(url), opt }); return new Response('', { status: pushStatus }); }
+  return orig(url, opt);
+})(globalThis.fetch);
+// Ontsleutelen zoals de browser het doet (RFC 8291), met Node's eigen crypto: een onafhankelijke controle
+function ontsleutel(body) {
+  const b = Buffer.from(body);
+  const zout = b.subarray(0, 16), idlen = b[20], asPubliek = b.subarray(21, 21 + idlen), geheim = b.subarray(21 + idlen);
+  const gedeeld = ua.computeSecret(asPubliek);
+  const ikm = Buffer.from(hkdfSync('sha256', gedeeld, uaAuth, Buffer.concat([Buffer.from('WebPush: info\0'), ua.getPublicKey(), asPubliek]), 32));
+  const cek = Buffer.from(hkdfSync('sha256', ikm, zout, Buffer.from('Content-Encoding: aes128gcm\0'), 16));
+  const nonce = Buffer.from(hkdfSync('sha256', ikm, zout, Buffer.from('Content-Encoding: nonce\0'), 12));
+  const d = createDecipheriv('aes-128-gcm', cek, nonce);
+  d.setAuthTag(geheim.subarray(geheim.length - 16));
+  const uit = Buffer.concat([d.update(geheim.subarray(0, geheim.length - 16)), d.final()]);
+  if (uit[uit.length - 1] !== 2) throw new Error('geen laatste-record-teken');
+  return JSON.parse(uit.subarray(0, uit.length - 1).toString());
+}
+function jwtKlopt(kop) {
+  const m = /^vapid t=([^,]+), k=(.+)$/.exec(kop);
+  if (!m || m[2] !== vapidPubliek) return false;
+  const [h, c, sig] = m[1].split('.');
+  const pub = Buffer.from(vapidPubliek, 'base64url');
+  const sleutel = createPublicKey({ key: { kty: 'EC', crv: 'P-256', x: pub.subarray(1, 33).toString('base64url'), y: pub.subarray(33).toString('base64url') }, format: 'jwk' });
+  const claims = JSON.parse(Buffer.from(c, 'base64url').toString());
+  return cryptoVerify('sha256', Buffer.from(h + '.' + c), { key: sleutel, dsaEncoding: 'ieee-p1363' }, Buffer.from(sig, 'base64url')) && claims.aud === 'https://fcm.googleapis.com' && claims.exp > Date.now() / 1000 && /^mailto:/.test(claims.sub);
+}
+let mv = await meldingenVersturen(env);
+const p1 = pushes.map(p => ({ kop: p.opt.headers, bericht: ontsleutel(p.opt.body) }));
+check('Herinnering 15 min voor sluiting: versleuteld, alleen voor het open kavel', p1.length === 2 && p1.some(p => /^Sluit over 1[12] min: Boormachine/.test(p.bericht.titel) && /Bied maximaal €120/.test(p.bericht.tekst) && p.bericht.url === '/app#kavel-a1') && p1.some(p => /^Veiling gesloten: Al gesloten/.test(p.bericht.titel)) && !p1.some(p => /Gewonnen|Stil/.test(p.bericht.titel)), p1.map(p => p.bericht.titel));
+check('Push-koppen: aes128gcm, geldige VAPID-handtekening', pushes.every(p => p.opt.headers['Content-Encoding'] === 'aes128gcm' && jwtKlopt(p.opt.headers.Authorization)));
+pushes.length = 0;
+mv = await meldingenVersturen(env);
+check('Geen dubbele meldingen bij de volgende ronde', pushes.length === 0, pushes.length);
+db.prepare('DELETE FROM push_verstuurd').run();
+pushStatus = 410;
+mv = await meldingenVersturen(env);
+check('Abonnement dat niet meer bestaat (410) wordt opgeruimd', db.prepare('SELECT COUNT(*) AS n FROM push_abonnementen WHERE gebruiker_id = ?').get(idA).n === 0);
+pushStatus = 201;
+await api('POST', '/api/push-aan', { abonnement: abon('https://fcm.googleapis.com/fcm/send/abc123') }, tkA);
+pushes.length = 0;
+r = await api('POST', '/api/push-test', {}, tkA);
+check('Testmelding komt aan', r.status === 200 && pushes.length === 1 && ontsleutel(pushes[0].opt.body).titel === 'Meldingen werken');
+r = await api('POST', '/api/push-uit', { endpoint: 'https://fcm.googleapis.com/fcm/send/abc123' }, tkA);
+check('Meldingen uitzetten', r.status === 200 && db.prepare('SELECT COUNT(*) AS n FROM push_abonnementen WHERE gebruiker_id = ?').get(idA).n === 0);
+await api('POST', '/api/push-aan', { abonnement: abon('https://fcm.googleapis.com/fcm/send/abc123') }, tkA);
+r = await api('GET', '/api/mijn-gegevens', null, tkA);
+check('Meldingen en agendalink staan in Mijn gegevens', r.data.meldingen.length === 1 && r.data.agenda_link && r.data.agenda_link.gemaakt);
+r = await api('POST', '/api/account-verwijderen', { wachtwoord: 'geheim123' }, tkA);
+check('Account verwijderen wist meldingen en agendalink', r.status === 200 && !db.prepare('SELECT 1 FROM push_abonnementen WHERE gebruiker_id = ?').get(idA) && !db.prepare('SELECT 1 FROM agenda WHERE gebruiker_id = ?').get(idA) && !db.prepare('SELECT 1 FROM push_verstuurd WHERE gebruiker_id = ?').get(idA));
 
 console.log('\n' + (aantal - fouten) + ' van ' + aantal + ' controles OK' + (fouten ? ' — ' + fouten + ' FOUT(EN)' : ''));
 process.exit(fouten ? 1 : 0);

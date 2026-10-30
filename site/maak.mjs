@@ -118,6 +118,17 @@ const HOME_NL = pagina({
   </div>
 </div></section>
 
+<section class="sectie"><div class="wrap">
+  <h2>Niet wat het op de veiling deed, maar wat jij eraan overhoudt</h2>
+  <p class="intro" style="margin:10px 0 22px">Andere sites laten zien wat vergelijkbare kavels op veilingen opbrachten. Veiling Analyser kijkt verder: wat brengt dit product op als je het daarna doorverkoopt, en tot welk bod houd je dan je marge?</p>
+  <div class="raster">
+    <div class="kaart"><h3>Per veiling overzichtelijk</h3><p>Kavels van dezelfde veiling of hetzelfde faillissement staan vanzelf bij elkaar, met de sluittijd erbij.</p></div>
+    <div class="kaart"><h3>Melding vóór de hamer</h3><p>Een seintje op je telefoon een kwartier voor sluiting, met je maximale bod erin.</p></div>
+    <div class="kaart"><h3>In je eigen agenda</h3><p>Koppel je agenda één keer en alle sluittijden staan er vanzelf in.</p></div>
+    <div class="kaart"><h3>Marge per bod</h3><p>Zie wat je overhoudt bij elk bod, en zet de hele reeks in Excel.</p></div>
+  </div>
+</div></section>
+
 <section class="sectie"><div class="wrap rij">
   <div>
     <h2>Het bod is niet wat je betaalt</h2>
@@ -201,8 +212,8 @@ function prijzenInhoud(nl) {
     knop: nl ? 'Kies ' + x.nl : 'Choose ' + x.en
   })).join('');
   const functies = nl
-    ? ['Echte vraagprijzen en verkochte items, met links', 'Opgeld, btw en kavelkosten van de kavelpagina', 'Maximaal bod voor de marge die jij kiest', 'Foto\'s laten bekijken bij een analyse', 'Auto\'s: gegevens uit het kentekenregister (RDW)', 'Meerdere links tegelijk analyseren', 'Je kavels op al je apparaten', 'Winst per verkocht kavel bijhouden en exporteren']
-    : ['Real asking prices and sold items, with links', 'Buyer\'s premium, VAT and lot fees from the lot page', 'Maximum bid for the margin you choose', 'Photo check during an analysis', 'Cars: data from the Dutch vehicle register (RDW)', 'Analyse several links at once', 'Your lots on all your devices', 'Track and export profit per sold lot'];
+    ? ['Echte vraagprijzen en verkochte items, met links', 'Opgeld, btw en kavelkosten van de kavelpagina', 'Maximaal bod voor de marge die jij kiest', 'Foto\'s laten bekijken bij een analyse', 'Auto\'s: gegevens uit het kentekenregister (RDW)', 'Meerdere links tegelijk analyseren', 'Kavels per veiling, meldingen en agenda voor sluittijden', 'Je kavels op al je apparaten', 'Winst per verkocht kavel bijhouden en exporteren']
+    : ['Real asking prices and sold items, with links', 'Buyer\'s premium, VAT and lot fees from the lot page', 'Maximum bid for the margin you choose', 'Photo check during an analysis', 'Cars: data from the Dutch vehicle register (RDW)', 'Analyse several links at once', 'Lots grouped per auction, closing alerts and calendar', 'Your lots on all your devices', 'Track and export profit per sold lot'];
   return `<section class="held"><div class="wrap smal" style="text-align:center">
   <h1>${nl ? 'Betaal voor wat je gebruikt' : 'Pay for what you use'}</h1>
   <p class="intro" style="margin:16px auto 0">${nl ? 'Begin met 10 gratis analyses. Bied je af en toe, koop dan een losse bundel. Bied je vaak, dan is een abonnement voordeliger. Alle prijzen zijn inclusief btw.' : 'Start with 10 free analyses. Bid now and then? Buy a one-off bundle. Bid often? A subscription is cheaper. All prices include VAT.'}</p>

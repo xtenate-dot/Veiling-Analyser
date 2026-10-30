@@ -138,3 +138,11 @@ CREATE TABLE IF NOT EXISTS verwijderd (
   oud_id INTEGER NOT NULL,
   tijd INTEGER NOT NULL
 );
+
+-- Meldingen en agenda (worden ook automatisch aangemaakt door de server)
+CREATE TABLE IF NOT EXISTS instellingen (sleutel TEXT PRIMARY KEY, waarde TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS push_abonnementen (id INTEGER PRIMARY KEY AUTOINCREMENT, gebruiker_id INTEGER NOT NULL, endpoint TEXT NOT NULL UNIQUE, p256dh TEXT NOT NULL, auth TEXT NOT NULL, minuten INTEGER NOT NULL DEFAULT 15, bij_sluiting INTEGER NOT NULL DEFAULT 1, gemaakt INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_push_gebruiker ON push_abonnementen(gebruiker_id);
+CREATE TABLE IF NOT EXISTS push_verstuurd (gebruiker_id INTEGER NOT NULL, kavel_id TEXT NOT NULL, soort TEXT NOT NULL, tijd INTEGER NOT NULL, PRIMARY KEY (gebruiker_id, kavel_id, soort));
+CREATE TABLE IF NOT EXISTS agenda (gebruiker_id INTEGER PRIMARY KEY, token_hash TEXT NOT NULL UNIQUE, gemaakt INTEGER NOT NULL);
+-- kavel_items krijgt een kolom sluit (sluittijd in ms) met index; de server voegt die zelf toe

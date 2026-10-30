@@ -2,6 +2,7 @@
 // Houdt de Anthropic-sleutel geheim, regelt accounts en abonnementen (Stripe),
 // bewaakt de maandlimiet per abonnement en een dagbudget, en synchroniseert kavels.
 import '../../kern.js';
+import { maakVapidSleutels, verstuurPush } from './webpush.js';
 
 const K = globalThis.VAKern;
 const MAAND_MS = 30 * 864e5;
@@ -337,7 +338,11 @@ async function mijnGegevens(request, env) {
   const aankopen = await env.DB.prepare('SELECT bundel, analyses, tijd FROM aankopen WHERE gebruiker_id = ? ORDER BY tijd').bind(g.id).all();
   const fb = await env.DB.prepare('SELECT tijd, soort, tekst, kavel_url, product FROM feedback WHERE gebruiker_id = ? ORDER BY tijd').bind(g.id).all();
   const rv = await env.DB.prepare('SELECT sterren, tekst, naam, tijd FROM reviews WHERE gebruiker_id = ?').bind(g.id).first();
+  const pa = await env.DB.prepare('SELECT minuten, bij_sluiting, gemaakt FROM push_abonnementen WHERE gebruiker_id = ?').bind(g.id).all();
+  const ag = await env.DB.prepare('SELECT gemaakt FROM agenda WHERE gebruiker_id = ?').bind(g.id).first();
   return json({
+    meldingen: (pa.results || []).map(p => ({ minuten_voor_sluiting: p.minuten, bij_sluiting: !!p.bij_sluiting, aangezet: iso(p.gemaakt) })),
+    agenda_link: ag ? { gemaakt: iso(ag.gemaakt) } : null,
     gemaakt_op: new Date().toISOString(),
     account: {
       email: g.email, aangemaakt: iso(g.aangemaakt), email_bevestigd: !!g.email_geverifieerd,
@@ -378,6 +383,9 @@ async function accountVerwijderen(request, env) {
     env.DB.prepare('UPDATE verbruik SET gebruiker_id = ?, url = NULL WHERE gebruiker_id = ?').bind(-g.id, g.id),
     env.DB.prepare('DELETE FROM kavels WHERE gebruiker_id = ?').bind(g.id),
     env.DB.prepare('DELETE FROM kavel_items WHERE gebruiker_id = ?').bind(g.id),
+    env.DB.prepare('DELETE FROM push_abonnementen WHERE gebruiker_id = ?').bind(g.id),
+    env.DB.prepare('DELETE FROM push_verstuurd WHERE gebruiker_id = ?').bind(g.id),
+    env.DB.prepare('DELETE FROM agenda WHERE gebruiker_id = ?').bind(g.id),
     env.DB.prepare('DELETE FROM tegoed WHERE gebruiker_id = ?').bind(g.id),
     env.DB.prepare('DELETE FROM feedback WHERE gebruiker_id = ?').bind(g.id),
     env.DB.prepare('DELETE FROM reviews WHERE gebruiker_id = ?').bind(g.id),
@@ -393,10 +401,173 @@ async function accountVerwijderen(request, env) {
 }
 
 // ── Dagelijks opruimen (cron) ────────────────────────────────────────────────
+// ── Database bijwerken zonder handwerk ───────────────────────────────────────
+// Nieuwe tabellen en kolommen komen er bij de eerste aanvraag vanzelf bij (CREATE IF NOT EXISTS).
+const SLUIT_UIT = col => "CAST((julianday(json_extract(" + col + ", '$.pagina.sluit_iso')) - 2440587.5) * 86400000 AS INTEGER)";
+let schemaKlaar = null;
+export function zorgVoorSchema(env) {
+  if (!schemaKlaar) schemaKlaar = (async () => {
+    await env.DB.batch([
+      env.DB.prepare('CREATE TABLE IF NOT EXISTS instellingen (sleutel TEXT PRIMARY KEY, waarde TEXT NOT NULL)'),
+      env.DB.prepare('CREATE TABLE IF NOT EXISTS push_abonnementen (id INTEGER PRIMARY KEY AUTOINCREMENT, gebruiker_id INTEGER NOT NULL, endpoint TEXT NOT NULL UNIQUE, p256dh TEXT NOT NULL, auth TEXT NOT NULL, minuten INTEGER NOT NULL DEFAULT 15, bij_sluiting INTEGER NOT NULL DEFAULT 1, gemaakt INTEGER NOT NULL)'),
+      env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_push_gebruiker ON push_abonnementen(gebruiker_id)'),
+      env.DB.prepare('CREATE TABLE IF NOT EXISTS push_verstuurd (gebruiker_id INTEGER NOT NULL, kavel_id TEXT NOT NULL, soort TEXT NOT NULL, tijd INTEGER NOT NULL, PRIMARY KEY (gebruiker_id, kavel_id, soort))'),
+      env.DB.prepare('CREATE TABLE IF NOT EXISTS agenda (gebruiker_id INTEGER PRIMARY KEY, token_hash TEXT NOT NULL UNIQUE, gemaakt INTEGER NOT NULL)')
+    ]);
+    let nieuweKolom = false;
+    try { await env.DB.prepare('ALTER TABLE kavel_items ADD COLUMN sluit INTEGER').run(); nieuweKolom = true; }
+    catch (e) { if (!/duplicate column/i.test(String(e && e.message))) throw e; }
+    await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_kavel_sluit ON kavel_items(sluit)').run();
+    if (nieuweKolom) await env.DB.prepare('UPDATE kavel_items SET sluit = ' + SLUIT_UIT('data') + " WHERE json_extract(data, '$.pagina.sluit_iso') IS NOT NULL").run();
+  })().catch(e => { schemaKlaar = null; throw e; });
+  return schemaKlaar;
+}
+
+// ── Agenda-abonnement: je opgeslagen kavels als agenda ───────────────────────
+async function agendaLink(request, env) {
+  const g = await huidigeGebruiker(request, env);
+  await limiet(env, 'agenda-link:' + g.id, 10, 3600000, 'Je hebt al veel nieuwe agendalinks gemaakt. Probeer het over een uur opnieuw.');
+  const token = hex(crypto.getRandomValues(new Uint8Array(24)));
+  await env.DB.prepare('INSERT INTO agenda (gebruiker_id, token_hash, gemaakt) VALUES (?, ?, ?) ON CONFLICT(gebruiker_id) DO UPDATE SET token_hash = excluded.token_hash, gemaakt = excluded.gemaakt')
+    .bind(g.id, await sha256(token), Date.now()).run();
+  const basis = new URL(request.url).origin; // de server zelf, waar de agenda wordt opgehaald
+  return json({ url: basis + '/api/agenda/' + token + '.ics' });
+}
+function icsTekst(s) { return String(s || '').replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n'); }
+function icsDatum(ms) { return new Date(ms).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, ''); }
+// Lange regels worden gevouwen (de agenda-standaard staat hooguit 75 bytes per regel toe; € telt als 3)
+function icsVouw(regel) {
+  const uit = [];
+  let rest = regel;
+  while (rest.length > 60) { uit.push(rest.slice(0, 60)); rest = ' ' + rest.slice(60); }
+  uit.push(rest);
+  return uit.join('\r\n');
+}
+async function agendaFeed(request, env, token) {
+  if (!/^[0-9a-f]{48}$/.test(token)) throw new Fout(404, 'onbekend', 'Onbekende agenda.');
+  await limiet(env, 'agenda:' + ipVan(request), 120, 3600000, 'Te veel verzoeken.');
+  const rij = await env.DB.prepare('SELECT gebruiker_id FROM agenda WHERE token_hash = ?').bind(await sha256(token)).first();
+  if (!rij) throw new Fout(404, 'onbekend', 'Onbekende agenda.');
+  const nu = Date.now();
+  const r = await env.DB.prepare("SELECT id, sluit, json_extract(data, '$.titel') AS titel, json_extract(data, '$.maxBod') AS max, json_extract(data, '$.url') AS url, json_extract(data, '$.status') AS status FROM kavel_items WHERE gebruiker_id = ? AND sluit IS NOT NULL AND sluit > ? ORDER BY sluit LIMIT 500")
+    .bind(rij.gebruiker_id, nu - 7 * 864e5).all();
+  const regels = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Veiling Analyser//NL', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
+    'X-WR-CALNAME:Veiling Analyser', 'X-WR-CALDESC:Sluittijden van je opgeslagen kavels', 'REFRESH-INTERVAL;VALUE=DURATION:PT1H', 'X-PUBLISHED-TTL:PT1H'];
+  for (const k of (r.results || [])) {
+    if (k.status === 'gewonnen') continue;
+    const url = typeof k.url === 'string' && /^https?:\/\//.test(k.url) ? k.url : '';
+    const tekst = (k.max > 0 ? 'Bied maximaal €' + Math.round(k.max).toLocaleString('nl-NL') + '. ' : '') + url;
+    regels.push('BEGIN:VEVENT', 'UID:kavel-' + String(k.id).replace(/[^\w.-]/g, '') + '@veilinganalyser.nl', 'DTSTAMP:' + icsDatum(nu),
+      'DTSTART:' + icsDatum(k.sluit - 15 * 60000), 'DTEND:' + icsDatum(k.sluit),
+      'SUMMARY:' + icsTekst('Veiling sluit: ' + String(k.titel || 'kavel').slice(0, 150)), 'DESCRIPTION:' + icsTekst(tekst));
+    if (url) regels.push('URL:' + url);
+    regels.push('BEGIN:VALARM', 'TRIGGER:PT0M', 'ACTION:DISPLAY', 'DESCRIPTION:' + icsTekst('Veiling sluit over 15 minuten'), 'END:VALARM', 'END:VEVENT');
+  }
+  regels.push('END:VCALENDAR');
+  return new Response(regels.map(icsVouw).join('\r\n') + '\r\n', { headers: { 'Content-Type': 'text/calendar; charset=utf-8', 'Cache-Control': 'private, max-age=900' } });
+}
+
+// ── Meldingen (Web Push) ─────────────────────────────────────────────────────
+// Alleen naar de pushdiensten van de browsers, zodat de server nooit naar willekeurige adressen post
+const PUSH_DIENSTEN = ['fcm.googleapis.com', 'android.googleapis.com', 'push.services.mozilla.com', 'push.apple.com', 'notify.windows.com'];
+function pushAdresGoed(endpoint) {
+  try {
+    const u = new URL(endpoint);
+    if (u.protocol !== 'https:' || u.port) return false;
+    const h = u.hostname.toLowerCase();
+    return PUSH_DIENSTEN.some(d => h === d || h.endsWith('.' + d));
+  } catch (e) { return false; }
+}
+async function vapidSleutels(env) {
+  const r = await env.DB.prepare("SELECT waarde FROM instellingen WHERE sleutel = 'vapid'").first();
+  if (r) return JSON.parse(r.waarde);
+  const nieuw = await maakVapidSleutels();
+  await env.DB.prepare("INSERT OR IGNORE INTO instellingen (sleutel, waarde) VALUES ('vapid', ?)").bind(JSON.stringify(nieuw)).run();
+  const terug = await env.DB.prepare("SELECT waarde FROM instellingen WHERE sleutel = 'vapid'").first();
+  return JSON.parse(terug.waarde); // bij twee gelijktijdige aanvragen wint de eerste
+}
+async function pushAan(request, env) {
+  const g = await huidigeGebruiker(request, env);
+  const b = await leesJson(request);
+  const ab = b.abonnement || {}, keys = ab.keys || {};
+  if (!pushAdresGoed(ab.endpoint) || String(ab.endpoint).length > 1000 || !/^[\w-]{80,100}$/.test(keys.p256dh || '') || !/^[\w-]{16,40}$/.test(keys.auth || ''))
+    throw new Fout(400, 'abonnement', 'Deze browser gaf een onbekend meldingsadres. Probeer een andere browser.');
+  const minuten = [5, 15, 30, 60].includes(Number(b.minuten)) ? Number(b.minuten) : 15;
+  const aantal = await env.DB.prepare('SELECT COUNT(*) AS n FROM push_abonnementen WHERE gebruiker_id = ? AND endpoint != ?').bind(g.id, ab.endpoint).first();
+  if (aantal && aantal.n >= 10) throw new Fout(400, 'te_veel', 'Meldingen staan al aan op 10 apparaten. Zet ze eerst op een ander apparaat uit.');
+  await env.DB.prepare('INSERT INTO push_abonnementen (gebruiker_id, endpoint, p256dh, auth, minuten, bij_sluiting, gemaakt) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(endpoint) DO UPDATE SET gebruiker_id = excluded.gebruiker_id, p256dh = excluded.p256dh, auth = excluded.auth, minuten = excluded.minuten, bij_sluiting = excluded.bij_sluiting')
+    .bind(g.id, ab.endpoint, keys.p256dh, keys.auth, minuten, b.bij_sluiting === false ? 0 : 1, Date.now()).run();
+  return json({ ok: true, minuten });
+}
+async function pushUit(request, env) {
+  const g = await huidigeGebruiker(request, env);
+  const b = await leesJson(request);
+  await env.DB.prepare('DELETE FROM push_abonnementen WHERE gebruiker_id = ? AND endpoint = ?').bind(g.id, String(b.endpoint || '')).run();
+  return json({ ok: true });
+}
+async function verstuurNaar(env, abonnementen, bericht) {
+  const vapid = await vapidSleutels(env);
+  let goed = 0;
+  for (const ab of abonnementen) {
+    let status = 0;
+    try { status = await verstuurPush(ab, bericht, vapid, 'mailto:' + (env.EIGENAAR_EMAIL || 'info@veilinganalyser.nl')); } catch (e) { console.error('push', e && e.message); }
+    if (status === 404 || status === 410) await env.DB.prepare('DELETE FROM push_abonnementen WHERE id = ?').bind(ab.id).run();
+    if (status >= 200 && status < 300) goed++;
+  }
+  return goed;
+}
+async function pushTest(request, env) {
+  const g = await huidigeGebruiker(request, env);
+  await limiet(env, 'push-test:' + g.id, 5, 3600000, 'Je hebt al een paar testmeldingen gestuurd. Probeer het later opnieuw.');
+  const r = await env.DB.prepare('SELECT * FROM push_abonnementen WHERE gebruiker_id = ?').bind(g.id).all();
+  const lijst = r.results || [];
+  if (!lijst.length) throw new Fout(400, 'geen_meldingen', 'Meldingen staan nog nergens aan.');
+  const goed = await verstuurNaar(env, lijst, { titel: 'Meldingen werken', tekst: 'Je krijgt hier een seintje voordat een veiling van je kavels sluit.', url: '/app' });
+  if (!goed) throw new Fout(502, 'push', 'De melding kon niet worden afgeleverd. Zet meldingen uit en weer aan.');
+  return json({ ok: true, verstuurd: goed });
+}
+// Elke 5 minuten: herinneringen voor kavels die binnenkort sluiten, en een seintje bij sluiting
+export async function meldingenVersturen(env, nu = Date.now()) {
+  const r = await env.DB.prepare("SELECT gebruiker_id, id, sluit, json_extract(data, '$.titel') AS titel, json_extract(data, '$.maxBod') AS max, json_extract(data, '$.huidig_bod') AS bod FROM kavel_items WHERE sluit BETWEEN ? AND ? AND COALESCE(json_extract(data, '$.status'), '') != 'gewonnen' AND COALESCE(json_extract(data, '$.geen_melding'), 0) != 1 AND gebruiker_id IN (SELECT gebruiker_id FROM push_abonnementen) ORDER BY sluit LIMIT 500")
+    .bind(nu - 10 * 60000, nu + 61 * 60000).all();
+  const kavelRijen = r.results || [];
+  if (!kavelRijen.length) return { verstuurd: 0 };
+  const gebruikers = [...new Set(kavelRijen.map(k => k.gebruiker_id))];
+  const ab = await env.DB.prepare('SELECT * FROM push_abonnementen WHERE gebruiker_id IN (SELECT value FROM json_each(?))').bind(JSON.stringify(gebruikers)).all();
+  const al = await env.DB.prepare('SELECT gebruiker_id, kavel_id, soort FROM push_verstuurd WHERE kavel_id IN (SELECT value FROM json_each(?))').bind(JSON.stringify(kavelRijen.map(k => String(k.id)))).all();
+  const gehad = new Set((al.results || []).map(x => x.gebruiker_id + '|' + x.kavel_id + '|' + x.soort));
+  const fmtE = n => '€' + Math.round(n).toLocaleString('nl-NL');
+  let verstuurd = 0;
+  for (const k of kavelRijen) {
+    const titel = String(k.titel || 'je kavel').slice(0, 80);
+    const per = {};
+    for (const a of (ab.results || []).filter(x => x.gebruiker_id === k.gebruiker_id)) {
+      const tot = k.sluit - nu;
+      let soort = null, bericht = null;
+      if (tot > 0 && tot <= a.minuten * 60000 + 60000) {
+        soort = 'h' + a.minuten;
+        const min = Math.max(1, Math.round(tot / 60000));
+        bericht = { titel: 'Sluit over ' + min + ' min: ' + titel, tekst: (k.max > 0 ? 'Bied maximaal ' + fmtE(k.max) + '.' : 'Bekijk het kavel.') + (k.bod > 0 ? ' Huidig bod ' + fmtE(k.bod) + '.' : ''), url: '/app#kavel-' + k.id, tag: 'kavel-' + k.id };
+      } else if (tot <= 0 && a.bij_sluiting) {
+        soort = 's';
+        bericht = { titel: 'Veiling gesloten: ' + titel, tekst: 'Gewonnen? Markeer het in de app, dan houdt de app je winst bij.', url: '/app#kavel-' + k.id, tag: 'kavel-' + k.id };
+      }
+      if (!soort || gehad.has(k.gebruiker_id + '|' + k.id + '|' + soort)) continue;
+      (per[soort] = per[soort] || { bericht, lijst: [] }).lijst.push(a);
+    }
+    for (const soort of Object.keys(per)) {
+      await env.DB.prepare('INSERT OR IGNORE INTO push_verstuurd (gebruiker_id, kavel_id, soort, tijd) VALUES (?, ?, ?, ?)').bind(k.gebruiker_id, String(k.id), soort, nu).run();
+      verstuurd += await verstuurNaar(env, per[soort].lijst, per[soort].bericht);
+    }
+  }
+  return { verstuurd };
+}
+
 export async function opruimen(env, nu = Date.now()) {
   const dag = 864e5;
   const stappen = [
     ['sessies', 'DELETE FROM sessies WHERE verloopt < ?', [nu]],
+    ['push-verstuurd', 'DELETE FROM push_verstuurd WHERE tijd < ?', [nu - 7 * 864e5]],
     ['herstel', 'DELETE FROM herstel WHERE verloopt < ?', [nu]],
     ['verificatie', 'DELETE FROM verificatie WHERE verloopt < ?', [nu - dag]],
     ['pogingen', 'DELETE FROM pogingen WHERE tijd < ?', [nu - dag]],
@@ -710,7 +881,7 @@ async function zetOudeKavelsOver(env, gebruikerId) {
   if (!oud) return;
   const lijst = (JSON.parse(oud.data) || []).filter(k => kavelId(k));
   if (lijst.length) {
-    await env.DB.prepare("INSERT OR IGNORE INTO kavel_items (gebruiker_id, id, data, bijgewerkt) SELECT ?, CAST(json_extract(value, '$.id') AS TEXT), value, ? FROM json_each(?)")
+    await env.DB.prepare("INSERT OR IGNORE INTO kavel_items (gebruiker_id, id, data, bijgewerkt, sluit) SELECT ?, CAST(json_extract(value, '$.id') AS TEXT), value, ?, " + SLUIT_UIT('value') + " FROM json_each(?)")
       .bind(gebruikerId, Date.now(), JSON.stringify(lijst)).run();
   }
   await env.DB.prepare('DELETE FROM kavels WHERE gebruiker_id = ?').bind(gebruikerId).run();
@@ -764,7 +935,7 @@ async function kavelsOpslaan(request, env) {
     const ruimte = await env.DB.prepare('SELECT COALESCE(SUM(length(data)), 0) AS n FROM kavel_items WHERE gebruiker_id = ? AND id NOT IN (SELECT value FROM json_each(?))').bind(g.id, ids2).first();
     const erbij = goed.reduce((t, k) => t + JSON.stringify(k).length, 0);
     if ((ruimte ? ruimte.n : 0) + erbij > MAX_KAVELS_TOTAAL) throw new Fout(413, 'te_veel', 'Je opgeslagen kavels nemen te veel ruimte in (maximaal 20 MB). Verwijder oude kavels of foto\'s.');
-    await env.DB.prepare("INSERT OR REPLACE INTO kavel_items (gebruiker_id, id, data, bijgewerkt) SELECT ?, CAST(json_extract(value, '$.id') AS TEXT), value, ? FROM json_each(?)")
+    await env.DB.prepare("INSERT OR REPLACE INTO kavel_items (gebruiker_id, id, data, bijgewerkt, sluit) SELECT ?, CAST(json_extract(value, '$.id') AS TEXT), value, ?, " + SLUIT_UIT('value') + " FROM json_each(?)")
       .bind(g.id, nu, JSON.stringify(goed)).run();
   }
   return json(Object.assign({ ok: true, bijgewerkt: nu }, kavelStatus(await aantalKavels(env, g.id))));
@@ -899,6 +1070,11 @@ const ROUTES = {
   'POST /api/review': reviewSchrijven,
   'POST /api/review-verwijderen': reviewVerwijderen,
   'POST /api/analyse': analyse,
+  'POST /api/agenda-link': agendaLink,
+  'GET /api/push-sleutel': async (req, env) => json({ sleutel: (await vapidSleutels(env)).publiek }),
+  'POST /api/push-aan': pushAan,
+  'POST /api/push-uit': pushUit,
+  'POST /api/push-test': pushTest,
   'GET /api/kavels': kavelsLezen,
   'PUT /api/kavels': kavelsOpslaan,
   'POST /api/afrekenen': afrekenen,
@@ -910,10 +1086,12 @@ export async function verwerk(request, env) {
   const cors = corsHeaders(request, env);
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
   const pad = new URL(request.url).pathname.replace(/\/+$/, '');
-  const route = ROUTES[request.method + ' ' + pad];
+  const agendaPad = request.method === 'GET' && pad.match(/^\/api\/agenda\/([^/]+)\.ics$/);
+  const route = agendaPad ? (req, e) => agendaFeed(req, e, agendaPad[1]) : ROUTES[request.method + ' ' + pad];
   let resp;
   try {
     if (!route) throw new Fout(404, 'onbekend', 'Onbekend adres.');
+    await zorgVoorSchema(env);
     resp = await route(request, env);
   } catch (e) {
     if (e instanceof Fout) resp = json({ fout: e.message, code: e.code }, e.status);
@@ -934,5 +1112,8 @@ export async function verwerk(request, env) {
 
 export default {
   fetch: (request, env) => verwerk(request, env),
-  scheduled: (event, env, ctx) => { ctx.waitUntil(opruimen(env)); }
+  // Twee schema's: elke 5 minuten meldingen, elke nacht opruimen
+  scheduled: (event, env, ctx) => {
+    ctx.waitUntil(zorgVoorSchema(env).then(() => event.cron === '*/5 * * * *' ? meldingenVersturen(env) : opruimen(env)));
+  }
 };

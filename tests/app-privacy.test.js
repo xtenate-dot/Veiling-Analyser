@@ -37,7 +37,7 @@ function check(naam, ok, extra) { console.log((ok ? 'OK   ' : 'FOUT ') + naam + 
   await page.waitForTimeout(1800);
 
   await page.evaluate(() => toonAccount());
-  check('Account toont review, downloaden en verwijderen', await page.locator('.acc-privacy .linkje').count() === 3);
+  check('Account toont meldingen, agenda, review, downloaden en verwijderen', await page.locator('.acc-privacy .linkje').count() === 5);
   await page.screenshot({ path: OUT + '/account-privacy.png' });
   const [dl] = await Promise.all([page.waitForEvent('download'), page.locator('.acc-privacy .linkje', { hasText: 'downloaden' }).click()]);
   const inhoud = JSON.parse(fs.readFileSync(await dl.path(), 'utf8'));

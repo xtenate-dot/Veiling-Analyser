@@ -228,6 +228,7 @@ function toonAccount() {
     }
     h += '<p class="help betaalmiddelen">Betalen kan met iDEAL, Bancontact of creditcard. Alle prijzen zijn inclusief btw.</p>';
   }
+  h += '<h3 class="acc-kop">Sluittijden</h3><div class="acc-privacy" style="margin-top:6px"><button type="button" class="linkje" onclick="meldingenScherm()">' + ic('bell') + 'Meldingen op dit apparaat</button><button type="button" class="linkje" onclick="agendaKoppelen()">' + ic('calendar') + 'Agenda koppelen</button></div>';
   h += '<div class="acc-privacy"><button type="button" class="linkje" onclick="vraagReview()">' + ic('star') + 'Review schrijven</button><button type="button" class="linkje" onclick="downloadGegevens()">' + ic('download') + 'Mijn gegevens downloaden</button>' +
     '<button type="button" class="linkje gevaar" onclick="vraagVerwijderen()">Account verwijderen</button></div>';
   var acties = [{ label: 'Uitloggen', cls: 'btn-ghost', fn: uitloggen }];
@@ -343,6 +344,9 @@ async function verwijderAccount() {
   finally { verwijderBezig = false; }
 }
 async function uitloggen() {
+  // Meldingen van dit account horen niet meer op dit apparaat te komen
+  try { var ab = await huidigAbonnement(); if (ab) { await apiCall('/api/push-uit', { method: 'POST', body: { endpoint: ab.endpoint } }); await ab.unsubscribe(); } } catch (e) {}
+  try { localStorage.removeItem('va_agenda_url'); localStorage.removeItem('va_meldingen'); } catch (e) {}
   try { await apiCall('/api/uitloggen', { method: 'POST' }); } catch (e) {}
   zetSessie(''); account = null; syncStand = {}; bewaarSyncStand(); werkAccountBij();
   toast('Uitgelogd. Je kavels blijven op dit apparaat staan.');
