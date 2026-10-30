@@ -27,6 +27,11 @@ FROM verbruik ORDER BY tijd DESC LIMIT 20;
 
 ## Afspraken en nog te doen
 
+- **Nog te doen (afgesproken 30 oktober 2026, als de eigenaar toegang kan geven):**
+  1. Google Search Console: veilinganalyser.nl aanmelden, eigendom bevestigen met een TXT-record in Cloudflare DNS, sitemap `https://veilinganalyser.nl/sitemap.xml` indienen.
+  2. Homepage aanscherpen met wat ons anders maakt dan Geveild.com (zoekmachine en eindbiedingen van veilingen): "Plak één link, wij zoeken de verkoopprijs (Marktplaats, 2dehands, eBay) voor je op, met alle veilingkosten en je maximale bod." Welkomstbundel van 10 gratis analyses prominenter.
+  3. Beslissen: extra functies alleen voor Handelaar en Handelaar Plus (bijvoorbeeld meerdere links tegelijk, exporteren, winst bijhouden)?
+  4. Idee voor later: eindbiedingen per kavel bijhouden (privacy en techniek eerst uitzoeken).
 - **Rondleiding Cloudflare (afgesproken 29 oktober 2026):** als de app af is, krijgt de eigenaar een rondleiding door het Cloudflare-dashboard. Onderdelen: de Worker en Deployments (versies terugzetten), Variables and Secrets, logboeken bij fouten, de D1-database, de nachtelijke opruimtaak, Turnstile, het domein en de DNS, en de kosten en limieten. Doel: vragen van klanten zelf kunnen beantwoorden.
 - **Alles via Cloudflare:** app, server en de promotiewebsite komen op Cloudflare, op veilinganalyser.nl. De DNS van het domein gaat daarvoor van Vimexx naar Cloudflare; de registratie blijft bij Vimexx.
 - **Werklijst avond 29 oktober 2026** (goedgekeurd door de eigenaar):
