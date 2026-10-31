@@ -372,6 +372,7 @@ function syncVanSheets() {
           k.eigen_bod = k.eigen_bod === true || k.eigen_bod === 'true' || k.eigen_bod === 'TRUE';
           return k;
         });
+        herberekenAlles();
         localStorage.setItem('hnvi_kavels', JSON.stringify(kavels));
         updateBadge();
         renderOverzicht();
@@ -386,6 +387,11 @@ function syncVanSheets() {
 
 function laadKavels() {
   try { kavels = JSON.parse(localStorage.getItem('hnvi_kavels') || '[]'); } catch(e) { kavels = []; }
+  herberekenAlles();
+}
+// Rekenregels kunnen veranderen: open kavels altijd met de huidige regels doorrekenen (alleen lokaal, geen sync)
+function herberekenAlles() {
+  kavels.forEach(function(k) { if (k && k.status !== 'gewonnen') { try { herberekenKosten(k); } catch (e) {} } });
 }
 function slaKavelsOp() {
   try { localStorage.setItem('hnvi_kavels', JSON.stringify(kavels)); } catch (e) { toast('Opslaan op dit apparaat lukt niet: de opslag is vol of geblokkeerd.', null, true); }

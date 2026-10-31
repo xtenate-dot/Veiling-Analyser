@@ -409,6 +409,7 @@ async function haalKavelsVanServer() {
     bewaarSyncStand();
     var alleenHier = kavels.filter(function(k) { return !opServer[k.id]; });
     kavels = (d.kavels || []).concat(alleenHier);
+    herberekenAlles();
     try { localStorage.setItem('hnvi_kavels', JSON.stringify(kavels)); } catch (e) {}
     if (alleenHier.length) syncNaarServer();
     toonKavelWaarschuwing(d);
