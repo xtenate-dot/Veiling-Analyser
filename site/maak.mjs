@@ -269,7 +269,7 @@ const GIDS = [
     kort: 'Opgeld verschilt per veiling, plus btw',
     cijfers: [['Opgeld', 'Per veiling', 'staat bij de veiling'], ['Btw', 'Erbij', 'volgens de veiling'], ['Vaste kosten per kavel', 'Geen', 'in de algemene voorwaarden']],
     tekst: '<p>Troostwijk rekent opgeld: een percentage over je bod, plus btw. Hoe hoog dat percentage is, staat niet in de algemene voorwaarden maar in de voorwaarden van elke veiling. Kijk dus per veiling, of laat de app het van de kavelpagina lezen.</p><p>Biedingen zijn altijd zonder opgeld en belastingen: wat je bovenop je bod betaalt, komt er na het gunnen bij.</p>',
-    extra: '<h2>Let op</h2><ul class="lijst"><li>Haal je een kavel niet op tijd op, dan kan Troostwijk opslag- en administratiekosten rekenen, volgens de algemene voorwaarden minstens €350.</li><li>Herroep je als consument een aankoop, dan rekent Troostwijk volgens de voorwaarden €25 per kavel voor de kosten.</li></ul>',
+    extra: '<h2>Let op</h2><ul class="lijst"><li>Haal je een kavel niet op tijd op, dan kan Troostwijk opslag- en administratiekosten rekenen, volgens de algemene voorwaarden minstens €350.</li><li>Herroep je als consument een aankoop, dan rekent Troostwijk volgens de voorwaarden €25 per kavel voor de kosten.</li></ul><h2>BVA Auctions</h2><p>De website van BVA Auctions (bva-auctions.com) stuurt inmiddels door naar Troostwijk Auctions (gecontroleerd op 31 oktober 2026). Beide horen bij TBAuctions.</p>',
     bron: 'Algemene voorwaarden online veiling TroostwijkAuctions.com', bronUrl: 'https://api.troostwijkauctions.com/salefile/terms/36301/0/126?language=nl'
   },
   {
@@ -296,6 +296,14 @@ const GIDS = [
     bron: 'Algemene voorwaarden Venduehuis (november 2024)', bronUrl: 'https://www.venduehuis.com/static/uploads/96/Algemene%20Voorwaarden%20NL%20Nov%202024.pdf'
   },
   {
+    slug: 'vavato', naam: 'Vavato', land: 'België en Nederland',
+    kort: 'Veilingkosten per veiling, plus 21% btw',
+    cijfers: [['Veilingkosten', 'Per veiling', 'niet in de algemene voorwaarden'], ['Btw over de veilingkosten', '21%', 'over de koopprijs alleen als die onder de btw valt'], ['Opslag bij te laat ophalen', '€30', 'per kavel per week, voertuigen €90']],
+    tekst: '<p>Bij Vavato betaal je bovenop de koopprijs veilingkosten, plus 21% btw. Hoe hoog die veilingkosten zijn, staat niet in de algemene voorwaarden maar bij de veiling. Over de koopprijs zelf komt btw als het kavel daaronder valt; bij elk kavel staat bij &quot;Marge&quot; of de margeregeling geldt.</p><p>Vavato hoort bij TBAuctions, net als Troostwijk. Hetzelfde kavel kan daarom ook op andere sites van TBAuctions staan.</p>',
+    extra: '<h2>Let op</h2><ul class="lijst"><li>Ophalen kan alleen op de afhaaldag die bij het kavel staat; die datum kun je niet veranderen.</li><li>Haal je een kavel bij Vavato zelf te laat op, dan betaal je opslag: €30 per kavel per week, voor voertuigen €90. Vavato kan de koop ook ontbinden en 25% van de waarde van het kavel plus de veilingkosten rekenen, minstens €25.</li><li>Betaal je niet op tijd, dan geldt diezelfde vergoeding van 25%, minstens €25.</li><li>Wil je boven €4.000 bieden, dan vraagt Vavato een borg van €200.</li></ul>',
+    bron: 'Algemene voorwaarden Vavato (versie 2 mei 2024)', bronUrl: 'https://www.troostwijkauctions.com/en/vavato-terms-and-conditions'
+  },
+  {
     slug: 'nedveiling', naam: 'Nedveiling', land: 'Nederland',
     kort: '15% opgeld, plus btw over het opgeld',
     cijfers: [['Opgeld', '15%', 'tenzij vooraf anders vermeld'], ['Btw', '21%', 'over het opgeld'], ['Vaste kosten per kavel', 'Geen', 'in de voorwaarden']],
@@ -304,7 +312,7 @@ const GIDS = [
     bron: 'Veilingvoorwaarden Nedveiling (pdf)', bronUrl: 'https://www.nedveiling.nl/files/terms.pdf'
   }
 ];
-const NOG = ['BVA Auctions', 'Vavato', 'Onlineveilingmeester', 'Klaz', 'Surplex', 'Openbare Verkopen', 'Dome Auctions', 'Auctelia', 'DTZ'];
+const NOG = ['Onlineveilingmeester', 'Klaz', 'Surplex', 'Openbare Verkopen', 'Dome Auctions', 'Auctelia', 'DTZ'];
 function gidsPagina(h) {
   const v = h.voorbeeld;
   const tabel = v ? `<div class="tabel-box"><table class="tabel"><caption>Rekenvoorbeeld: bod van ${euro(v.bod)}</caption><tbody><tr><td>Bod</td><td>${euro(v.bod)}</td></tr>${v.regels.map(([a, b]) => `<tr><td>${a}</td><td>${euro(b)}</td></tr>`).join('')}<tr class="totaal"><td>Totaal</td><td>${euro(v.totaal)}</td></tr></tbody></table></div>${v.noot ? `<p class="bron">${v.noot}</p>` : ''}` : '';
