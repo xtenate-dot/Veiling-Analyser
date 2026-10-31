@@ -207,7 +207,7 @@ function sluitDatumTxt(ms) {
 }
 
 // ── Stand van zaken: in één oogopslag waar je staat ──
-function standZin(d) {
+function standZinBasis(d) {
   var bod = d.huidig_bod > 0 ? d.huidig_bod : null;
   if (partijOnbetrouwbaar(d)) return { cls: 'warn', tekst: 'Controleer eerst de opbrengst per stuk; daarna zie je tot hoeveel je kunt bieden.' };
   if (d.maxBod == null) return { cls: 'warn', tekst: 'Er is geen verkoopprijs bekend, dus nog geen maximaal bod.' };
@@ -216,6 +216,11 @@ function standZin(d) {
   if (bod > d.breakEvenBod) return { cls: 'neg', tekst: 'Niet meer bieden: het bod ligt al boven het punt waarop je quitte speelt (' + fmt(d.breakEvenBod) + ').' };
   if (bod > d.maxBod) return { cls: 'warn', tekst: 'Het bod ligt boven je maximum. Je verdient nog iets, maar minder dan je ' + pctTxt(doelPct()) + '% marge.' };
   return { cls: 'ok', tekst: 'Je kunt nog ' + fmt(d.maxBod - bod) + ' hoger bieden en houdt dan ' + pctTxt(doelPct()) + '% marge over.' };
+}
+function standZin(d) {
+  var z = standZinBasis(d);
+  if (partijGeschat(d) && d.maxBod != null) z.tekst += ' Let op: dit is een schatting voor ' + partijGeschat(d) + ' stuks; controleer de opbrengst per stuk.';
+  return z;
 }
 function standVanZaken(d) {
   var pg = d.pagina || {}, ms = sluitMs(d), z = standZin(d);

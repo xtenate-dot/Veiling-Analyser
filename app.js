@@ -473,6 +473,8 @@ function verkoopkostenVan(k) {
   return (typeof k.verkoopkosten === 'number' && isFinite(k.verkoopkosten) && k.verkoopkosten >= 0) ? k.verkoopkosten : getInst().verkoopkosten;
 }
 function verkoopprijsVan(k) {
+  var n = partijGeschat(k);
+  if (n) { var per = partijPerStuk(k); return per > 0 ? Math.round(per * n * PARTIJ_FACTOR) : null; }
   var mp = k.prijzen && k.prijzen.marktplaats ? k.prijzen.marktplaats : null;
   var g = k.controle ? k.controle.mp_gem : (mp ? mp.gemiddeld : k.mp_gemiddeld);
   return (typeof g === 'number' && isFinite(g) && g > 0) ? g : null;
@@ -1141,6 +1143,7 @@ function veilingVan(k) { return k.veiling || (k.kosten && k.kosten.site) || 'Onb
 
 function adviesRedenen(d) {
   var r = [];
+  if (partijGeschat(d)) r.push(['warn', 'Schatting voor een partij van ' + partijGeschat(d) + ' stuks: ' + fmt(partijPerStuk(d)) + ' per stuk × ' + partijGeschat(d) + ' × ' + Math.round(PARTIJ_FACTOR * 100) + '% (je verkoopt een partij zelden helemaal tegen losse prijzen) = ' + fmt(verkoopprijsVan(d)) + '. Klopt het aantal of de prijs per stuk niet, pas het dan aan onder Prijzen controleren.']);
   if (partijOnbetrouwbaar(d)) r.push(['warn', 'Dit lijkt een partij van meerdere stuks' + (partijAantal(d) ? ' (ongeveer ' + partijAantal(d) + ')' : '') + '. De prijs geldt voor één stuk, dus het kavel is niet zonder meer te beoordelen. Controleer onder Prijzen controleren de opbrengst per stuk.']);
   (d.waarschuwingen || []).forEach(function(w) { r.push(['warn', w]); });
   if (partijOnbetrouwbaar(d)) return r;
@@ -1239,14 +1242,23 @@ function platformKaart(naam, p, tagsLabel, tags, ctl) {
 // ── Zoekterm en partij-detectie ──────────────────────────────────────────────
 // null = geen partij, 0 = partij met onbekend aantal, anders het aantal stuks
 function partijAantal(d) {
-  if (d.prijzen && d.prijzen.partij && d.prijzen.partij.aantal > 1) return d.prijzen.partij.aantal;
-  if (d.pagina && d.pagina.aantal_stuks > 1) return d.pagina.aantal_stuks;
   var tekst = (d.titel || '') + ' ' + naamUitUrl(d.url || '');
+  // Een set, kit of koffer met onderdelen is één artikel, ook als er "11-delig" bij staat
+  var isSet = /\b(set|kit|koffer|\d+[- ]?delig\w*)\b/i.test(tekst) && !/\b(stuks|partij|pallet|assortiment)\b/i.test(tekst);
+  if (d.prijzen && d.prijzen.partij && d.prijzen.partij.aantal > 1 && !isSet) return d.prijzen.partij.aantal;
+  if (d.pagina && d.pagina.aantal_stuks > 1 && !isSet) return d.pagina.aantal_stuks;
   var m = tekst.match(/\b(\d{2,})\s*(stuks|stuk|st|pcs|pieces|artikelen|items)\b/i);
   if (m) return parseInt(m[1], 10);
   return /\b(partij|pallet|assortiment)\b/i.test(tekst) ? 0 : null;
 }
-function partijOnbetrouwbaar(d) { return partijAantal(d) !== null && !d.controle; }
+// Partij zonder bekend aantal: dan valt er niets te rekenen. Met een aantal: een duidelijk gemarkeerde schatting.
+function partijOnbetrouwbaar(d) { return partijAantal(d) === 0 && !d.controle; }
+var PARTIJ_FACTOR = 0.7; // een partij verkoop je zelden helemaal tegen losse prijzen
+function partijGeschat(d) { var n = partijAantal(d); return n > 1 && !d.controle ? n : 0; }
+function partijPerStuk(d) {
+  var pr = d.prijzen || {};
+  return (pr.partij && pr.partij.prijs_per_stuk > 0) ? pr.partij.prijs_per_stuk : (pr.marktplaats ? pr.marktplaats.gemiddeld : d.mp_gemiddeld);
+}
 
 // ── Prijzen controleren (handmatig, gratis) ─────────────────────────────────
 var BACKUP_KEYS = ['prijzen', 'kosten', 'advies', 'adviesReden', 'roi', 'maxBod', 'mp_gemiddeld', 'mp_laag', 'mp_hoog', 'nieuwprijs'];
@@ -1467,7 +1479,7 @@ function toonAnalyseResultaat(d, behoudScroll) {
     var k = d.kosten, pct = Math.round(k.marge / gem * 100);
     var margeCls = k.marge > 0 ? 'pos' : k.marge < 0 ? 'neg' : '';
     h += '<div class="metrics">';
-    h += '<div class="metric"><div class="metric-l">Verwachte verkoop</div><div class="metric-v">' + fmt(gem) + '</div><div class="metric-s">' + (d.controle && d.controle.partij ? d.controle.partij.aantal + ' × ' + fmt(d.controle.partij.per_stuk) + (d.controle.partij.verkocht_pct ? ' × ' + d.controle.partij.verkocht_pct + '%' : '') : d.controle ? 'Door jou gecontroleerd' : d.prijzen && d.prijzen.live ? 'Op basis van echte advertenties' : 'Schatting') + '</div></div>';
+    h += '<div class="metric"><div class="metric-l">Verwachte verkoop</div><div class="metric-v">' + fmt(gem) + '</div><div class="metric-s">' + (partijGeschat(d) ? partijGeschat(d) + ' × ' + fmt(partijPerStuk(d)) + ' × ' + Math.round(PARTIJ_FACTOR * 100) + '% (schatting)' : d.controle && d.controle.partij ? d.controle.partij.aantal + ' × ' + fmt(d.controle.partij.per_stuk) + (d.controle.partij.verkocht_pct ? ' × ' + d.controle.partij.verkocht_pct + '%' : '') : d.controle ? 'Door jou gecontroleerd' : d.prijzen && d.prijzen.live ? 'Op basis van echte advertenties' : 'Schatting') + '</div></div>';
     h += '<div class="metric"><div class="metric-l">Totale kosten</div><div class="metric-v">' + fmt(k.totaal) + '</div><div class="metric-s">Incl. veilingkosten en btw</div></div>';
     h += '<div class="metric"><div class="metric-l">Verwachte winst</div><div class="metric-v ' + margeCls + '">' + fmtS(k.marge) + '</div><div class="metric-s">' + (vkst ? 'Na ' + fmt(vkst) + ' verkoopkosten' : 'Verkoop min kosten') + '</div></div>';
     h += '<div class="metric"><div class="metric-l">Marge</div><div class="metric-v ' + margeCls + '">' + pct + '%</div><div class="metric-s">Van de verkoopprijs (doel ' + pctTxt(doelPct()) + '%)</div></div>';
