@@ -184,6 +184,9 @@ const STAP2_JSON = { productnaam: 'Apple iPhone 13 128GB', categorie: 'Telefoons
   const k4 = await page.evaluate(() => kavels[0]);
   check('Terugval: schatting zonder internet, met waarschuwing', k4.live === false && k4.waarschuwingen.some(w => /niet beschikbaar/.test(w)), k4.waarschuwingen);
   check('Terugval: vertrouwen max "middel"', k4.prijzen.marktplaats.vertrouwen === 'middel');
+  check('Terugval: geen hard koop/skip-advies, wel een maximaal bod', k4.advies === 'twijfel' && k4.maxBod != null && /schatting zonder gevonden advertenties/.test(k4.adviesReden), [k4.advies, k4.maxBod, k4.adviesReden]);
+  const setTest = await page.evaluate(() => [partijAantal({ titel: 'Klauke persmatrijzen set kunststoffen koffer', pagina: { aantal_stuks: 11 }, url: '' }), partijAantal({ titel: 'Partij 20 stuks boormachines', pagina: { aantal_stuks: 20 }, url: '' })]);
+  check('Set in koffer telt als één artikel, echte partij niet', setTest[0] === null && setTest[1] === 20, setTest);
   check('Terugval: HNVI-tarief 19% gebruikt', k4.veiling_tarief.opgeld === 0.19 && k4.tarief_bron === 'huis', k4.veiling_tarief);
 
   // ── 6. Oude kavel (vorige versie) blijft werken ──

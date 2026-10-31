@@ -245,11 +245,12 @@
     '- btw_regeling: "volledig" als er btw over het bod (hamerprijs) én het opgeld komt; "opgeld" als er geen btw over het bod komt (margeregeling / bijzondere regeling gebruikte goederen) en wel btw bovenop het opgeld; "geen" als er geen btw bijkomt omdat het opgeld al inclusief btw is of de btw verlegd/0% is; anders "onbekend".\n' +
     '- opgeld_pct is het percentage zoals het bij die btw_regeling klopt (bij "geen" inclusief btw).\n' +
     '- vaste_kosten: vast bedrag per kavel in euro vóór btw (bij btw_regeling "geen" inclusief btw). Niet gevonden: null.\n' +
+    '- Merknamen staan in veilingtitels vaak verkeerd gespeld of afgekort (bijvoorbeeld "Klauk" is Klauke, "Makitta" is Makita). Vul bij merk en zoekterm de juiste schrijfwijze in als je die zeker weet.\n' +
     '- aantal_stuks: alleen invullen bij een partij van meerdere losse artikelen die samen worden verkocht (bijvoorbeeld "50 stuks", "pallet met 20 boormachines"). Een set, kit of koffer met onderdelen (bijvoorbeeld "11-delige set" of "set persmatrijzen in koffer") is één artikel: aantal_stuks 1.\n' +
     '- voertuig: true bij een auto, bestelbus, motor, scooter, camper, caravan, aanhanger, tractor of boot met motor; anders false. Vul dan ook kenteken (zoals op de pagina), kilometerstand (getal, km) en bouwjaar in als ze op de pagina staan.\n' +
     '- kosten.bron: korte letterlijke zin of vindplaats waar je de kosten zag.\n' +
     '- veiling_naam: de naam van de veiling, het faillissement of de catalogus waar dit kavel bij hoort, zoals op de pagina (bijvoorbeeld "Faillissementsveiling Bouwbedrijf Jansen"). Niet het veilinghuis zelf en niet de kaveltitel. Niet gevonden: null.';
-  var PAGINA_JSON = '{"gevonden":true,"titel":"","veilinghuis":"","veiling_naam":null,"kavelnummer":"","product":{"merk":"","model":"","variant":"","zoekterm":"korte zoekterm om dit exacte product tweedehands te vinden"},' +
+  var PAGINA_JSON = '{"gevonden":true,"titel":"","veilinghuis":"","veiling_naam":null,"kavelnummer":"","product":{"merk":"","model":"","variant":"","zoekterm":"korte zoekterm om dit exacte product tweedehands te vinden, met de juiste schrijfwijze van het merk"},' +
     '"staat":"nieuw|zo goed als nieuw|gebruikt|beschadigd|defect|onbekend","staat_toelichting":"","aantal_stuks":1,"voertuig":false,"kenteken":null,"kilometerstand":null,"bouwjaar":null,"huidig_bod":null,"aantal_biedingen":null,"sluit":null,"sluit_iso":null,"locatie":null,' +
     '"kosten":{"opgeld_pct":null,"vaste_kosten":null,"btw_pct":null,"btw_regeling":"onbekend","bron":""},"opmerkingen":[]}';
   function vandaag() { return new Date().toISOString().slice(0, 10); }
@@ -445,6 +446,8 @@
     '- vertrouwen: "hoog" bij 5 of meer goed vergelijkbare advertenties of verkochte items, "middel" bij 2 tot 4, anders "laag". Weinig gevonden? Zeg dat eerlijk via een laag vertrouwen en in de toelichting.\n' +
     '- nieuwprijs: laagste actuele prijs bij een gewone Nederlandse winkel, niet de adviesprijs. Niet gezien: null.\n' +
     '- ebay: alleen invullen als je eBay-prijzen hebt gezien, anders null-waarden.\n' +
+    '- Merknamen in veilingtitels zijn vaak verkeerd gespeld of afgekort (bijvoorbeeld "Klauk" is Klauke). Zoek op de juiste merknaam. Bij professioneel gereedschap verschillen prijzen sterk per type: zoek op merk + type of serie als die bekend is.\n' +
+    '- Een set of koffer met onderdelen (ook als die incompleet is) beoordeel je als geheel: zoek de complete set en trek voor ontbrekende delen redelijk af.\n' +
     '- Partij van meerdere stuks: partij = {"aantal":n,"prijs_per_stuk":verwachte opbrengst per stuk}; de marktplaats-prijzen gelden voor één stuk.\n' +
     '- toelichting: één of twee zinnen over waarop je de verwachte verkoopprijs baseert.\n' +
     '- Bedragen in euro als getal.';
