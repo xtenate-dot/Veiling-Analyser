@@ -281,6 +281,21 @@ const GIDS = [
     bron: 'Catawiki Help: What is the Buyer Protection fee?', bronUrl: 'https://auction.catawiki.com/en/help/fees/what-is-the-buyer-protection-fee'
   },
   {
+    slug: 'xl-auctions', naam: 'XL Auctions', land: 'Nederland',
+    kort: 'Opgeld per veiling, bod en kosten exclusief btw',
+    cijfers: [['Opgeld', 'Per veiling', 'bijvoorbeeld 10% (veiling juni 2026)'], ['Btw', 'Erbij', 'bod en bijkomende kosten zijn exclusief btw'], ['Verzendkosten', 'Apart', 'inclusief btw, als verzenden kan']],
+    tekst: '<p>Bij XL Auctions staat bij elk kavel hoeveel opgeld je betaalt. Bij een veiling in juni 2026 was dat 10%. Je bod en eventuele bijkomende kosten zijn exclusief btw; verzendkosten zijn inclusief btw. Het percentage kan per veiling verschillen, dus kijk het na bij het kavel, of laat de app het van de kavelpagina lezen.</p>',
+    bron: 'Kavelpagina XL Auctions, veiling 2769 (juni 2026)', bronUrl: 'https://xlauctions.com/en/veilingen/2769/kavels/20260618-2769-2'
+  },
+  {
+    slug: 'venduehuis', naam: 'Venduehuis Den Haag', land: 'Nederland',
+    kort: 'Margeregeling, koperscommissie inclusief btw',
+    cijfers: [['Koperscommissie (opgeld)', 'Per veiling', 'inclusief btw'], ['Btw over je bod', 'Meestal niet', 'margeregeling, tenzij anders vermeld'], ['Opslag na de ophaaltermijn', '€30', 'per maand per 2 m²']],
+    tekst: '<p>Bij het Venduehuis vallen kavels onder de margeregeling, tenzij er iets anders staat. Over je bod komt dan geen btw. Bovenop je bod betaal je koperscommissie (opgeld), inclusief btw. Hoe hoog die is, staat niet in de algemene voorwaarden maar bij de veiling.</p>',
+    extra: '<h2>Let op</h2><ul class="lijst"><li>Haal je een kavel niet op tijd op, dan rekent het Venduehuis opslag: €30 per maand per 2 m².</li><li>Wordt een kavel dat je niet ophaalt opnieuw geveild, dan betaal je de kosten daarvan, minstens €150 per veiling.</li><li>Ophalen is voor jouw rekening.</li></ul>',
+    bron: 'Algemene voorwaarden Venduehuis (november 2024)', bronUrl: 'https://www.venduehuis.com/static/uploads/96/Algemene%20Voorwaarden%20NL%20Nov%202024.pdf'
+  },
+  {
     slug: 'nedveiling', naam: 'Nedveiling', land: 'Nederland',
     kort: '15% opgeld, plus btw over het opgeld',
     cijfers: [['Opgeld', '15%', 'tenzij vooraf anders vermeld'], ['Btw', '21%', 'over het opgeld'], ['Vaste kosten per kavel', 'Geen', 'in de voorwaarden']],
@@ -289,7 +304,7 @@ const GIDS = [
     bron: 'Veilingvoorwaarden Nedveiling (pdf)', bronUrl: 'https://www.nedveiling.nl/files/terms.pdf'
   }
 ];
-const NOG = ['BVA Auctions', 'Vavato', 'Onlineveilingmeester', 'Klaz', 'Surplex', 'Venduehuis', 'XL Auctions', 'Openbare Verkopen', 'Dome Auctions', 'Auctelia', 'DTZ'];
+const NOG = ['BVA Auctions', 'Vavato', 'Onlineveilingmeester', 'Klaz', 'Surplex', 'Openbare Verkopen', 'Dome Auctions', 'Auctelia', 'DTZ'];
 function gidsPagina(h) {
   const v = h.voorbeeld;
   const tabel = v ? `<div class="tabel-box"><table class="tabel"><caption>Rekenvoorbeeld: bod van ${euro(v.bod)}</caption><tbody><tr><td>Bod</td><td>${euro(v.bod)}</td></tr>${v.regels.map(([a, b]) => `<tr><td>${a}</td><td>${euro(b)}</td></tr>`).join('')}<tr class="totaal"><td>Totaal</td><td>${euro(v.totaal)}</td></tr></tbody></table></div>${v.noot ? `<p class="bron">${v.noot}</p>` : ''}` : '';

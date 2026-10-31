@@ -194,7 +194,7 @@ Doe dit eerst in **testmodus** (schakelaar rechtsboven in het Stripe-dashboard).
 2. **Klantportaal:** zet onder Instellingen → Billing → Klantportaal het portaal aan, zodat klanten zelf kunnen opzeggen, wisselen en hun betaalgegevens bijwerken.
 3. **Webhook:** voeg onder Ontwikkelaars → Webhooks een endpoint toe:
    - adres: `https://veiling-analyser.jouwnaam.workers.dev/api/stripe-webhook`
-   - gebeurtenissen: `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`
+   - gebeurtenissen: `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `checkout.session.async_payment_succeeded`, `charge.refunded`, `charge.dispute.created` (terugbetaalde of teruggeboekte bundels gaan dan automatisch van het tegoed af)
    - kopieer de ondertekeningssleutel (begint met `whsec_`).
 4. Zet de geheimen:
 

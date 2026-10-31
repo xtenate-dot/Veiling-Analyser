@@ -32,6 +32,9 @@ writeFileSync(join(doel, '_headers'), [
   '  Referrer-Policy: no-referrer',
   '  X-Frame-Options: DENY',
   '  Permissions-Policy: camera=(), microphone=(), geolocation=()',
+  // Alleen code en verbindingen van bekende plekken: de eigen site, Turnstile (botcontrole), Web Analytics,
+  // en voor de versie met eigen sleutel Anthropic, de RDW en Google Sheets. Inline-handlers blijven toegestaan.
+  "  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://api.anthropic.com https://opendata.rdw.nl https://script.google.com https://script.googleusercontent.com https://cloudflareinsights.com; frame-src https://challenges.cloudflare.com; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
   '/sw.js',
   '  Cache-Control: no-cache',
   ''

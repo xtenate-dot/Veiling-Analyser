@@ -167,6 +167,7 @@ async function inlogVerstuur(modus) {
     await haalKavelsVanServer();
     if (!account.email_geverifieerd) vraagCode(data.mail_fout);
     else toast(modus === 'registreren' ? 'Welkom! Je account is klaar.' : 'Ingelogd als ' + account.email);
+    if (data.welkom_overgeslagen) toast('Vanaf dit internetadres zijn al meerdere accounts met gratis analyses gemaakt, dus dit account krijgt ze niet. Je kunt wel een bundel kopen.', null, true);
   } catch (e) {
     toonMsg('li-err', e.message);
     if (e.code === 'bot' && window.turnstile && tsWidget != null) { try { window.turnstile.reset(tsWidget); } catch (x) {} tsToken = null; }

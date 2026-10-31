@@ -254,11 +254,21 @@ async function registreer(request, env) {
     eerder = await env.DB.prepare('SELECT oud_id, tijd FROM verwijderd WHERE kanon_hash = ?').bind(await sha256('kanon:' + kanon)).first();
     if (eerder && eerder.tijd >= maandBegin()) await env.DB.prepare('UPDATE verbruik SET gebruiker_id = ? WHERE gebruiker_id = ? AND tijd >= ?').bind(id, -eerder.oud_id, maandBegin()).run();
   } catch (e) { console.error('verwijderd-controle', e); }
-  if (!eerder && WELKOM(env) > 0) await tegoedErbij(env, id, WELKOM(env));
+  // Gratis analyses hooguit voor 3 nieuwe accounts per internetadres per 30 dagen (tegen steeds nieuwe e-mailadressen)
+  let welkom = 0;
+  if (!eerder && WELKOM(env) > 0) {
+    const ipHash = ip ? await sha256('welkom-ip:' + ip) : null;
+    const al = ipHash ? await env.DB.prepare('SELECT COUNT(*) AS n FROM welkom_ip WHERE ip_hash = ? AND tijd > ?').bind(ipHash, Date.now() - 30 * 864e5).first() : null;
+    if (!al || al.n < 3) {
+      await tegoedErbij(env, id, WELKOM(env));
+      welkom = WELKOM(env);
+      if (ipHash) await env.DB.prepare('INSERT INTO welkom_ip (ip_hash, tijd) VALUES (?, ?)').bind(ipHash, Date.now()).run();
+    }
+  }
   const g = await env.DB.prepare('SELECT * FROM gebruikers WHERE id = ?').bind(id).first();
   let mailFout = null;
   try { await stuurCode(env, g); } catch (e) { mailFout = e.message; }
-  return json({ token: await maakSessie(env, id), account: await accountInfo(env, g), mail_fout: mailFout }, 201);
+  return json({ token: await maakSessie(env, id), account: await accountInfo(env, g), mail_fout: mailFout, welkom, welkom_overgeslagen: !eerder && WELKOM(env) > 0 && !welkom }, 201);
 }
 async function inloggen(request, env) {
   const b = await leesJson(request);
@@ -414,9 +424,18 @@ export function zorgVoorSchema(env) {
       env.DB.prepare('CREATE TABLE IF NOT EXISTS push_verstuurd (gebruiker_id INTEGER NOT NULL, kavel_id TEXT NOT NULL, soort TEXT NOT NULL, tijd INTEGER NOT NULL, PRIMARY KEY (gebruiker_id, kavel_id, soort))'),
       env.DB.prepare('CREATE TABLE IF NOT EXISTS agenda (gebruiker_id INTEGER PRIMARY KEY, token_hash TEXT NOT NULL UNIQUE, gemaakt INTEGER NOT NULL)')
     ]);
-    let nieuweKolom = false;
-    try { await env.DB.prepare('ALTER TABLE kavel_items ADD COLUMN sluit INTEGER').run(); nieuweKolom = true; }
-    catch (e) { if (!/duplicate column/i.test(String(e && e.message))) throw e; }
+    await env.DB.batch([
+      env.DB.prepare('CREATE TABLE IF NOT EXISTS welkom_ip (ip_hash TEXT NOT NULL, tijd INTEGER NOT NULL)'),
+      env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_welkom_ip ON welkom_ip(ip_hash, tijd)')
+    ]);
+    const kolomErbij = async sql => {
+      try { await env.DB.prepare(sql).run(); return true; }
+      catch (e) { if (/duplicate column/i.test(String(e && e.message))) return false; throw e; }
+    };
+    await kolomErbij('ALTER TABLE aankopen ADD COLUMN betaling TEXT');
+    await kolomErbij('ALTER TABLE aankopen ADD COLUMN teruggeboekt INTEGER NOT NULL DEFAULT 0');
+    await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_aankopen_betaling ON aankopen(betaling)').run();
+    const nieuweKolom = await kolomErbij('ALTER TABLE kavel_items ADD COLUMN sluit INTEGER');
     await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_kavel_sluit ON kavel_items(sluit)').run();
     if (nieuweKolom) await env.DB.prepare('UPDATE kavel_items SET sluit = ' + SLUIT_UIT('data') + " WHERE json_extract(data, '$.pagina.sluit_iso') IS NOT NULL").run();
   })().catch(e => { schemaKlaar = null; throw e; });
@@ -568,6 +587,7 @@ export async function opruimen(env, nu = Date.now()) {
   const stappen = [
     ['sessies', 'DELETE FROM sessies WHERE verloopt < ?', [nu]],
     ['push-verstuurd', 'DELETE FROM push_verstuurd WHERE tijd < ?', [nu - 7 * 864e5]],
+    ['welkom-ip', 'DELETE FROM welkom_ip WHERE tijd < ?', [nu - 31 * 864e5]],
     ['herstel', 'DELETE FROM herstel WHERE verloopt < ?', [nu]],
     ['verificatie', 'DELETE FROM verificatie WHERE verloopt < ?', [nu - dag]],
     ['pogingen', 'DELETE FROM pogingen WHERE tijd < ?', [nu - dag]],
@@ -1035,9 +1055,23 @@ async function stripeWebhook(request, env) {
     const id = Number(o.client_reference_id || o.metadata.gebruiker_id) || 0;
     if (bundel && id > 0 && o.payment_status === 'paid') {
       // INSERT OR IGNORE: Stripe kan dezelfde webhook vaker sturen; dan maar één keer bijschrijven
-      const r = await env.DB.prepare('INSERT OR IGNORE INTO aankopen (stripe_sessie, gebruiker_id, bundel, analyses, tijd) VALUES (?, ?, ?, ?, ?)')
-        .bind(String(o.id), id, o.metadata.bundel, bundel.analyses, Date.now()).run();
+      const r = await env.DB.prepare('INSERT OR IGNORE INTO aankopen (stripe_sessie, gebruiker_id, bundel, analyses, tijd, betaling) VALUES (?, ?, ?, ?, ?, ?)')
+        .bind(String(o.id), id, o.metadata.bundel, bundel.analyses, Date.now(), o.payment_intent ? String(o.payment_intent) : null).run();
       if (r.meta && r.meta.changes) await tegoedErbij(env, id, bundel.analyses);
+    }
+  } else if ((ev.type === 'charge.refunded' || ev.type === 'charge.dispute.created') && o.payment_intent) {
+    // Bundel terugbetaald of teruggeboekt: de analyses gaan er weer af (alleen wat nog niet gebruikt is)
+    const a = await env.DB.prepare('SELECT stripe_sessie, gebruiker_id, analyses, teruggeboekt FROM aankopen WHERE betaling = ?').bind(String(o.payment_intent)).first();
+    if (a) {
+      const deel = ev.type === 'charge.refunded' && o.amount > 0 ? Math.min(1, (o.amount_refunded || 0) / o.amount) : 1;
+      const terug = Math.max(0, Math.round(a.analyses * deel) - (a.teruggeboekt || 0));
+      if (terug > 0) {
+        await env.DB.batch([
+          env.DB.prepare('UPDATE aankopen SET teruggeboekt = teruggeboekt + ? WHERE stripe_sessie = ?').bind(terug, a.stripe_sessie),
+          env.DB.prepare('UPDATE tegoed SET saldo = MAX(0, saldo - ?), bijgewerkt = ? WHERE gebruiker_id = ?').bind(terug, Date.now(), a.gebruiker_id)
+        ]);
+        if (ev.type === 'charge.dispute.created') await meldEigenaar(env, 'chargeback', 'Terugboeking van een bundel', 'Een klant heeft een betaling voor een bundel laten terugboeken (' + terug + ' analyses ingetrokken). Bekijk het in Stripe.');
+      }
     }
   } else if (afgerond && o.mode === 'subscription' && o.subscription) {
     const sub = await stripe(env, 'GET', 'subscriptions/' + o.subscription);

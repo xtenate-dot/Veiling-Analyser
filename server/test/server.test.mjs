@@ -711,5 +711,29 @@ check('Meldingen en agendalink staan in Mijn gegevens', r.data.meldingen.length 
 r = await api('POST', '/api/account-verwijderen', { wachtwoord: 'geheim123' }, tkA);
 check('Account verwijderen wist meldingen en agendalink', r.status === 200 && !db.prepare('SELECT 1 FROM push_abonnementen WHERE gebruiker_id = ?').get(idA) && !db.prepare('SELECT 1 FROM agenda WHERE gebruiker_id = ?').get(idA) && !db.prepare('SELECT 1 FROM push_verstuurd WHERE gebruiker_id = ?').get(idA));
 
+// ── 22. Terugbetaling en terugboeking van een bundel ──
+const rr = await api('POST', '/api/registreer', { email: 'terug@voorbeeld.nl', wachtwoord: 'geheim123' });
+const idR = db.prepare("SELECT id FROM gebruikers WHERE email = 'terug@voorbeeld.nl'").get().id;
+const saldoR = () => db.prepare('SELECT saldo FROM tegoed WHERE gebruiker_id = ?').get(idR).saldo;
+const voorR = saldoR();
+await webhook({ type: 'checkout.session.completed', data: { object: { id: 'cs_terug_1', mode: 'payment', payment_status: 'paid', payment_intent: 'pi_terug_1', client_reference_id: String(idR), metadata: { bundel: 'b25', gebruiker_id: String(idR) } } } });
+check('Bundel bijgeschreven met betaalnummer', saldoR() === voorR + 25 && db.prepare("SELECT betaling FROM aankopen WHERE stripe_sessie = 'cs_terug_1'").get().betaling === 'pi_terug_1');
+await webhook({ type: 'charge.refunded', data: { object: { id: 'ch_1', payment_intent: 'pi_terug_1', amount: 499, amount_refunded: 499 } } });
+await webhook({ type: 'charge.refunded', data: { object: { id: 'ch_1', payment_intent: 'pi_terug_1', amount: 499, amount_refunded: 499 } } });
+check('Terugbetaald: de 25 analyses gaan er één keer af', saldoR() === voorR, saldoR());
+await webhook({ type: 'checkout.session.completed', data: { object: { id: 'cs_terug_2', mode: 'payment', payment_status: 'paid', payment_intent: 'pi_terug_2', client_reference_id: String(idR), metadata: { bundel: 'b25', gebruiker_id: String(idR) } } } });
+db.prepare('UPDATE tegoed SET saldo = 5 WHERE gebruiker_id = ?').run(idR);
+await webhook({ type: 'charge.dispute.created', data: { object: { id: 'dp_1', payment_intent: 'pi_terug_2', amount: 499 } } });
+check('Teruggeboekt na gebruik: saldo niet onder 0', saldoR() === 0, saldoR());
+
+// ── 23. Gratis analyses hooguit 3 keer per internetadres ──
+const welkomVan = async (n) => {
+  const r = await api('POST', '/api/registreer', { email: 'ipboer' + n + '@voorbeeld.nl', wachtwoord: 'geheim123' }, null, { 'CF-Connecting-IP': '203.0.113.7' });
+  return r.data;
+};
+const w = [];
+for (const n of [1, 2, 3, 4]) w.push(await welkomVan(n));
+check('Vierde account vanaf hetzelfde adres krijgt geen gratis analyses, en hoort dat', w.slice(0, 3).every(x => x.welkom === 2 && !x.welkom_overgeslagen) && w[3].welkom === 0 && w[3].welkom_overgeslagen === true && w[3].account.tegoed === 0, w.map(x => x.welkom));
+
 console.log('\n' + (aantal - fouten) + ' van ' + aantal + ' controles OK' + (fouten ? ' — ' + fouten + ' FOUT(EN)' : ''));
 process.exit(fouten ? 1 : 0);
