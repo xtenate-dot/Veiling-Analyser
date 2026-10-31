@@ -28,8 +28,8 @@ FROM verbruik ORDER BY tijd DESC LIMIT 20;
 ## Afspraken en nog te doen
 
 - **Nog te doen (afgesproken 30 oktober 2026, als de eigenaar toegang kan geven):**
-  1. Google Search Console: veilinganalyser.nl aanmelden, eigendom bevestigen met een TXT-record in Cloudflare DNS, sitemap `https://veilinganalyser.nl/sitemap.xml` indienen.
-  2. Homepage aanscherpen met wat ons anders maakt dan Geveild.com (zoekmachine en eindbiedingen van veilingen): "Plak één link, wij zoeken de verkoopprijs (Marktplaats, 2dehands, eBay) voor je op, met alle veilingkosten en je maximale bod." Welkomstbundel van 10 gratis analyses prominenter.
+  1. ~~Google Search Console~~ gedaan op 31 oktober 2026: domein-property veilinganalyser.nl, bevestigd met een TXT-record in Cloudflare DNS (laten staan!), sitemap ingediend (17 pagina's gevonden). Ook gedaan: Cloudflare Web Analytics met eigen snippet op alle pagina's (de instelling 'zonder EU-bezoekers' telde niemand), CSP-kop, terugbetaling/terugboeking van bundels, gratis analyses hooguit 3 per IP per 30 dagen, veilinggids XL Auctions en Venduehuis.
+  2. ~~Homepage aanscherpen~~ (gedaan 30 oktober) met wat ons anders maakt dan Geveild.com (zoekmachine en eindbiedingen van veilingen): "Plak één link, wij zoeken de verkoopprijs (Marktplaats, 2dehands, eBay) voor je op, met alle veilingkosten en je maximale bod." Welkomstbundel van 10 gratis analyses prominenter.
   3. Beslissen: extra functies alleen voor Handelaar en Handelaar Plus (bijvoorbeeld meerdere links tegelijk, exporteren, winst bijhouden)?
   4. Idee voor later: eindbiedingen per kavel bijhouden (privacy en techniek eerst uitzoeken).
 - **Feedback testronde (30 oktober 2026) — gebouwd op 30 oktober 's avonds** (stand van zaken bovenaan, marge per bod + Excel, groepen per veiling, agenda-abonnement, pushmeldingen). Meldingen draaien via een cron elke 5 minuten; de server maakt zijn eigen VAPID-sleutels en nieuwe tabellen zelf aan (geen handwerk in D1). Bij veel gebruikers: Workers Paid aanzetten (CPU-limiet en D1-daglimieten).
