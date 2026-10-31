@@ -478,7 +478,7 @@ anthropicAntwoord = (b) => b.system.startsWith('Je leest veilingkavels')
   : { content: [{ type: 'text', text: 'geen json' }], stop_reason: 'end_turn', usage: { input_tokens: 40000, output_tokens: 900 } };
 const dagVoor = db.prepare('SELECT COALESCE(SUM(usd),0) AS u FROM verbruik WHERE gebruiker_id = 0').get().u;
 r = await api('POST', '/api/analyse', { url: 'https://www.testveiling.nl/kavel/3000', hergebruik: false }, tkS);
-check('Mislukte analyse: tegoed blijft 2', r.status >= 500 && db.prepare('SELECT saldo FROM tegoed WHERE gebruiker_id = ?').get(idS).saldo === 2, r.status);
+check('Mislukte analyse: duidelijke melding (geen prijzen), tegoed blijft 2', r.status === 422 && r.data.code === 'geen_prijzen' && /productnaam/.test(r.data.fout) && db.prepare('SELECT saldo FROM tegoed WHERE gebruiker_id = ?').get(idS).saldo === 2, r.status);
 check('Mislukte analyse: AI-kosten tellen wel mee voor het dagbudget', db.prepare('SELECT COALESCE(SUM(usd),0) AS u FROM verbruik WHERE gebruiker_id = 0').get().u > dagVoor);
 check('Mislukte analyse telt als poging voor de limiet per uur', db.prepare('SELECT COUNT(*) AS n FROM pogingen WHERE email = ?').get('analyse:' + idS).n === 1);
 anthropicAntwoord = bewaar;
@@ -734,6 +734,20 @@ const welkomVan = async (n) => {
 const w = [];
 for (const n of [1, 2, 3, 4]) w.push(await welkomVan(n));
 check('Vierde account vanaf hetzelfde adres krijgt geen gratis analyses, en hoort dat', w.slice(0, 3).every(x => x.welkom === 2 && !x.welkom_overgeslagen) && w[3].welkom === 0 && w[3].welkom_overgeslagen === true && w[3].account.tegoed === 0, w.map(x => x.welkom));
+
+// ── 24. Geen verwachte verkoopprijs, wel andere prijzen: voorzichtig afleiden ──
+{
+  const r0 = { bevestigd: () => false, bronnen: [], zoekvragen: [], usd: 0 };
+  const pa = K.normPrijzen({ marktplaats: { gemiddeld: null }, handelaar: { laag: 30000, hoog: 34000, aantal: 4 }, tweedehands: [] }, r0, true);
+  check('Alleen autobedrijven gevonden → particuliere prijs ≈ 90% van hun gemiddelde, laag vertrouwen', pa.marktplaats.gemiddeld === 28800 && pa.marktplaats.vertrouwen === 'laag' && pa.controles.some(c => /afgeleid/.test(c)), pa.marktplaats);
+  const pb = K.normPrijzen({ tweedehands: [{ prijs: 100 }, { prijs: 140 }, { prijs: 120 }] }, r0, true);
+  check('Alleen advertenties gevonden → mediaan min 10%', pb.marktplaats.gemiddeld === 108, pb.marktplaats);
+  let fout = null;
+  try { K.normPrijzen({ toelichting: 'niets gevonden' }, Object.assign({ tekst: 'Ik kon geen advertenties vinden' }, r0), true); } catch (e) { fout = e; }
+  check('Echt niets → fout met een stukje van het AI-antwoord voor het logboek', fout && /Ik kon geen advertenties vinden/.test(fout.detail));
+  const log = db.prepare("SELECT email FROM pogingen WHERE email LIKE 'foutlog:%' ORDER BY tijd DESC LIMIT 1").get();
+  check('Foutlogboek bevat de reden', log && /zoeken: .* \| schatting: /.test(log.email), log && log.email.slice(0, 120));
+}
 
 console.log('\n' + (aantal - fouten) + ' van ' + aantal + ' controles OK' + (fouten ? ' — ' + fouten + ' FOUT(EN)' : ''));
 process.exit(fouten ? 1 : 0);

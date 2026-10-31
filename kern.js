@@ -533,20 +533,31 @@
   }
 
   // Reserve als live zoeken niet beschikbaar is: schatting op basis van kennis van het model
-  async function schatPrijzen(product, deps) {
-    var system = 'Je bent een Nederlandse marktprijsexpert zonder internettoegang. Geef je beste eerlijke schatting. Antwoord uitsluitend met één geldig JSON-object, zonder markdown.';
-    var prompt = 'Schat de huidige nieuwprijs bij Nederlandse winkels (niet de adviesprijs) en de realistische tweedehands verkoopprijs in Nederland voor: "' + product + '".\n' +
+  async function schatPrijzen(product, deps, pagina) {
+    var system = 'Je bent een Nederlandse marktprijsexpert zonder internettoegang. Geef altijd je beste eerlijke schatting, ook als je het precieze model niet kent: ga dan uit van vergelijkbare producten. Antwoord uitsluitend met één geldig JSON-object, zonder markdown.';
+    var rdw = pagina && pagina.rdw;
+    var context = (rdw ? 'Gegevens van de RDW: ' + [rdw.merk, rdw.model, rdw.aandrijving, rdw.eerste_toelating ? 'eerste toelating ' + rdw.eerste_toelating : '', rdw.catalogusprijs ? 'catalogusprijs nieuw ' + fmtEuro(rdw.catalogusprijs) : ''].filter(Boolean).join(', ') + '\n' : '') +
+      (pagina && pagina.kilometerstand ? 'Kilometerstand: ' + pagina.kilometerstand + ' km\n' : '') +
+      (pagina && pagina.staat && pagina.staat !== 'onbekend' ? 'Staat: ' + pagina.staat + '\n' : '');
+    var prompt = 'Schat de huidige nieuwprijs bij Nederlandse winkels (niet de adviesprijs) en de realistische tweedehands verkoopprijs in Nederland voor: "' + product + '".\n' + context +
       'Tweedehands ligt altijd onder de nieuwprijs. Laat tweedehands leeg ([]) en zet vertrouwen hooguit op "middel".\n\nVul dit JSON-object in:\n' + PRIJS_JSON;
     var r = await vraagClaude({ system: system, prompt: prompt, maxTokens: 3000, model: deps.modelPrijzen }, deps);
     var p = normPrijzen(r.json, r, false);
+    if (pagina && pagina.voertuig) p.voertuig = true;
     if (p.marktplaats.vertrouwen === 'hoog') p.marktplaats.vertrouwen = 'middel';
     return p;
   }
 
   // Controleert en ordent het prijsantwoord. Links worden alleen als bevestigd gemarkeerd
   // als ze echt in de zoek- of ophaalresultaten voorkwamen.
+  function geenPrijzen(j, r) {
+    var e = new Error('Kon geen marktprijzen ophalen. Probeer opnieuw.');
+    // Voor het foutlogboek: een stukje van wat het AI-model wel antwoordde
+    e.detail = String((r && r.tekst) || (j ? JSON.stringify(j) : '') || '').replace(/\s+/g, ' ').slice(0, 300);
+    return e;
+  }
   function normPrijzen(j, r, live) {
-    if (!j || !j.marktplaats) throw new Error('Kon geen marktprijzen ophalen. Probeer opnieuw.');
+    if (!j || typeof j !== 'object') throw geenPrijzen(j, r);
     function platform(x) {
       x = x || {};
       var p = {
@@ -562,7 +573,6 @@
       return p;
     }
     var mp = platform(j.marktplaats);
-    if (!mp) throw new Error('Kon geen marktprijzen ophalen. Probeer opnieuw.');
     var eb = platform(j.ebay);
     var lijst = (Array.isArray(j.tweedehands) ? j.tweedehands : []).map(function (a) {
       a = a || {};
@@ -573,6 +583,19 @@
         bevestigd: !!(u && r.bevestigd(u))
       };
     }).filter(function (a) { return a.prijs > 0; }).slice(0, 12);
+    // Geen verwachte verkoopprijs ingevuld, maar wel prijzen gevonden? Dan leiden we hem daar voorzichtig van af
+    var afgeleid = null;
+    if (!mp) {
+      var h = j.handelaar || {}, hl = num(h.laag), hh = num(h.hoog) >= hl ? num(h.hoog) : hl;
+      var gezien = lijst.map(function (a) { return a.prijs; }).sort(function (a, b) { return a - b; });
+      if (hl > 0) { var hm = (hl + hh) / 2; mp = { laag: Math.round(hl * 0.85), gemiddeld: Math.round(hm * 0.9), hoog: Math.round(hh * 0.92) }; afgeleid = 'de vraagprijzen van autobedrijven, min 10%'; }
+      else if (eb) { mp = { laag: eb.laag, gemiddeld: eb.gemiddeld, hoog: eb.hoog }; afgeleid = 'verkochte items op eBay'; }
+      else if (gezien.length) { var med = gezien[Math.floor((gezien.length - 1) / 2)]; mp = { laag: Math.round(gezien[0] * 0.9), gemiddeld: Math.round(med * 0.9), hoog: Math.round(gezien[gezien.length - 1] * 0.9) }; afgeleid = 'de gevonden vraagprijzen, min 10%'; }
+      if (!mp) throw geenPrijzen(j, r);
+      mp = Object.assign(mp, { vertrouwen: 'laag', aantal_vergelijkbaar: gezien.length, tip: '', verkooptijd: '', zoekwoorden: [], keywords: [] });
+      if (!(mp.laag > 0) || mp.laag > mp.gemiddeld) mp.laag = mp.gemiddeld;
+      if (!(mp.hoog > 0) || mp.hoog < mp.gemiddeld) mp.hoog = mp.gemiddeld;
+    }
     var nieuwUrl = veiligeUrl(j.nieuwprijs_url);
     var p = {
       productnaam: kortTekst(j.productnaam, 160), categorie: kortTekst(j.categorie, 60),
@@ -589,7 +612,7 @@
       live: live, opgehaald_op: Date.now(), usd: r.usd,
       zoekvragen: r.zoekvragen.slice(0, 12),
       bronnen: r.bronnen.slice(0, 20).map(function (b) { return { url: b.url, titel: kortTekst(b.titel, 120), opgehaald: !!b.opgehaald }; }),
-      controles: []
+      controles: afgeleid ? ['De verwachte verkoopprijs is afgeleid van ' + afgeleid + '. Controleer hem zelf via de knoppen hieronder.'] : []
     };
     // Eigen controle van het AI-antwoord tegen de gevonden advertenties
     var prijzen = lijst.map(function (a) { return a.prijs; }).sort(function (a, b) { return a - b; });
@@ -672,13 +695,20 @@
         else {
           // Laatste vangnet: liever een duidelijk gemarkeerde schatting dan een foutmelding
           extraUsd += e.usd || (e.resultaat && e.resultaat.usd) || 0;
-          prijzen = await schatPrijzen(product, deps);
+          try { prijzen = await schatPrijzen(product, deps, pagina); }
+          catch (e2) {
+            if (e2.apiType) throw e2;
+            var fout = new Error('Voor dit product vonden we geen bruikbare prijzen. Vul bij "Opmerking" de precieze productnaam in en probeer het opnieuw; je tegoed is niet gebruikt.');
+            fout.geenPrijzen = true;
+            fout.detail = 'zoeken: ' + (e.detail || e.message) + ' | schatting: ' + (e2.detail || e2.message);
+            throw fout;
+          }
           waarschuwingen.push('Het live prijsonderzoek lukte deze keer niet. De prijzen zijn een schatting van het AI-model; controleer ze zelf via de knoppen Marktplaats en 2dehands.');
         }
       }
     }
     if (!live) {
-      prijzen = await schatPrijzen(product, deps);
+      prijzen = await schatPrijzen(product, deps, pagina);
       waarschuwingen.push('Live zoeken is niet beschikbaar. De prijzen zijn een schatting van het AI-model zonder internet.');
     }
     // De catalogusprijs van de RDW is de echte nieuwprijs van dit voertuig (inclusief btw en bpm, bij eerste toelating)

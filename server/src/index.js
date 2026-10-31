@@ -717,7 +717,7 @@ async function telFout(env, bericht) {
   try {
     await env.DB.prepare('INSERT INTO pogingen (email, tijd) VALUES (?, ?)').bind('fout-analyse', Date.now()).run();
     // Laatste foutmeldingen bewaren (2 dagen, zoals alle pogingen), om te kunnen zien wat er misging
-    await env.DB.prepare('INSERT INTO pogingen (email, tijd) VALUES (?, ?)').bind('foutlog:' + String(bericht || 'onbekend').slice(0, 400), Date.now()).run();
+    await env.DB.prepare('INSERT INTO pogingen (email, tijd) VALUES (?, ?)').bind('foutlog:' + String(bericht || 'onbekend').slice(0, 700), Date.now()).run();
     const r = await env.DB.prepare("SELECT COUNT(*) AS n FROM pogingen WHERE email = 'fout-analyse' AND tijd > ?").bind(Date.now() - 3600000).first();
     if (r && r.n >= 10) await meldEigenaar(env, 'fouten', 'Veel mislukte analyses', r.n + ' analyses zijn in het afgelopen uur mislukt. Laatste fout: ' + String(bericht || '').slice(0, 300));
   } catch (e) { console.error('telFout', e); }
@@ -1131,9 +1131,10 @@ export async function verwerk(request, env) {
     if (e instanceof Fout) resp = json({ fout: e.message, code: e.code }, e.status);
     else {
       console.error(e && e.stack || e);
-      if (pad === '/api/analyse') await telFout(env, e && e.message);
+      if (pad === '/api/analyse') await telFout(env, (e && e.message) + (e && e.detail ? ' | ' + e.detail : ''));
       // Fouten van de AI-dienst doorgeven in begrijpelijke vorm, zonder interne details
       const t = e && e.apiType;
+      if (e && e.geenPrijzen) { resp = json({ fout: e.message, code: 'geen_prijzen' }, 422); Object.entries(cors).forEach(([k, v]) => resp.headers.set(k, v)); return resp; }
       const bericht = t === 'overloaded_error' ? 'De analyseservice is even druk. Probeer het over een paar seconden opnieuw.'
         : t === 'rate_limit_error' ? 'De analyseservice is even druk. Probeer het over een minuut opnieuw.'
         : 'De analyse is mislukt. Je tegoed is niet gebruikt. Probeer het over een paar minuten opnieuw.';

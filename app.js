@@ -145,7 +145,7 @@ function toonMsg(id, msg) {
   el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 function vriendelijkeFout(e) {
-  if (e && e.serverFout) return e.message;
+  if (e && (e.serverFout || e.geenPrijzen)) return e.message;
   var m = (e && e.message) ? e.message : '';
   var l = m.toLowerCase();
   if (l.indexOf('rate_limit') !== -1) return 'Je hebt te veel analyses kort achter elkaar gedaan. Wacht een minuut en probeer het opnieuw.';
