@@ -8,6 +8,7 @@ const { chromium } = require('playwright');
   let fout = 0;
   for (const [w, h, tag] of [[390, 844, 'tel'], [1280, 900, 'pc']]) {
     const p = await b.newPage({ viewport: { width: w, height: h } });
+    await p.route('https://static.cloudflareinsights.com/**', r => r.fulfill({ status: 200, contentType: 'text/javascript', body: '' })); // bezoekersteller: niet echt laden in de test
     const fouten = [];
     p.on('pageerror', e => fouten.push(e.message));
     p.on('console', m => { if (m.type() === 'error' && !/api\/reviews|404/.test(m.text())) fouten.push(m.text()); });

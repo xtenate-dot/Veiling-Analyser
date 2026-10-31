@@ -1,6 +1,6 @@
 // Kopieert de app (HTML, CSS, JS, iconen) naar server/public, zodat de Worker hem zelf serveert.
 // Draait automatisch bij elke `wrangler deploy` (zie [build] in wrangler.toml).
-import { cpSync, mkdirSync, rmSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, rmSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -25,6 +25,13 @@ await import(new URL('../site/maak.mjs', import.meta.url));
 cpSync(join(bron, 'site', 'www'), doel, { recursive: true });
 mkdirSync(join(doel, 'site'), { recursive: true });
 cpSync(join(bron, 'site', 'site.css'), join(doel, 'site', 'site.css'));
+// Cloudflare Web Analytics (zonder cookies) op elke pagina; de token is openbaar
+const BEACON = '<script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon=\'{"token": "a3f95845f27b4fa1ad6517cf1f687185"}\'></script>';
+const htmlBestanden = dir => readdirSync(dir).flatMap(n => { const p = join(dir, n); return statSync(p).isDirectory() ? htmlBestanden(p) : /\.html$/.test(n) ? [p] : []; });
+for (const f of htmlBestanden(doel)) {
+  const t = readFileSync(f, 'utf8');
+  if (!t.includes('cloudflareinsights') && t.includes('</body>')) writeFileSync(f, t.replace('</body>', BEACON + '\n</body>'));
+}
 // Beveiligingskoppen voor alle pagina's
 writeFileSync(join(doel, '_headers'), [
   '/*',
