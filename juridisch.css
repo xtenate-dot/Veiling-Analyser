@@ -1,0 +1,24 @@
+/* Opmaak voor het privacybeleid en de voorwaarden (gebruikt de kleuren uit styles.css) */
+.jur{background:var(--bg)}
+.jur-pagina{max-width:720px;margin:0 auto;padding:28px 16px 64px}
+.jur-terug{display:inline-block;margin-bottom:18px;font-size:14.5px}
+.jur h1{font-family:var(--ff-d);font-size:clamp(28px,6vw,38px);line-height:1.1;letter-spacing:-.01em;margin:6px 0 6px;color:var(--ink)}
+.jur h2{font-family:var(--ff-d);font-size:20px;margin:30px 0 8px;color:var(--ink)}
+.jur p,.jur li{color:var(--ink-2);margin:0 0 10px}
+.jur ul{padding-left:20px;margin:0 0 10px}
+.jur li{margin-bottom:6px}
+.jur b{color:var(--ink)}
+.jur-datum{font-size:14px;color:var(--ink-3)!important}
+.jur-concept{background:var(--brass-soft);border:1px solid var(--brass-line);color:var(--brass-ink);border-radius:var(--r-sm);padding:10px 14px;font-size:14.5px;margin-bottom:18px}
+.jur mark{background:var(--brass-soft);color:var(--brass-ink);border-bottom:2px solid var(--brass);padding:0 3px;border-radius:3px}
+.jur-tabel{width:100%;border-collapse:collapse;margin:8px 0 14px;font-size:14.5px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-sm);overflow:hidden}
+.jur-tabel th,.jur-tabel td{text-align:left;vertical-align:top;padding:9px 10px;border-bottom:1px solid var(--line);color:var(--ink-2)}
+.jur-tabel th{background:var(--surface-2);color:var(--ink);font-weight:600}
+.jur-tabel tr:last-child td{border-bottom:none}
+@media (max-width:560px){
+  .jur-tabel thead{display:none}
+  .jur-tabel,.jur-tabel tbody,.jur-tabel tr,.jur-tabel td{display:block;width:100%}
+  .jur-tabel tr{border-bottom:1px solid var(--line);padding:6px 0}
+  .jur-tabel td{border:none;padding:3px 12px}
+  .jur-tabel td:first-child{font-weight:600;color:var(--ink);padding-top:8px}
+}

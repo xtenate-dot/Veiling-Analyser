@@ -1,0 +1,77 @@
+# Veiling Analyser – Cloudflare Worker
+# Zie SETUP.md in de hoofdmap voor de stappen.
+name = "veiling-analyser"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+
+# Eigen domein: Cloudflare maakt de DNS-records en het certificaat zelf aan
+routes = [
+  { pattern = "veilinganalyser.nl", custom_domain = true },
+  { pattern = "www.veilinganalyser.nl", custom_domain = true }
+]
+
+# De Worker serveert ook de app zelf (HTML, CSS, JS), zodat app en server op één adres staan.
+# Bij elke deploy kopieert kopieer-app.mjs de app-bestanden naar public/.
+[build]
+command = "node kopieer-app.mjs"
+
+[assets]
+directory = "public"
+
+
+# Elke nacht om 03:23 UTC: verlopen sessies, oude codes, oude links en nooit bevestigde accounts opruimen
+# Logboek van de Worker in het Cloudflare-dashboard (Observability), om fouten terug te zien
+[observability]
+enabled = true
+
+[triggers]
+crons = ["23 3 * * *", "*/5 * * * *"]  # nacht: opruimen; elke 5 minuten: meldingen voor kavels die bijna sluiten
+
+[[d1_databases]]
+binding = "DB"
+database_name = "veiling-analyser"
+database_id = "17c48dc4-7c06-4fb0-8856-a06ea6b9962f"   # D1 in de EU, aangemaakt 28 okt 2026
+
+[vars]
+# Webadres van de app (voor links in e-mails en terug van de betaalpagina)
+APP_URL = "https://veilinganalyser.nl/app"
+# Welke websites de server mogen aanroepen (komma-gescheiden)
+APP_ORIGIN = "https://veilinganalyser.nl,https://www.veilinganalyser.nl,https://veiling-analyser.xtenate.workers.dev,https://xtenate-dot.github.io"
+# Welkomstbundel: eenmalig bij een nieuw account, verloopt niet
+WELKOM_TEGOED = "10"
+# Analyses per kalendermaand per abonnement (gratis: geen maandtegoed, alleen de welkomstbundel)
+LIMIET_GRATIS = "0"
+LIMIET_AF_EN_TOE = "30"
+LIMIET_REGELMATIG = "120"
+LIMIET_HANDELAAR = "500"
+LIMIET_HANDELAAR_PLUS = "1500"
+# Veiligheidsplafond voor AI-kosten per 24 uur, voor alle klanten samen:
+# DAGBUDGET_USD plus DAGBUDGET_PER_KLANT_USD voor elke betalende klant (abonnement of bundel in de afgelopen 30 dagen)
+DAGBUDGET_USD = "20"
+DAGBUDGET_PER_KLANT_USD = "1"
+# Maximaal aantal analyses per klant per uur (Handelaar minstens 120, Handelaar Plus minstens 200)
+MAX_PER_UUR = "60"
+# Hierheen gaan meldingen bij veel mislukte analyses of een (bijna) vol dagbudget
+EIGENAAR_EMAIL = "xtenate@gmail.com"
+# AI-modellen (Haiku is ruim 20x goedkoper dan Sonnet)
+MODEL_PAGINA = "claude-haiku-5-5"
+MODEL_PRIJZEN = "claude-haiku-5-5"
+# Zoekopdrachten per analyse ($0,01 per stuk). 1 = beter bij weinig aanbod, 0 = altijd goedkoper
+ZOEKOPDRACHTEN = "1"
+# Openbare sitekey van Cloudflare Turnstile (botcontrole bij aanmelden); leeg = uit
+TURNSTILE_SITEKEY = "0x4AAAAAAFqGuKCrAsvJyp8E"
+# Afzender van e-mails (domein veilinganalyser.nl staat in Resend, regio Ierland)
+# E-mailcontrole met een code staat pas aan zodra ook het geheim RESEND_API_KEY is ingesteld
+EMAIL_VAN = "Veiling Analyser <noreply@veilinganalyser.nl>"
+
+# Geheimen zet je met: npx wrangler secret put NAAM
+#   ANTHROPIC_API_KEY      (verplicht)
+#   STRIPE_SECRET_KEY      (voor betalen)
+#   STRIPE_WEBHOOK_SECRET  (voor betalen)
+#   STRIPE_PRICE_AF_EN_TOE, STRIPE_PRICE_REGELMATIG, STRIPE_PRICE_HANDELAAR, STRIPE_PRICE_HANDELAAR_PLUS
+#                          (prijs-ID's van de abonnementen, beginnen met price_, terugkerend per maand)
+#   STRIPE_PRICE_BUNDEL_25, STRIPE_PRICE_BUNDEL_60
+#                          (prijs-ID's van de losse bundels, eenmalig)
+#   RESEND_API_KEY         (voor e-mailcontrole en wachtwoord vergeten)
+#   UITNODIGINGSCODE       (optioneel: alleen wie deze code invult kan een account maken)
+#   TURNSTILE_SECRET       (aanbevolen: geheime sleutel van Cloudflare Turnstile tegen nep-aanmeldingen)
