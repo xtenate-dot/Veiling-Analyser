@@ -204,6 +204,7 @@ function resetFormulier() {
   document.getElementById('kavel-url').value = '';
   document.getElementById('huidig-bod').value = '';
   document.getElementById('extra-txt').value = '';
+  document.getElementById('aantal-stuks').value = '';
   document.getElementById('previews').innerHTML = '';
   document.getElementById('analyse-err').style.display = 'none';
   imgs = []; huidigeThumb = null;
@@ -1038,7 +1039,7 @@ function bouwKavel(res, inv) {
     veiling: naam, veiling_tarief: tarief, tarief_handmatig: !!veilingInfo.handmatig, tarief_bron: tariefBron,
     tarief_pagina_velden: vanPagina, tarief_citaat: vanPagina.length && pk ? pk.bron : '',
     kavelnummer: (pagina && pagina.kavelnummer) || (url ? ((url.match(/\/(\d+)\/?(?:[?#]|$)/) || [])[1]) : null) || null,
-    huidig_bod: bod, bod_van_pagina: bodVanPagina,
+    huidig_bod: bod, bod_van_pagina: bodVanPagina, aantal_handmatig: inv.aantal || null,
     mp_gemiddeld: mp.gemiddeld, mp_laag: mp.laag, mp_hoog: mp.hoog,
     ebay_gemiddeld: prijzen.ebay ? prijzen.ebay.gemiddeld : null,
     nieuwprijs: prijzen.nieuwprijs, prijzen: prijzen, live: prijzen.live,
@@ -1104,11 +1105,17 @@ async function analyseer() {
     bod = /^[\d.,\s€]+$/.test(bodStr) ? parseBedrag(bodStr) : NaN;
     if (!isFinite(bod) || bod <= 0) { toonMsg('analyse-err', 'Voer een geldig bedrag in, bijvoorbeeld 250.'); return; }
   }
+  var aantalStr = document.getElementById('aantal-stuks').value.replace(/[.\s]/g, '');
+  var aantal = null;
+  if (aantalStr) {
+    aantal = /^\d{1,6}$/.test(aantalStr) ? parseInt(aantalStr, 10) : NaN;
+    if (!isFinite(aantal) || aantal < 1 || aantal > 100000) { toonMsg('analyse-err', 'Vul bij aantal stuks een geheel getal in, bijvoorbeeld 30. Laat het leeg als het kavel uit één artikel bestaat.'); return; }
+  }
   var veilingInfo = formTarief(url);
   if (veilingInfo.fout) { toonMsg('analyse-err', veilingInfo.fout); return; }
   if (serverModus() && !account) { vraagInloggen(); return; }
   if (!serverModus() && !getApiKey()) { toonMsg('analyse-err', 'Voer eerst je API-sleutel in (bovenaan de pagina).'); return; }
-  var inv = { url: url, bod: bod, bodType: bodType, tarief: veilingInfo, leesKosten: document.getElementById('vk-lees').checked };
+  var inv = { url: url, bod: bod, bodType: bodType, aantal: aantal, tarief: veilingInfo, leesKosten: document.getElementById('vk-lees').checked };
   var thumb = huidigeThumb;
 
   document.getElementById('analyse-err').style.display = 'none';
@@ -1251,6 +1258,9 @@ function platformKaart(naam, p, tagsLabel, tags, ctl) {
 // ── Zoekterm en partij-detectie ──────────────────────────────────────────────
 // null = geen partij, 0 = partij met onbekend aantal, anders het aantal stuks
 function partijAantal(d) {
+  // Het aantal dat je zelf hebt ingevuld gaat voor: 1 = geen partij, meer dan 1 = partij van dat aantal
+  if (d.aantal_handmatig === 1) return null;
+  if (d.aantal_handmatig > 1) return d.aantal_handmatig;
   var tekst = (d.titel || '') + ' ' + naamUitUrl(d.url || '');
   // Een set, kit of koffer met onderdelen is één artikel, ook als er "11-delig" bij staat
   var isSet = /\b(set|kit|koffer|\d+[- ]?delig\w*)\b/i.test(tekst) && !/\b(stuks|partij|pallet|assortiment)\b/i.test(tekst);
@@ -1687,7 +1697,8 @@ function maakKavelKaart(k, i, opts) {
   if (ond) {
     h += '<div class="kc-result"><span class="kc-meta">Partij van meerdere stuks: controleer eerst de opbrengst per stuk.</span></div>';
   } else if (k.kosten && k.kosten.marge != null) {
-    var pct = k.mp_gemiddeld ? Math.round(k.kosten.marge / k.mp_gemiddeld * 100) : null;
+    var gemK = verkoopprijsVan(k);
+    var pct = gemK ? Math.round(k.kosten.marge / gemK * 100) : null;
     var c = mp ? vertrouwenInfo(mp.vertrouwen) : null;
     h += '<div class="kc-result"><span class="marge ' + (k.kosten.marge > 0 ? 'pos' : k.kosten.marge < 0 ? 'neg' : '') + '">' + fmtS(k.kosten.marge) + ' marge' + (pct != null ? ' &middot; ' + pct + '%' : '') + '</span>';
     if (k.controle) h += '<span class="conf pos"><i></i>Prijs gecontroleerd</span>';
@@ -1861,6 +1872,7 @@ function heranalyseer(idx) {
   resetFormulier();
   document.getElementById('kavel-url').value = k.url || '';
   if (k.huidig_bod) document.getElementById('huidig-bod').value = String(k.huidig_bod);
+  if (k.aantal_handmatig) document.getElementById('aantal-stuks').value = String(k.aantal_handmatig);
   var type = k.eigen_bod ? 'eigen' : 'ander';
   setBodType(type, document.getElementById('bod-' + type));
   zetTariefFormulier(k);

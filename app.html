@@ -189,6 +189,12 @@
             <div class="help">Wat je hier invult weegt zwaarder dan de kavelpagina, bijvoorbeeld als de omschrijving onvolledig is. Laat leeg om alles van de pagina te halen.</div>
           </div>
 
+          <div class="field">
+            <label for="aantal-stuks">Aantal stuks in dit kavel <span class="opt">(optioneel)</span></label>
+            <input class="input" type="text" id="aantal-stuks" inputmode="numeric" autocomplete="off" placeholder="Bijv. 30" style="max-width:180px">
+            <div class="help">Staat het aantal niet op de kavelpagina, bijvoorbeeld bij een doos boosterpakjes of een partij kleding? Vul het hier in. De app rekent dan met het aantal keer de prijs per stuk. Laat leeg als het kavel uit één artikel bestaat.</div>
+          </div>
+
           <label class="ctl-check" style="margin:0 0 14px"><input type="checkbox" id="prijs-hergebruik" checked> Prijzen hergebruiken als dit product de afgelopen 3 dagen al is opgezocht <span class="opt">(bespaart kosten)</span></label>
           <div class="help" style="margin:-4px 0 12px">Meerdere kavels? <button type="button" class="linkje" onclick="openBatch()">Plak een lijst met links</button> en laat ze na elkaar analyseren.</div>
           <button class="btn btn-primary btn-lg btn-block" id="analyse-btn" onclick="analyseer()"><span id="analyse-btn-txt">Analyseer kavel</span></button>
