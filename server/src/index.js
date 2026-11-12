@@ -1029,7 +1029,8 @@ async function verwerkAbonnement(env, sub, gebruikerId, nieuw) {
   const prijsId = item && item.price ? item.price.id : null;
   // Nieuwere Stripe-versies zetten current_period_end op het abonnementsitem
   const einde = (sub.current_period_end || (item && item.current_period_end) || 0) * 1000 || null;
-  const actief = sub.status === 'active' || sub.status === 'trialing' || sub.status === 'past_due';
+  // Bij een mislukte betaling (past_due) vervalt het plan tot er is betaald; komt de betaling alsnog binnen, dan zet Stripe de status terug op active
+  const actief = sub.status === 'active' || sub.status === 'trialing';
   const plan = actief ? (planVanPrijs(env, prijsId) || 'gratis') : 'gratis';
   const q = nieuw && gebruikerId
     ? env.DB.prepare('UPDATE gebruikers SET plan = ?, stripe_klant = ?, stripe_abonnement = ?, abonnement_status = ?, periode_einde = ? WHERE id = ?').bind(plan, sub.customer, sub.id, sub.status, einde, gebruikerId)
