@@ -476,13 +476,33 @@
       (extra ? 'Opmerking van de koper: ' + extra + '\n' : '') +
       '\nPagina\'s die je mag openen:\n' + zoekUrls(term).join('\n') +
       '\n\nVul dit JSON-object in:\n' + PRIJS_JSON;
-    return prijzenMetHerstel(function () {
-      return vraagClaude({
-        system: system, prompt: prompt, maxTokens: 6000, model: deps.modelPrijzen,
-        tools: [{ type: 'web_fetch_20250910', name: 'web_fetch', max_uses: 3, max_content_tokens: 6000, blocked_domains: NIET_OPENEN }].concat(
-          zoekMax > 0 ? [{ type: 'web_search_20250305', name: 'web_search', max_uses: zoekMax, user_location: locatieVoor(url) }] : [])
-      }, deps);
-    }, product, deps, PRIJS_JSON);
+    function ronde(zm, extraTekst) {
+      return prijzenMetHerstel(function () {
+        return vraagClaude({
+          system: system, prompt: prompt + (extraTekst || ''), maxTokens: 6000, model: deps.modelPrijzen,
+          tools: [{ type: 'web_fetch_20250910', name: 'web_fetch', max_uses: 3, max_content_tokens: 6000, blocked_domains: NIET_OPENEN }].concat(
+            zm > 0 ? [{ type: 'web_search_20250305', name: 'web_search', max_uses: zm, user_location: locatieVoor(url) }] : [])
+        }, deps);
+      }, product, deps, PRIJS_JSON);
+    }
+    var eerste = await ronde(zoekMax);
+    // Niets vergelijkbaars gevonden (bijvoorbeeld bij verzamelkaarten of importproducten die weinig op Marktplaats staan)?
+    // Dan één keer breder zoeken met andere zoektermen en bronnen. Dit kost alleen iets extra bij kavels waar de eerste ronde niets vond.
+    var zonderBewijs = !(eerste.tweedehands && eerste.tweedehands.length) && eerste.marktplaats && eerste.marktplaats.vertrouwen === 'laag';
+    if (!zonderBewijs || zoekMax < 1 || deps.tweedeRonde === false) return eerste;
+    var breder = '\n\nEen eerste zoekpoging vond geen vergelijkbare advertenties. Zoek nu breder: probeer andere zoektermen (de Engelse of originele productnaam, merk plus type, set- of modelnummer) en andere bronnen waar dit soort product echt wordt verhandeld, zoals verkochte eBay-items, Vinted, Cardmarket of TCGplayer bij verzamelkaarten, of vergelijkbare producten. Prijzen uit het buitenland reken je om naar wat het in Nederland en België opbrengt en dat zeg je in de toelichting. Zet het vertrouwen op laag, tenzij je minstens twee echte verkochte items of advertenties ziet.';
+    try {
+      var tweede = await ronde(typeof deps.maxZoekBreed === 'number' ? deps.maxZoekBreed : 2, breder);
+      var kosten = (eerste.usd || 0) + (tweede.usd || 0);
+      tweede.tweede_ronde = true;
+      eerste.tweede_ronde = true;
+      var gekozen = (tweede.tweedehands && tweede.tweedehands.length) ? tweede : eerste;
+      gekozen.usd = kosten;
+      return gekozen;
+    } catch (e) {
+      // De tweede ronde mislukte: dan blijft het resultaat van de eerste ronde staan
+      return eerste;
+    }
   }
 
   // Het zoeken zelf is gelukt maar het antwoord is onbruikbaar (te lang, geen geldig JSON, geen verkoopprijs)?

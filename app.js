@@ -536,10 +536,11 @@ function herberekenKosten(k) {
   else if (m < -50 || pctExact < -10) { advies = 'skip'; roi = Math.max(8, 50 + pct / 2); }
   else { roi = Math.max(25, Math.min(68, 50 + pct / 2)); }
   // Prijs zonder één gevonden advertentie: dan geen hard koop- of skip-advies, wel de cijfers als verwachting
-  var onzeker = !k.controle && k.prijzen && (k.prijzen.live === false || prijsZonderBewijs(k));
+  var onzeker = !k.controle && k.prijzen && k.prijzen.live === false;
+  var zonderBewijs = !k.controle && !onzeker && prijsZonderBewijs(k);
   if (onzeker && advies !== 'twijfel') { advies = 'twijfel'; roi = Math.max(25, Math.min(68, roi)); }
   k.advies = advies; k.roi = Math.round(roi);
-  k.adviesReden = (onzeker ? 'Let op: de verkoopprijs is een schatting zonder gevonden advertenties; controleer die eerst, want het advies kan daardoor veranderen. ' : '') + (m > 0
+  k.adviesReden = (onzeker ? 'Let op: de verkoopprijs is een schatting zonder gevonden advertenties; controleer die eerst. ' : zonderBewijs ? 'Let op: er zijn geen vergelijkbare advertenties gevonden, dus de verkoopprijs is een schatting. Kijk zelf wat het echt opbrengt: een hogere prijs kan het advies veranderen. ' : '') + (m > 0
     ? 'Kosten ' + fmt(kk.totaal) + (vkst ? ' + ' + fmt(vkst) + ' verkoopkosten' : '') + ' tegenover verwachte verkoop ~' + fmt(gem) + ': marge ' + fmt(m) + ' (' + pct + '%).'
     : 'Kosten ' + fmt(kk.totaal) + (vkst ? ' + ' + fmt(vkst) + ' verkoopkosten' : '') + ' liggen ' + fmt(Math.abs(m)) + ' boven de verwachte verkoop van ' + fmt(gem) + ' (' + pct + '%).') +
     (k.maxBod != null ? ' Max. bod ' + fmt(k.maxBod) + '.' : '');
