@@ -1314,6 +1314,9 @@ function openZoek(site) {
   };
   window.open(urls[site], '_blank', 'noopener');
 }
+// Knoppen in het detailscherm zoeken hun kavel op id op het moment van klikken, niet op een plek in de lijst die intussen kan zijn veranderd
+function kIdx(id) { return kavels.findIndex(function(k) { return String(k.id) === String(id); }); }
+
 function controleKaart(d, idx) {
   if (idx < 0) return '';
   var c = d.controle;
@@ -1348,8 +1351,8 @@ function controleKaart(d, idx) {
     '<div><label class="ctl-l" for="ctl-nieuw">Nieuwprijs <span class="opt">(optioneel)</span></label><div class="money"><span>&euro;</span><input class="input" id="ctl-nieuw" type="text" inputmode="decimal" value="' + val(c && c.nieuw) + '"></div></div></div></div>';
   h += '<div class="help">Het maximale bod rekent met je gecontroleerde gemiddelde en je gewenste marge van ' + pctTxt(doelPct()) + '%.' + (pc.per_stuk && !c ? ' De opbrengst per stuk is voorgesteld door de analyse; controleer hem.' : '') + '</div>';
   h += '<div class="msg err" id="ctl-err" role="alert"></div>';
-  h += '<div class="ctl-actions"><button class="btn btn-primary" onclick="bewaarControle(' + idx + ')">' + ic('check') + 'Opslaan en herberekenen</button>' +
-    (c ? '<button class="btn btn-secondary" onclick="herstelAiSchatting(' + idx + ')">' + ic('undo') + 'Terug naar AI-schatting</button>' : '') + '</div></div>';
+  h += '<div class="ctl-actions"><button class="btn btn-primary" onclick="bewaarControle(kIdx(\'' + d.id + '\'))">' + ic('check') + 'Opslaan en herberekenen</button>' +
+    (c ? '<button class="btn btn-secondary" onclick="herstelAiSchatting(kIdx(\'' + d.id + '\'))">' + ic('undo') + 'Terug naar AI-schatting</button>' : '') + '</div></div>';
   // Bij echte prijzen hoeft niemand eerst te controleren: ingeklapt als optie
   var kop = '<div class="card" id="controle-kaart"><div class="card-h"><h2>Prijzen controleren</h2><span class="conf warn"><i></i>Nog niet gecontroleerd</span></div>';
   if (d.prijzen && d.prijzen.live && !c && h.indexOf(kop) === 0 && h.slice(-6) === '</div>') {
@@ -1447,9 +1450,9 @@ function toonAnalyseResultaat(d, behoudScroll) {
   var pg = d.pagina || {};
 
   var h = '<div class="res-bar"><button class="btn btn-ghost btn-sm" onclick="switchTab(\'overzicht\')">' + ic('back') + 'Mijn kavels</button><div class="grp">';
-  if (idx >= 0) h += '<button class="btn btn-secondary btn-sm" onclick="wijzigBod(' + idx + ')">' + ic('tag') + 'Bod wijzigen</button>';
-  if (idx >= 0) h += '<button class="btn btn-secondary btn-sm" onclick="heranalyseer(' + idx + ')">' + ic('refresh') + 'Opnieuw analyseren</button>';
-  if (idx >= 0 && d.status !== 'gewonnen') h += '<button class="btn btn-secondary btn-sm" onclick="markeerGewonnen(' + idx + ',function(){switchTab(\'overzicht\')})">' + ic('trophy') + 'Markeer als gewonnen</button>';
+  if (idx >= 0) h += '<button class="btn btn-secondary btn-sm" onclick="wijzigBod(kIdx(\'' + d.id + '\'))">' + ic('tag') + 'Bod wijzigen</button>';
+  if (idx >= 0) h += '<button class="btn btn-secondary btn-sm" onclick="heranalyseer(kIdx(\'' + d.id + '\'))">' + ic('refresh') + 'Opnieuw analyseren</button>';
+  if (idx >= 0 && d.status !== 'gewonnen') h += '<button class="btn btn-secondary btn-sm" onclick="markeerGewonnen(kIdx(\'' + d.id + '\'),function(){switchTab(\'overzicht\')})">' + ic('trophy') + 'Markeer als gewonnen</button>';
   h += '<button class="btn btn-primary btn-sm" onclick="nieuwKavel()">' + ic('plus') + 'Nieuwe analyse</button></div></div>';
 
   // Hero: het advies met het kavelkaartje (maximaal bod)
@@ -1485,11 +1488,11 @@ function toonAnalyseResultaat(d, behoudScroll) {
   if (idx >= 0) {
     h += '<div class="kc-actions" style="margin-top:16px">';
     if (pg.sluit_iso && Date.parse(pg.sluit_iso) > Date.now()) {
-      h += '<button class="btn btn-secondary btn-sm" onclick="agendaKeuze(' + idx + ')">' + ic('calendar') + 'In agenda</button>';
-      if (serverModus() && account) h += '<button class="btn btn-secondary btn-sm" onclick="' + (d.geen_melding ? 'wisselKavelMelding(' + idx + ')' : 'meldingenScherm()') + '">' + ic('bell') + (d.geen_melding ? 'Meldingen aanzetten' : 'Meldingen') + '</button>';
+      h += '<button class="btn btn-secondary btn-sm" onclick="agendaKeuze(kIdx(\'' + d.id + '\'))">' + ic('calendar') + 'In agenda</button>';
+      if (serverModus() && account) h += '<button class="btn btn-secondary btn-sm" onclick="' + (d.geen_melding ? 'wisselKavelMelding(kIdx(\'' + d.id + '\'))' : 'meldingenScherm()') + '">' + ic('bell') + (d.geen_melding ? 'Meldingen aanzetten' : 'Meldingen') + '</button>';
     }
-    h += '<button class="btn btn-secondary btn-sm" onclick="kiesGroep(' + idx + ')">' + ic('folder') + (d.groep ? esc(d.groep) : 'Groep') + '</button>';
-    h += '<button class="btn btn-secondary btn-sm" onclick="deelKavel(' + idx + ')">' + ic('share') + 'Delen</button></div>';
+    h += '<button class="btn btn-secondary btn-sm" onclick="kiesGroep(kIdx(\'' + d.id + '\'))">' + ic('folder') + (d.groep ? esc(d.groep) : 'Groep') + '</button>';
+    h += '<button class="btn btn-secondary btn-sm" onclick="deelKavel(kIdx(\'' + d.id + '\'))">' + ic('share') + 'Delen</button></div>';
   }
   h += '</div>';
 
@@ -1498,7 +1501,7 @@ function toonAnalyseResultaat(d, behoudScroll) {
   h += '<div class="card"><div class="card-h"><h2>Financiële analyse</h2>';
   h += '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">';
   if (d.kosten && d.kosten.site) h += '<span class="kc-meta">' + esc(d.kosten.site) + ' &middot; ' + (d.eigen_bod ? 'Mijn bod' : 'Huidig bod') + '</span>';
-  if (idx >= 0) h += '<button class="btn btn-secondary btn-sm" onclick="pasTariefAan(' + idx + ')">' + ic('percent') + 'Kosten aanpassen</button>';
+  if (idx >= 0) h += '<button class="btn btn-secondary btn-sm" onclick="pasTariefAan(kIdx(\'' + d.id + '\'))">' + ic('percent') + 'Kosten aanpassen</button>';
   h += '</div></div>';
   function kostenRijen(k) {
     var t = tariefVan(d);
@@ -1529,7 +1532,7 @@ function toonAnalyseResultaat(d, behoudScroll) {
     h += '<div class="note">' + ic('alert') + '<span>' + (ond ? 'Verkoopprijs en marge worden pas getoond nadat je onder Prijzen controleren de opbrengst per stuk hebt ingevuld.' : 'Er is geen verkoopprijs bekend, dus de marge kan niet worden berekend.') + '</span></div>';
   } else {
     h += '<div class="empty small" style="border-style:solid"><h3>Nog geen bod bekend</h3><p>Vul een bod in om de totale kosten en de marge te zien.' + (d.maxBod > 0 ? ' Bied maximaal ' + fmt(d.maxBod) + ' voor ' + pctTxt(doelPct()) + '% marge.' : '') + '</p>' +
-         (idx >= 0 ? '<button class="btn btn-primary" onclick="wijzigBod(' + idx + ')">Bod invullen</button>' : '') + '</div>';
+         (idx >= 0 ? '<button class="btn btn-primary" onclick="wijzigBod(kIdx(\'' + d.id + '\'))">Bod invullen</button>' : '') + '</div>';
   }
   if (!ond) h += biedLadderHtml(d, idx);
   if (d.tarief_citaat) h += '<div class="note">' + ic('info') + '<span>Kosten op de kavelpagina: ' + esc(d.tarief_citaat) + '</span></div>';
@@ -1624,7 +1627,7 @@ function toonAnalyseResultaat(d, behoudScroll) {
       : '<p class="help" style="margin:0 0 8px">Geen duidelijke gebreken gezien.</p>';
     h += '<div class="note">' + ic('alert') + '<span>' + FOTO_GRENS + '</span></div></div>';
   }
-  if (idx >= 0 && serverModus() && account) h += '<div class="feedback-rij"><button type="button" class="linkje" onclick="vraagFeedback(' + idx + ')">' + ic('flag') + 'Klopt er iets niet aan deze analyse?</button></div>';
+  if (idx >= 0 && serverModus() && account) h += '<div class="feedback-rij"><button type="button" class="linkje" onclick="vraagFeedback(kIdx(\'' + d.id + '\'))">' + ic('flag') + 'Klopt er iets niet aan deze analyse?</button></div>';
 
   var box = document.getElementById('analyse-result');
   box.innerHTML = h;
