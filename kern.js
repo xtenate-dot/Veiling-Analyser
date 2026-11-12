@@ -668,6 +668,8 @@
   }
   function cacheSleutel(term, staat) { return String(term || '').toLowerCase().replace(/\s+/g, ' ').trim() + '|' + String(staat || '').toLowerCase(); }
 
+  function zonderAdvertenties(p) { return !!p && !(p.tweedehands && p.tweedehands.length) && !!p.marktplaats && p.marktplaats.vertrouwen === 'laag'; }
+
   // ── Volledige analyse ──────────────────────────────────────────────────────
   // input: { url, extra, hergebruik }
   // deps:  { anthropic, haalPagina?, modelPagina, modelPrijzen, cacheLees?(sleutel), cacheSchrijf?(sleutel, prijzen), opStap?(n) }
@@ -705,13 +707,15 @@
     var prijzen = null;
     if (live && sleutel && input.hergebruik !== false && deps.cacheLees) {
       try { prijzen = await deps.cacheLees(sleutel); } catch (e) { prijzen = null; }
+      // Een eerder resultaat zonder één gevonden advertentie hergebruiken we niet: dat zou dezelfde zwakke schatting opnieuw geven
+      if (prijzen && zonderAdvertenties(prijzen)) prijzen = null;
       if (prijzen) prijzen.hergebruikt = true;
     }
     if (live && !prijzen) {
       try {
         prijzen = await zoekPrijzen(product, pagina, extra, url, deps);
         // Alleen delen met anderen als niemand de opdracht heeft kunnen beïnvloeden (geen eigen tekst of foto's)
-        if (prijzen.live && sleutel && deps.cacheSchrijf && !extra && !fotos) { try { await deps.cacheSchrijf(sleutel, prijzen); } catch (e) {} }
+        if (prijzen.live && sleutel && deps.cacheSchrijf && !extra && !fotos && !zonderAdvertenties(prijzen)) { try { await deps.cacheSchrijf(sleutel, prijzen); } catch (e) {} }
       } catch (e) {
         if (isToolFout(e)) live = false;
         else if (e.apiType) throw e;
