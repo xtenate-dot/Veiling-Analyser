@@ -424,7 +424,7 @@
   }
   var PRIJS_JSON = '{"productnaam":"","categorie":"","nieuwprijs":null,"nieuwprijs_bron":"winkel en datum","nieuwprijs_url":null,' +
     '"tweedehands":[{"platform":"Marktplaats","titel":"","prijs":0,"soort":"vraagprijs|verkocht","staat":"","url":null}],' +
-    '"marktplaats":{"laag":0,"gemiddeld":0,"hoog":0,"vertrouwen":"hoog|middel|laag","aantal_vergelijkbaar":0,"tip":"","verkooptijd":"","zoekwoorden":[]},' +
+    '"marktplaats":{"laag":0,"gemiddeld":0,"hoog":0,"werkend_gemiddeld":null,"vertrouwen":"hoog|middel|laag","aantal_vergelijkbaar":0,"tip":"","verkooptijd":"","zoekwoorden":[]},' +
     '"ebay":{"laag":null,"gemiddeld":null,"hoog":null,"vertrouwen":"laag","tip":"","verkooptijd":"","keywords":[]},' +
     '"partij":null,"toelichting":"","aandachtspunten":[]}';
   // Bij voertuigen ook de vraagprijzen van autobedrijven, apart van de particuliere verkoopprijs
@@ -440,6 +440,7 @@
   var PRIJS_REGELS =
     'Regels:\n' +
     '- Eerlijkheid gaat voor alles. Gebruik alleen advertenties van exact hetzelfde product (zelfde model, variant, opslag, maat, generatie) in een vergelijkbare staat. Laat "gezocht", accessoires, onderdelen, bundels en uitschieters weg. Defecte exemplaren alleen als het kavel zelf defect is.\n' +
+    '- Is het kavel defect of beschadigd? Dan zijn marktplaats.laag/gemiddeld/hoog de verkoopprijzen van een exemplaar in DIE staat (defect of voor onderdelen), en zet je in marktplaats.werkend_gemiddeld de verkoopprijs van een werkend exemplaar. Is het kavel niet defect, dan is werkend_gemiddeld null. Vond je geen defecte exemplaren, dan is het verschil een schatting: zeg dat in de toelichting en noem wat je aannam (soort gebrek, reparatiekosten).\n' +
     '- Vraagprijzen op Marktplaats en 2dehands zijn geen verkoopprijzen; er wordt meestal lager verkocht. Verkochte eBay-items zijn de beste aanwijzing voor wat er echt betaald wordt.\n' +
     '- tweedehands: maximaal 12 advertenties die je echt hebt gezien, met de exacte URL. Verzin nooit URL\'s of prijzen. Geen URL: url null.\n' +
     '- marktplaats.laag / gemiddeld / hoog: realistische VERKOOPprijzen in NL/BE voor één exemplaar in de staat van het kavel. gemiddeld = waarvoor het binnen een paar weken verkoopt.\n' +
@@ -587,6 +588,7 @@
         laag: num(x.laag), gemiddeld: num(x.gemiddeld), hoog: num(x.hoog),
         vertrouwen: ['hoog', 'middel', 'laag'].indexOf(x.vertrouwen) !== -1 ? x.vertrouwen : 'laag',
         aantal_vergelijkbaar: num(x.aantal_vergelijkbaar), tip: kortTekst(x.tip, 300), verkooptijd: kortTekst(x.verkooptijd, 40),
+        werkend_gemiddeld: num(x.werkend_gemiddeld) > 0 ? num(x.werkend_gemiddeld) : null,
         zoekwoorden: Array.isArray(x.zoekwoorden || x.keywords) ? (x.zoekwoorden || x.keywords).filter(function (w) { return typeof w === 'string'; }).slice(0, 8) : []
       };
       if (!(p.gemiddeld > 0)) return null;
@@ -670,6 +672,17 @@
 
   function zonderAdvertenties(p) { return !!p && !(p.tweedehands && p.tweedehands.length) && !!p.marktplaats && p.marktplaats.vertrouwen === 'laag'; }
 
+  // Defect of beschadigd: laat zien hoeveel lager het geschatte bedrag ligt dan bij een werkend exemplaar, zodat de klant het kan beoordelen
+  function defectWaarschuwing(pagina, prijzen) {
+    if (!pagina || !/defect|beschadigd/i.test(pagina.staat || '') || !prijzen || !prijzen.marktplaats) return null;
+    var wm = prijzen.marktplaats.werkend_gemiddeld, dm = prijzen.marktplaats.gemiddeld;
+    var eur = function (n) { return '€' + Math.round(n).toLocaleString('nl-NL'); };
+    if (wm > 0 && dm > 0 && wm > dm) {
+      return 'Dit kavel is ' + pagina.staat + '. Een werkend exemplaar brengt ongeveer ' + eur(wm) + ' op; voor dit exemplaar is ' + eur(dm) + ' geschat (' + Math.round((1 - dm / wm) * 100) + '% lager). Dat verschil is een schatting: kijk bij eBay (verkochte items) en Marktplaats naar defecte exemplaren en pas de prijs zo nodig aan onder Prijzen zelf aanpassen.';
+    }
+    return 'Dit kavel is ' + pagina.staat + ', maar de app weet niet hoeveel lager de prijs dan bij een werkend exemplaar ligt. Controleer de verkoopwaarde zelf.';
+  }
+
   // ── Volledige analyse ──────────────────────────────────────────────────────
   // input: { url, extra, hergebruik }
   // deps:  { anthropic, haalPagina?, modelPagina, modelPrijzen, cacheLees?(sleutel), cacheSchrijf?(sleutel, prijzen), opStap?(n) }
@@ -746,6 +759,8 @@
       prijzen.controles = (prijzen.controles || []).filter(function (c) { return c.indexOf('niet onder de nieuwprijs') === -1; });
       if (prijzen.marktplaats && prijzen.marktplaats.gemiddeld >= prijzen.nieuwprijs) prijzen.controles.push('De tweedehands prijs ligt niet onder de nieuwprijs. Controleer beide bedragen.');
     }
+    var defectTekst = defectWaarschuwing(pagina, prijzen);
+    if (defectTekst) waarschuwingen.push(defectTekst);
     if (deps.opStap) deps.opStap(3);
     return {
       pagina: pagina, prijzen: prijzen, product: product, waarschuwingen: waarschuwingen,
@@ -762,6 +777,6 @@
     normKenteken: normKenteken, kentekenMetStreepjes: kentekenMetStreepjes, vindKenteken: vindKenteken, normRdw: normRdw, rdwOpzoeken: rdwOpzoeken,
     apiFout: apiFout, isToolFout: isToolFout, vraagClaude: vraagClaude,
     leesKavelpagina: leesKavelpagina, zoekPrijzen: zoekPrijzen, schatPrijzen: schatPrijzen, normPrijzen: normPrijzen,
-    bepaalProduct: bepaalProduct, analyseer: analyseer
+    bepaalProduct: bepaalProduct, analyseer: analyseer, defectWaarschuwing: defectWaarschuwing
   };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

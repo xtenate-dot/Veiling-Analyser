@@ -825,7 +825,10 @@ async function analyse(request, env) {
   const gebruikt = await verbruikDezeMaand(env, g.id);
   const saldo = await saldoVan(env, g.id);
   const uitTegoed = gebruikt >= p[plan].limiet;
-  const geenTegoed = () => new Fout(402, 'limiet', plan === 'gratis'
+  const betalingMislukt = plan === 'gratis' && ['past_due', 'unpaid'].includes(g.abonnement_status);
+  const geenTegoed = () => new Fout(402, 'limiet', betalingMislukt
+    ? 'De laatste betaling van je abonnement is mislukt, daarom staat het even stil. Werk je betaalgegevens bij onder Account; zodra de betaling is gelukt kun je weer analyseren.'
+    : plan === 'gratis'
     ? (env.STRIPE_SECRET_KEY ? 'Je gratis analyses zijn op. Koop een losse bundel of kies een abonnement om verder te gaan.' : 'Je gratis analyses zijn op. Een ander bod doorrekenen kan wel gewoon.')
     : 'Je hebt deze maand alle ' + p[plan].limiet + ' analyses van je abonnement gebruikt. Koop een losse bundel, kies een groter abonnement of wacht tot de 1e van volgende maand.');
   if (uitTegoed && saldo <= 0) throw geenTegoed();
