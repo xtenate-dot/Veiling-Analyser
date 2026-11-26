@@ -181,10 +181,28 @@
   async function vraagClaude(opts, deps) {
     var messages = [{ role: 'user', content: opts.content || opts.prompt }];
     var bronnen = {}, zoekvragen = [], corpus = '', laatste = null, alleTekst = '', usd = 0, doorgeschreven = false;
+    var zoeklog = [], toolNaam = {}; // per zoek- of ophaalopdracht: wat leverde het op, of welke fout gaf het
+    function lijstBronnen() { return Object.keys(bronnen).map(function (k) { return bronnen[k]; }); }
+    function bevestigdFn(u) {
+      if (!u) return false;
+      if (bronnen[normUrl(u)]) return true;
+      var corpusLaag = (corpus + '\n' + (opts.extraCorpus || '')).toLowerCase();
+      try { var p = new URL(u).pathname; return p.length > 8 && corpusLaag.indexOf(p.toLowerCase()) !== -1; } catch (e) { return false; }
+    }
     for (var ronde = 0; ronde < 5; ronde++) {
       var body = { model: opts.model, max_tokens: opts.maxTokens || 8000, system: opts.system, messages: messages };
       if (opts.tools) body.tools = opts.tools;
-      var data = await deps.anthropic(body);
+      var data;
+      try { data = await deps.anthropic(body); }
+      catch (err) {
+        // De kosten van wat al gelukt is tellen mee, en wat al gevonden is gooien we niet weg: bij een fout halverwege
+        // kan de aanroeper de gevonden zoekresultaten nog laten omzetten (zonder opnieuw te zoeken)
+        err.usd = usd;
+        if (ronde > 0 && Object.keys(bronnen).length) {
+          err.resultaat = { json: parseJSON(alleTekst), usd: usd, zoekvragen: zoekvragen, zoeklog: zoeklog, tekst: alleTekst, bronnen: lijstBronnen(), bevestigd: bevestigdFn, onderbroken: String(err.message || err).slice(0, 300) };
+        }
+        throw err;
+      }
       if (!data || !Array.isArray(data.content)) throw new Error('Onverwachte API response');
       usd += apiKostenVan(opts.model, data.usage);
       data.content.forEach(function (b) {
@@ -192,10 +210,19 @@
           alleTekst += b.text || '';
           (b.citations || []).forEach(function (c) { if (c.url) bronnen[normUrl(c.url)] = { url: c.url, titel: c.title || '' }; });
         } else if (b.type === 'server_tool_use' && b.name === 'web_search' && b.input && b.input.query) {
-          zoekvragen.push(b.input.query);
-        } else if (b.type === 'web_search_tool_result' && Array.isArray(b.content)) {
-          b.content.forEach(function (r) { if (r && r.url) bronnen[normUrl(r.url)] = { url: r.url, titel: r.title || '' }; });
+          zoekvragen.push(b.input.query); toolNaam[b.id] = b.input.query;
+        } else if (b.type === 'server_tool_use' && b.name === 'web_fetch' && b.input) {
+          toolNaam[b.id] = b.input.url || '';
+        } else if (b.type === 'web_search_tool_result') {
+          // Een geslaagde zoekopdracht (ook zonder bruikbare resultaten) is iets anders dan een zoekopdracht die een fout gaf
+          if (Array.isArray(b.content)) {
+            b.content.forEach(function (r) { if (r && r.url) bronnen[normUrl(r.url)] = { url: r.url, titel: r.title || '' }; });
+            zoeklog.push({ soort: 'zoeken', vraag: toolNaam[b.tool_use_id] || '', resultaten: b.content.length });
+          } else zoeklog.push({ soort: 'zoeken', vraag: toolNaam[b.tool_use_id] || '', fout: (b.content && (b.content.error_code || b.content.type)) || 'onbekende fout' });
+        } else if (b.type === 'web_fetch_tool_result' && b.content && b.content.type !== 'web_fetch_result') {
+          zoeklog.push({ soort: 'ophalen', url: toolNaam[b.tool_use_id] || '', fout: b.content.error_code || b.content.type || 'onbekende fout' });
         } else if (b.type === 'web_fetch_tool_result' && b.content && b.content.type === 'web_fetch_result') {
+          zoeklog.push({ soort: 'ophalen', url: b.content.url || toolNaam[b.tool_use_id] || '', ok: true });
           var doc = b.content.content || {};
           bronnen[normUrl(b.content.url)] = { url: b.content.url, titel: doc.title || '', opgehaald: true };
           var src = doc.source || {};
@@ -223,16 +250,7 @@
     }
     var tekst = laatste.content.filter(function (b) { return b.type === 'text'; }).map(function (b) { return b.text; }).join('');
     var json = parseJSON(tekst) || parseJSON(alleTekst) || (doorgeschreven ? parseJSON(alleTekst.slice(alleTekst.indexOf('{'))) : null);
-    var corpusLaag = (corpus + '\n' + (opts.extraCorpus || '')).toLowerCase();
-    var resultaat = {
-      json: json, usd: usd, zoekvragen: zoekvragen, tekst: alleTekst,
-      bronnen: Object.keys(bronnen).map(function (k) { return bronnen[k]; }),
-      bevestigd: function (u) {
-        if (!u) return false;
-        if (bronnen[normUrl(u)]) return true;
-        try { var p = new URL(u).pathname; return p.length > 8 && corpusLaag.indexOf(p.toLowerCase()) !== -1; } catch (e) { return false; }
-      }
-    };
+    var resultaat = { json: json, usd: usd, zoekvragen: zoekvragen, zoeklog: zoeklog, tekst: alleTekst, bronnen: lijstBronnen(), bevestigd: bevestigdFn };
     if (!json && laatste.stop_reason === 'max_tokens') {
       var fout = new Error('Het antwoord was te lang en is afgebroken. Probeer het opnieuw.');
       fout.resultaat = resultaat; // wat er wel al gevonden is, voor een herstelpoging
@@ -491,21 +509,37 @@
       }, product, deps, PRIJS_JSON);
     }
     var eerste = await ronde(zoekMax);
-    // Niets vergelijkbaars gevonden (bijvoorbeeld bij verzamelkaarten of importproducten die weinig op Marktplaats staan)?
-    // Dan één keer breder zoeken met andere zoektermen en bronnen. Dit kost alleen iets extra bij kavels waar de eerste ronde niets vond.
-    var zonderBewijs = !(eerste.tweedehands && eerste.tweedehands.length) && eerste.marktplaats && eerste.marktplaats.vertrouwen === 'laag';
-    if (!zonderBewijs || zoekMax < 1 || deps.tweedeRonde === false) return eerste;
-    var breder = '\n\nEen eerste zoekpoging vond geen vergelijkbare advertenties. Zoek nu breder: probeer andere zoektermen (de Engelse of originele productnaam, merk plus type, set- of modelnummer) en andere bronnen waar dit soort product echt wordt verhandeld, zoals verkochte eBay-items, Vinted, Cardmarket of TCGplayer bij verzamelkaarten, of vergelijkbare producten. Prijzen uit het buitenland reken je om naar wat het in Nederland en België opbrengt en dat zeg je in de toelichting. Zet het vertrouwen op laag, tenzij je minstens twee echte verkochte items of advertenties ziet.';
+    // Te weinig echt passende advertenties (minder dan twee voor exact dit product, in deze staat en voor één stuk)?
+    // Dan één keer breder zoeken met andere zoektermen en bronnen. Dit beslist de code, niet het oordeel van de AI.
+    var bet1 = berekenBetrouwbaarheid(eerste, pagina, product, extra);
+    eerste.tweede_ronde = false;
+    if (bet1.aantal_passend >= 2 || zoekMax < 1 || deps.tweedeRonde === false) return eerste;
+    // Kostenbudget per analyse (optioneel): een tweede ronde kost ongeveer evenveel als de eerste
+    var uitgegeven = deps.boek ? deps.boek.usd : (eerste.usd || 0);
+    if (typeof deps.maxUsdPerAnalyse === 'number' && uitgegeven + (eerste.usd || 0) > deps.maxUsdPerAnalyse) {
+      eerste.tweede_ronde_overgeslagen = 'kostenbudget van $' + deps.maxUsdPerAnalyse + ' per analyse zou worden overschreden (al $' + uitgegeven.toFixed(3) + ' uitgegeven)';
+      return eerste;
+    }
+    var redenen = Object.keys(bet1.afgekeurd || {}).map(function (r) { return bet1.afgekeurd[r] + ' x ' + r; }).join(', ');
+    var breder = '\n\nEen eerste zoekpoging vond te weinig vergelijkbare advertenties: minder dan twee die echt passen bij exact dit product, in deze staat en voor één stuk.' + (redenen ? ' Afgekeurd waren: ' + redenen + '. Zoek dus losse stuks in de juiste staat, geen partijen, sets of veilingkavels.' : '') + ' Zoek nu breder: probeer andere zoektermen (de Engelse of originele productnaam, merk plus type, set- of modelnummer) en andere bronnen waar dit soort product echt wordt verhandeld, zoals verkochte eBay-items, Vinted, Cardmarket of TCGplayer bij verzamelkaarten, of vergelijkbare producten. Prijzen uit het buitenland reken je om naar wat het in Nederland en België opbrengt en dat zeg je in de toelichting. Zet het vertrouwen op laag, tenzij je minstens twee echte verkochte items of advertenties ziet.';
     try {
       var tweede = await ronde(typeof deps.maxZoekBreed === 'number' ? deps.maxZoekBreed : 2, breder);
+      var bet2 = berekenBetrouwbaarheid(tweede, pagina, product, extra);
       var kosten = (eerste.usd || 0) + (tweede.usd || 0);
-      tweede.tweede_ronde = true;
-      eerste.tweede_ronde = true;
-      var gekozen = (tweede.tweedehands && tweede.tweedehands.length) ? tweede : eerste;
+      // We kiezen de ronde met de meeste passende advertenties (bij gelijkstand de eerste)
+      var gekozen = bet2.aantal_passend > bet1.aantal_passend ? tweede : eerste;
+      var andere = gekozen === tweede ? eerste : tweede;
       gekozen.usd = kosten;
+      gekozen.tweede_ronde = true;
+      gekozen.tweede_ronde_info = 'eerste ronde: ' + bet1.aantal_passend + ' passend; tweede ronde: ' + bet2.aantal_passend + ' passend; gekozen: ' + (gekozen === tweede ? 'tweede' : 'eerste');
+      gekozen.zoeklog = (eerste.zoeklog || []).map(function (z) { return Object.assign({ ronde: 1 }, z); }).concat((tweede.zoeklog || []).map(function (z) { return Object.assign({ ronde: 2 }, z); }));
+      gekozen.zoekvragen = (eerste.zoekvragen || []).concat(tweede.zoekvragen || []).slice(0, 12);
       return gekozen;
     } catch (e) {
-      // De tweede ronde mislukte: dan blijft het resultaat van de eerste ronde staan
+      // De tweede ronde mislukte: het resultaat van de eerste ronde blijft staan, met de reden erbij
+      eerste.tweede_ronde = true;
+      eerste.tweede_ronde_fout = String(e.message || e).slice(0, 300);
+      eerste.usd = (eerste.usd || 0) + (e.usd || (e.resultaat && e.resultaat.usd) || 0);
       return eerste;
     }
   }
@@ -525,7 +559,7 @@
       prompt: 'Product: ' + product + '\n\nGevonden pagina\'s en zoekresultaten:\n' + (gevonden || '(geen)') + '\n\nAantekeningen van het onderzoek:\n' + (notities || '(geen)') + '\n\nVul dit JSON-object in, met korte teksten:\n' + jsonVorm,
       maxTokens: 4000, model: deps.modelPrijzen
     }, deps);
-    var p = normPrijzen(r2.json, { bevestigd: r.bevestigd, bronnen: r.bronnen, zoekvragen: r.zoekvragen, usd: r.usd + r2.usd }, true);
+    var p = normPrijzen(r2.json, { bevestigd: r.bevestigd, bronnen: r.bronnen, zoekvragen: r.zoekvragen, zoeklog: r.zoeklog, onderbroken: r.onderbroken, usd: r.usd + r2.usd }, true);
     p.hersteld = true;
     return p;
   }
@@ -640,7 +674,7 @@
       toelichting: kortTekst(j.toelichting, 400),
       aandachtspunten: Array.isArray(j.aandachtspunten) ? j.aandachtspunten.filter(function (x) { return typeof x === 'string'; }).slice(0, 6).map(function (x) { return kortTekst(x, 240); }) : [],
       live: live, opgehaald_op: Date.now(), usd: r.usd,
-      zoekvragen: r.zoekvragen.slice(0, 12),
+      zoekvragen: r.zoekvragen.slice(0, 12), zoeklog: (r.zoeklog || []).slice(0, 20), onderbroken: r.onderbroken || null,
       bronnen: r.bronnen.slice(0, 20).map(function (b) { return { url: b.url, titel: kortTekst(b.titel, 120), opgehaald: !!b.opgehaald }; }),
       controles: afgeleid ? ['De verwachte verkoopprijs is afgeleid van ' + afgeleid + '. Controleer hem zelf via de knoppen hieronder.'] : []
     };
@@ -747,16 +781,32 @@
   }
   function pastBijEisen(titel, e) { return toetsEisen(titel, e).past; }
   // Advertenties die nooit een eerlijke vergelijking zijn voor één stuk in de staat van het kavel
-  var DEFECT_RE = /\b(defect|defecte|kapot|kapotte|gebarsten|barst|gebroken|beschadigd|beschadigde|schade|onderdelen|niet werkend|werkt niet|water ?schade)\b/i;
+  var DEFECT_RE = /\b(defect|defecte|defecten|kapot|kapotte|gebarsten|barst|gebroken|beschadigd|beschadigde|schade|gebrek|gebreken|onderdelen|niet werkend|werkt niet|water ?schade)\b/gi;
+  var ONTKENNING = /^(geen|niet|zonder|nooit|vrij|nergens|nul)$/;
+  // Eerste echte defectmelding in een tekst. "geen schade", "niet defect", "zonder schade" en "vrij van gebreken" tellen niet:
+  // een ontkenning binnen de vier woorden ervoor, in dezelfde zin, maakt van het woord geen defectmelding
+  function defectWoord(tekst) {
+    tekst = String(tekst || '');
+    var re = new RegExp(DEFECT_RE.source, 'gi'), m;
+    while ((m = re.exec(tekst))) {
+      var voor = tekst.slice(0, m.index).split(/[.,;:!?()\n]/).pop().toLowerCase().split(/\s+/).filter(Boolean).slice(-4);
+      var br = -1; voor.forEach(function (w, i) { if (/^(maar|wel|echter|helaas|wél)$/.test(w)) br = i; });
+      if (br >= 0) voor = voor.slice(br + 1);
+      // "niet werkend" en "werkt niet" bevatten zelf een ontkenning en zijn juist een defectmelding
+      var ontkend = !/^(niet werkend|werkt niet)$/i.test(m[0]) && voor.some(function (w) { return ONTKENNING.test(w); });
+      if (!ontkend) return m[0];
+    }
+    return null;
+  }
   var PARTIJ_RE = /\b(partij|bulk|bundel|lot van|mix van|diverse|collectie|set van|([2-9]|[1-9]\d)\s*(x|stuks|stuk|pcs|packs?|boosters?|pakjes|kaarten|sets))\b/i; // 2 tot 99 stuks; een getal als "151" is vaak een setnaam, geen aantal
   var VEILING_RE = /\b(veilingkavel|kavel|veiling)\b/i;
   var VEILING_HOSTS = ['hnvi', 'troostwijk', 'bva-auctions', 'vavato', 'dtz', 'catawiki', 'onlineveilingmeester', 'veilingzaken', 'kavelkoning'];
   function kavelContext(pagina, product, extra) {
     var invoer = [extra, product, pagina && pagina.titel, pagina && pagina.staat_toelichting].filter(Boolean).join(' ');
-    var m = invoer.match(DEFECT_RE) || ((pagina && pagina.staat) || '').match(/defect|beschadigd/i);
+    var woord = defectWoord(invoer) || (((pagina && pagina.staat) || '').match(/defect|beschadigd/i) || [null])[0];
     return {
-      defect: !!m,
-      defect_woord: m ? m[0] : null,
+      defect: !!woord,
+      defect_woord: woord,
       partij: !!(pagina && pagina.aantal_stuks > 1) || PARTIJ_RE.test(String(extra || '') + ' ' + String(product || ''))
     };
   }
@@ -767,8 +817,8 @@
     if (mp) return { reden: 'meerdere stuks', detail: 'de titel noemt "' + mp[0] + '" en het kavel is één stuk' };
     var mv = titel.match(VEILING_RE), host = VEILING_HOSTS.filter(function (h) { return hostVan(a.url || '').indexOf(h) !== -1 || String(a.platform || '').toLowerCase().indexOf(h) !== -1; })[0];
     if (mv || host) return { reden: 'veilingkavel', detail: mv ? 'de titel noemt "' + mv[0] + '"' : 'de bron is een veilinghuis (' + host + ')' };
-    var dt = titel.match(DEFECT_RE), ds = staat.match(DEFECT_RE), defectAd = dt || ds;
-    if (!ctx.defect && defectAd) return { reden: 'defect of beschadigd', detail: 'de advertentie noemt "' + defectAd[0] + '" (' + (dt ? 'titel' : 'staat') + ') en het kavel is niet defect' };
+    var dt = defectWoord(titel), ds = defectWoord(staat), defectAd = dt || ds;
+    if (!ctx.defect && defectAd) return { reden: 'defect of beschadigd', detail: 'de advertentie noemt "' + defectAd + '" (' + (dt ? 'titel' : 'staat') + ') en het kavel is niet defect' };
     if (ctx.defect && !defectAd) return { reden: 'werkend exemplaar (kavel is defect)', detail: 'het kavel is als defect gelezen (invoer of pagina noemt "' + ctx.defect_woord + '"); de advertentie noemt geen defect in titel of staat (staat: "' + staat + '")' };
     if (a.datum && (nu - Date.parse(a.datum)) / 864e5 > 365) return { reden: 'ouder dan een jaar', detail: 'datum ' + a.datum + ' is ' + Math.round((nu - Date.parse(a.datum)) / 864e5) + ' dagen geleden' };
     return null;
@@ -894,7 +944,34 @@
   // ── Volledige analyse ──────────────────────────────────────────────────────
   // input: { url, extra, hergebruik }
   // deps:  { anthropic, haalPagina?, modelPagina, modelPrijzen, cacheLees?(sleutel), cacheSchrijf?(sleutel, prijzen), opStap?(n) }
+  // Eén kostenboek per analyse: elk API-antwoord wordt precies één keer geteld, ook als de poging daarna mislukt of wordt weggegooid.
   async function analyseer(input, deps) {
+    var boek = { usd: 0, verzoeken: 0, zoekopdrachten: 0, ophalen: 0, tokens_in: 0, tokens_uit: 0, fouten: [] };
+    var orig = deps.anthropic;
+    var diep = Object.assign({}, deps, {
+      boek: boek,
+      anthropic: async function (body) {
+        var d;
+        try { d = await orig(body); }
+        catch (e) {
+          boek.fouten.push({ na_verzoeken: boek.verzoeken, model: body && body.model, soort: e.apiType || 'fout', status: e.status || null, melding: String(e.message || e).slice(0, 300) });
+          throw e;
+        }
+        var u = (d && d.usage) || {}, st = u.server_tool_use || {};
+        boek.usd += apiKostenVan(body.model, u); boek.verzoeken++;
+        boek.zoekopdrachten += st.web_search_requests || 0; boek.ophalen += st.web_fetch_requests || 0;
+        boek.tokens_in += (u.input_tokens || 0) + (u.cache_creation_input_tokens || 0) + (u.cache_read_input_tokens || 0); boek.tokens_uit += u.output_tokens || 0;
+        return d;
+      }
+    });
+    try {
+      var res = await analyseerIntern(input, diep, boek);
+      res.usd = boek.usd; // de som van alle echte API-antwoorden; de bedragen per stap zijn alleen ter informatie
+      res.boekhouding = boek;
+      return res;
+    } catch (e) { e.boekhouding = boek; e.usd = boek.usd; throw e; }
+  }
+  async function analyseerIntern(input, deps, boek) {
     var url = input.url || '', extra = input.extra || '', fotos = fotoBlokken(input.fotos).length ? input.fotos : null;
     var pagina = null, live = true, waarschuwingen = [], extraUsd = 0;
     if (deps.opStap) deps.opStap(1);
@@ -993,6 +1070,6 @@
     normKenteken: normKenteken, kentekenMetStreepjes: kentekenMetStreepjes, vindKenteken: vindKenteken, normRdw: normRdw, rdwOpzoeken: rdwOpzoeken,
     apiFout: apiFout, isToolFout: isToolFout, vraagClaude: vraagClaude,
     leesKavelpagina: leesKavelpagina, zoekPrijzen: zoekPrijzen, schatPrijzen: schatPrijzen, normPrijzen: normPrijzen,
-    bepaalProduct: bepaalProduct, berekenBetrouwbaarheid: berekenBetrouwbaarheid, bepaalHerkenning: bepaalHerkenning, analyseer: analyseer, defectWaarschuwing: defectWaarschuwing
+    bepaalProduct: bepaalProduct, berekenBetrouwbaarheid: berekenBetrouwbaarheid, defectWoord: defectWoord, bepaalHerkenning: bepaalHerkenning, analyseer: analyseer, defectWaarschuwing: defectWaarschuwing
   };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

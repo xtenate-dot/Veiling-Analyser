@@ -70,7 +70,7 @@ async function bevestig(tk, email) { return api('POST', '/api/verifieer', { code
 const STAP1 = { gevonden: true, titel: 'Apple iPhone 13 128GB', veilinghuis: 'Testveiling', kavelnummer: '4711', product: { zoekterm: 'iPhone 13 128GB' }, staat: 'gebruikt',
   aantal_stuks: 1, huidig_bod: 300, aantal_biedingen: 7, sluit: 'do 30 okt 20:00', sluit_iso: '2026-10-30T20:00:00+01:00',
   kosten: { opgeld_pct: 18, vaste_kosten: 2.5, btw_pct: 21, btw_regeling: 'volledig', bron: 'Opgeld 18%' }, opmerkingen: [] };
-const STAP2 = { productnaam: 'Apple iPhone 13 128GB', nieuwprijs: 899, tweedehands: [{ platform: 'Marktplaats', titel: 'iPhone 13', prijs: 575, soort: 'vraagprijs', url: 'https://www.marktplaats.nl/v/x/m1-iphone' }],
+const STAP2 = { productnaam: 'Apple iPhone 13 128GB', nieuwprijs: 899, tweedehands: [{ platform: 'Marktplaats', titel: 'iPhone 13 128GB', prijs: 575, soort: 'vraagprijs', url: 'https://www.marktplaats.nl/v/x/m1-iphone' }, { platform: 'Marktplaats', titel: 'iPhone 13 128GB blauw', prijs: 560, soort: 'vraagprijs', url: 'https://www.marktplaats.nl/v/x/m2-iphone' }],
   marktplaats: { laag: 500, gemiddeld: 600, hoog: 700, vertrouwen: 'middel' }, ebay: null, toelichting: 'test' };
 let anthropicBodies = [];
 anthropicAntwoord = (b) => {

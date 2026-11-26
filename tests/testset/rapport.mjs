@@ -31,6 +31,16 @@ const kv = data.filter(r => r.waarschuwing_kosten);
 o.push('- Analyses waarbij twee onafhankelijke kostenoptellingen verschillen: ' + kv.length + (kv.length ? ' (' + kv.map(r => r.id + ' ' + r.model + ': ' + r.waarschuwing_kosten).join('; ') + ')' : '') + '.');
 const meer = data.filter(r => r.telling && (r.telling.verzoeken > 2 || r.telling.zoekopdrachten > 1 || r.telling.herhalingen > 0));
 o.push('- Analyses met extra verzoeken, meer dan 1 zoekopdracht of herhalingen na een fout: ' + meer.length + (meer.length ? ' (' + meer.map(r => r.id + ' ' + r.model + ': ' + r.telling.verzoeken + ' verzoeken, ' + r.telling.zoekopdrachten + ' zoekopdrachten, ' + r.telling.herhalingen + ' herhalingen').join('; ') + ')' : '') + '.\n');
+const metFouten = data.filter(r => r.boekhouding && r.boekhouding.fouten && r.boekhouding.fouten.length);
+o.push('- API-fouten tijdens analyses (ook van pogingen die daarna herstelden): ' + metFouten.reduce((a, r) => a + r.boekhouding.fouten.length, 0) + (metFouten.length ? ' (' + metFouten.map(r => r.id + ' ' + r.model + ': ' + r.boekhouding.fouten.map(f => (f.status || f.soort) + ' "' + String(f.melding).replace(/\|/g, '/') + '"').join(', ')).join('; ') + ')' : '') + '.');
+const gefaaldZoek = data.filter(r => (r.zoeklog || []).some(z => z.fout));
+o.push('- Analyses met een mislukte zoek- of ophaalopdracht (fout van de zoekdienst, iets anders dan zoeken zonder resultaat): ' + gefaaldZoek.length + (gefaaldZoek.length ? ' (' + gefaaldZoek.map(r => r.id + ' ' + r.model + ': ' + r.zoeklog.filter(z => z.fout).map(z => z.soort + ' ' + z.fout).join(', ')).join('; ') + ')' : '') + '.');
+const leegZoek = data.filter(r => (r.zoeklog || []).some(z => z.soort === 'zoeken' && z.resultaten === 0));
+o.push('- Analyses met een geslaagde zoekopdracht zonder resultaten: ' + leegZoek.length + '.');
+const tweede = data.filter(r => r.tweede_ronde);
+o.push('- Analyses met een tweede zoekronde: ' + tweede.length + (tweede.length ? ' (' + tweede.map(r => r.id + ' ' + r.model + ': ' + (r.tweede_ronde_info || ('mislukt: ' + r.tweede_ronde_fout))).join('; ') + ')' : '') + '.');
+const overgeslagen = data.filter(r => r.tweede_ronde_overgeslagen);
+if (overgeslagen.length) o.push('- Tweede ronde overgeslagen wegens kostenbudget: ' + overgeslagen.map(r => r.id + ' ' + r.model + ' (' + r.tweede_ronde_overgeslagen + ')').join('; ') + '.');
 o.push('Alle kosten zijn gemeten uit de API-gegevens. De klassen B en D zijn een automatische indeling; of een afkeuring terecht was moet per product met de lijst van vergelijkingen worden nagekeken.\n');
 o.push('## Samenvatting per model\n');
 o.push('| Model | Producten | A | B | C | D | Zonder live zoeken | Mislukt | Met referentie | Mediane afwijking | Gem. kosten | Hoogste kosten |\n|---|---|---|---|---|---|---|---|---|---|---|---|');
@@ -49,7 +59,7 @@ for (const id of ids) {
   const ref = rs.find(r => r.referentie); o.push('Referentie: ' + (ref ? eur(ref.referentie) : 'nog niet ingevuld') + '\n');
   o.push('| Model | Herkend als | Klasse | Niveau (indicatiescore) | Waarde laag / waarschijnlijk / hoog | Advies | Max bod | Kosten | Afwijking |\n|---|---|---|---|---|---|---|---|---|');
   for (const r of rs) {
-    if (r.fout) { o.push(`| ${r.model} | - | F | - | - | - | - | ${usd(r.kosten_usd)} | MISLUKT: ${r.fout} |`); continue; }
+    if (r.fout) { o.push(`| ${r.model} | - | F | - | - | - | - | ${usd(r.kosten_usd)} | MISLUKT: ${r.fout}${r.boekhouding && r.boekhouding.fouten.length ? ' (API: ' + r.boekhouding.fouten.map(f => f.melding).join(', ') + ')' : ''} |`); continue; }
     o.push(`| ${r.model} | ${r.ai_productnaam || '-'} | ${klasse(r)} | ${r.betrouwbaarheid.niveau} (${r.betrouwbaarheid.score}) | ${eur(r.waarde.laag)} / ${eur(r.waarde.waarschijnlijk)} / ${eur(r.waarde.hoog)} | ${r.waarde.getoond ? 'ja' : 'onvoldoende gemeld'} | ${eur(r.max_bod)} | ${usd(r.kosten_usd)} (${r.telling.verzoeken} verzoeken, ${r.telling.zoekopdrachten} zoekopdr.${r.live ? '' : ', ZONDER LIVE ZOEKEN'}) | ${r.afwijking_pct == null ? '-' : r.afwijking_pct + '%'} |`);
   }
   invoer.modellen.filter(m => !rs.some(r => r.model === m)).forEach(m => o.push(`| ${m} | NIET UITGEVOERD | - | - | - | - | - | - | - |`));
@@ -66,6 +76,11 @@ for (const id of ids) {
       const zelfde = bronnen.filter(b => host(b.url) === host(a.url));
       o.push(`- Niet bevestigd: ${a.url} | webadressen van dezelfde site die het model zag: ${zelfde.length}${zelfde.length ? ' (bijvoorbeeld ' + zelfde.slice(0, 2).map(b => b.url).join(' ; ') + ')' : ''}`);
     });
+    const zl = r.zoeklog || [];
+    o.push(`\n${r.model}: zoeklog (${zl.length} opdrachten): ` + (zl.length ? zl.map(z => (z.ronde ? 'ronde ' + z.ronde + ' ' : '') + z.soort + ' "' + String(z.vraag || z.url || '').slice(0, 60) + '" ' + (z.fout ? 'FOUT ' + z.fout : z.ok ? 'ok' : z.resultaten + ' resultaten')).join('; ') : 'geen zoekopdrachten') + '.');
+    if (r.tweede_ronde) o.push(`Tweede ronde: ${r.tweede_ronde_info || 'mislukt: ' + r.tweede_ronde_fout}.`);
+    if (r.onderbroken) o.push(`Zoekronde onderbroken door API-fout: ${r.onderbroken}.`);
+    if (r.boekhouding) o.push(`Kosten: boekhouding ${usd(r.boekhouding.usd)} over ${r.boekhouding.verzoeken} verzoeken en ${r.boekhouding.zoekopdrachten} zoekopdrachten; onafhankelijke telling ${usd(r.kosten_controle_usd)}${r.boekhouding.fouten.length ? '; API-fouten: ' + r.boekhouding.fouten.map(f => (f.status || f.soort) + ' ' + f.melding).join(', ') : ''}.`);
     o.push(`\n${r.model}: ${r.vergelijkbaar.length} gevonden, ${r.betrouwbaarheid.passend} passend volgens de code, ${r.betrouwbaarheid.verkocht} verkocht.`);
     if (r.vergelijkbaar.length) {
       o.push('\n| Titel | Staat (volgens het model) | Soort | Prijs | Platform | Datum | Link bevestigd | Past (code) | Reden en detail van afkeuring |\n|---|---|---|---|---|---|---|---|---|');

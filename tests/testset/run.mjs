@@ -35,6 +35,7 @@ if (arg('ids', false) && arg('ids') !== true && arg('ids') !== 'alle') {
 const TARIEF = { opgeld: 0.18, btw: 0.21, vast: 0, regeling: 'volledig' }; // rekenaanname voor het maximaal bod
 const DOEL = 0.20;
 const MAX_USD = Number(arg('max-usd', 8));
+const MAX_USD_ANALYSE = arg('max-usd-analyse', null) != null ? Number(arg('max-usd-analyse', null)) : undefined; // optioneel kostenbudget per analyse (bepaalt of een tweede zoekronde mag)
 const SLEUTEL = process.env.ANTHROPIC_API_KEY || '';
 if (!mock && !SLEUTEL) { console.error('Zet ANTHROPIC_API_KEY, of gebruik --mock voor een droogloop.'); process.exit(1); }
 // Nooit een sleutel in uitvoer, logbestanden of resultaten
@@ -72,7 +73,7 @@ async function anthropic(body) {
 
 const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
 log('TESTSET: alleen productnamen als invoer. Dit is NIET hetzelfde als herkenning vanaf een echte veilingpagina of foto.');
-log('Modellen: ' + lijst.map(n => MODELLEN[n]).join(', ') + ' | producten: ' + set.map(p => p.id).join(',') + ' | zoeken: standaard max 1 opdracht per analyse, tweede ronde alleen als de eerste niets vindt | budgetgrens $' + MAX_USD);
+log('Modellen: ' + lijst.map(n => MODELLEN[n]).join(', ') + ' | producten: ' + set.map(p => p.id).join(',') + ' | zoeken: standaard max 1 opdracht per analyse, tweede ronde als de code minder dan 2 passende advertenties telt | budgetgrens $' + MAX_USD);
 const uit = [];
 let totaal = 0, gestopt = null;
 buiten: for (const naam of lijst) {
@@ -81,7 +82,7 @@ buiten: for (const naam of lijst) {
     const t0 = Date.now(); tel = nieuweTel();
     let rec = { id: p.id, categorie: p.categorie, invoer: p.invoer, model: MODELLEN[naam], mock: mock || undefined };
     try {
-      const res = await K.analyseer({ url: '', extra: p.invoer, hergebruik: false }, { anthropic, modelPagina: MODELLEN.haiku, modelPrijzen: MODELLEN[naam], cacheLees: null, cacheSchrijf: null });
+      const res = await K.analyseer({ url: '', extra: p.invoer, hergebruik: false }, { anthropic, modelPagina: MODELLEN.haiku, modelPrijzen: MODELLEN[naam], cacheLees: null, cacheSchrijf: null, maxUsdPerAnalyse: MAX_USD_ANALYSE });
       const pr = res.prijzen, b = pr.betrouwbaarheid, mp = pr.marktplaats;
       const gem = b.niveau === 'onvoldoende' ? null : mp.gemiddeld;
       const ref = p.referentie && p.referentie.verkoopprijs_eur;
@@ -96,18 +97,21 @@ buiten: for (const naam of lijst) {
         kosten_usd: res.usd, // gemeten uit de usage van alle verzoeken van deze analyse (berekend door de analyse zelf)
         kosten_controle_usd: tel.usd, // tweede, onafhankelijke optelling per verzoek in dit script; moet gelijk zijn
         telling: Object.assign({}, tel), tweede_ronde: !!pr.tweede_ronde, hersteld: !!pr.hersteld,
+        tweede_ronde_info: pr.tweede_ronde_info || null, tweede_ronde_overgeslagen: pr.tweede_ronde_overgeslagen || null, tweede_ronde_fout: pr.tweede_ronde_fout || null,
+        onderbroken: pr.onderbroken || null, // zoekronde afgebroken door een API-fout; wat al gevonden was is nog gebruikt
+        zoeklog: pr.zoeklog || [], boekhouding: res.boekhouding, // boekhouding: kosten, verzoeken en alle API-fouten (ook mislukte pogingen) van deze analyse
         onderbouwing: pr.toelichting, waarschuwingen: res.waarschuwingen,
         referentie: ref || null, afwijking_pct: ref && mp.gemiddeld ? Math.round((mp.gemiddeld - ref) / ref * 100) : null,
         seconden: Math.round((Date.now() - t0) / 100) / 10,
         ruw: res
       });
-    } catch (e) { rec.fout = schoon(e.message || e).slice(0, 300); rec.kosten_usd = tel.usd || e.usd || null; rec.telling = Object.assign({}, tel); }
+    } catch (e) { rec.fout = schoon(e.message || e).slice(0, 300); rec.kosten_usd = Math.max(tel.usd || 0, e.usd || 0) || null; rec.kosten_controle_usd = tel.usd; rec.boekhouding = e.boekhouding; rec.telling = Object.assign({}, tel); }
     if (rec.kosten_controle_usd != null && Math.abs(rec.kosten_controle_usd - rec.kosten_usd) > 0.0005) { rec.waarschuwing_kosten = 'De twee kostenoptellingen verschillen: ' + rec.kosten_usd + ' tegenover ' + rec.kosten_controle_usd; }
     totaal += Math.max(rec.kosten_usd || 0, tel.usd || 0);
     const tekst = schoon(JSON.stringify(rec));
     appendFileSync(regels, tekst + '\n');
     uit.push(JSON.parse(tekst));
-    log(naam, p.id, rec.fout ? 'FOUT ' + rec.fout : (rec.live ? '' : 'ZONDER LIVE ZOEKEN ') + rec.betrouwbaarheid.niveau + ' ' + (rec.waarde.waarschijnlijk || '-') + ' $' + (rec.kosten_usd || 0).toFixed(4) + ' verzoeken ' + rec.telling.verzoeken + ' zoekopdrachten ' + rec.telling.zoekopdrachten);
+    log(naam, p.id, rec.fout ? 'FOUT ' + rec.fout : (rec.live ? '' : 'ZONDER LIVE ZOEKEN ') + rec.betrouwbaarheid.niveau + ' ' + (rec.waarde.waarschijnlijk || '-') + ' $' + (rec.kosten_usd || 0).toFixed(4) + ' verzoeken ' + rec.telling.verzoeken + ' zoekopdrachten ' + rec.telling.zoekopdrachten + (rec.tweede_ronde ? ' | tweede ronde: ' + (rec.tweede_ronde_info || rec.tweede_ronde_fout) : '') + (rec.boekhouding && rec.boekhouding.fouten.length ? ' | API-fouten: ' + rec.boekhouding.fouten.map(f => f.melding).join('; ') : ''));
   }
 }
 const verwacht = lijst.length * set.length;

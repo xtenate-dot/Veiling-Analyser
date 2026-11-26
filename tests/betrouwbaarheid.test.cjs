@@ -181,4 +181,48 @@ t('C: de begrenzing staat in de uitleg', () => {
   const b = K.berekenBetrouwbaarheid(pr([ad('DeWalt DCD791 los', 200)]), pagina, 'x', '', nu);
   assert.ok(b.score <= 24 && b.begrensd && b.factoren.some(f => f.naam === 'Begrenzing'));
 });
+
+// Ontkenningen: "geen schade" is geen defectmelding, echte defectmeldingen blijven gevonden
+t('negatie: ontkende defectwoorden zijn geen defect', () => {
+  ['geen schade', 'Geen schade aan het toestel', 'niet defect', 'zonder schade', 'zonder defecten', 'vrij van gebreken', 'Vrij van schade en gebreken',
+   'geen enkele schade', 'niet beschadigd', 'nooit defect geweest', 'geen gebreken', 'geen defecten bekend', 'nergens schade', 'zonder krassen of schade',
+   'in perfecte staat, geen schade of defect', 'NIET kapot', 'niet gebarsten'].forEach(z => assert.strictEqual(K.defectWoord(z), null, z));
+});
+t('negatie: echte defectmeldingen blijven gevonden', () => {
+  ['defect', 'Scherm gebarsten', 'kapot scherm', 'waterschade', 'water schade aanwezig', 'beschadigd', 'niet werkend', 'werkt niet meer', 'voor onderdelen',
+   'met schade', 'heeft gebreken', 'defecte accu', 'gebroken scherm', 'MacBook Pro, scherm kapot'].forEach(z => assert.ok(K.defectWoord(z), z));
+});
+t('negatie: ontkenning in andere zin geldt niet', () => {
+  assert.ok(K.defectWoord('Geen krassen. Scherm defect'));
+  assert.ok(K.defectWoord('niet origineel, wel defect'));
+  assert.ok(K.defectWoord('Geen doos, schade aan behuizing'));
+});
+t('negatie: contrastwoord heft ontkenning op', () => {
+  assert.ok(K.defectWoord('niet origineel wel defect'));
+  assert.ok(K.defectWoord('geen doos maar schade aan scherm'));
+});
+t('negatie: gemengd, eerste echte melding wordt gevonden', () => {
+  assert.strictEqual(K.defectWoord('geen schade, maar accu defect').toLowerCase(), 'defect');
+  assert.strictEqual(K.defectWoord('zonder schade of gebreken'), null);
+});
+t('negatie: niet-werkend blijft defect ondanks "niet"', () => {
+  assert.ok(K.defectWoord('toestel is niet werkend'));
+  assert.ok(K.defectWoord('werkt niet'));
+});
+t('negatie: kavel met "geen schade" is niet defect, advertentie met "defect" wordt dan afgekeurd', () => {
+  const pg = { gevonden: true, merk: 'DeWalt', model: 'DCD791', variant: '', titel: 'DeWalt DCD791 zonder schade', staat: 'goed, vrij van gebreken', zoekterm: 'dewalt dcd791' };
+  const ads = [ad('DeWalt DCD791 defect', 100), ad('DeWalt DCD791 a', 200), ad('DeWalt DCD791 b', 210), ad('DeWalt DCD791 c', 220)];
+  const b = K.berekenBetrouwbaarheid(pr(ads), pg, 'DeWalt DCD791', '', nu);
+  assert.strictEqual(b.kavel_defect, false); assert.strictEqual(b.aantal_passend, 3);
+});
+t('negatie: kavel met "geen schade" in titel en defect in advertentie: advertentie afgekeurd, niet omgekeerd', () => {
+  const pg = { gevonden: true, merk: 'DeWalt', model: 'DCD791', variant: '', titel: 'DeWalt DCD791 geen schade', zoekterm: 'x' };
+  const b = K.berekenBetrouwbaarheid(pr([ad('DeWalt DCD791 niet defect', 200), ad('DeWalt DCD791 defect', 90)]), pg, 'x', '', nu);
+  assert.strictEqual(b.aantal_passend, 1); assert.strictEqual(b.kavel_defect, false);
+});
+t('negatie: echt defect kavel blijft defect', () => {
+  const pg = { gevonden: true, merk: 'DeWalt', model: 'DCD791', variant: '', titel: 'DeWalt DCD791 defect', zoekterm: 'x' };
+  const b = K.berekenBetrouwbaarheid(pr([ad('DeWalt DCD791 a', 200)]), pg, 'x', '', nu);
+  assert.strictEqual(b.kavel_defect, true);
+});
 console.log(n + ' tests ok');
