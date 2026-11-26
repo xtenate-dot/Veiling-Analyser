@@ -89,7 +89,7 @@ buiten: for (const naam of lijst) {
         live: pr.live !== false, // false = zoeken lukte niet en het model schatte zonder internet: niet bruikbaar voor de kwaliteitsbeoordeling
         ai_productnaam: pr.productnaam,
         herkend: { naam: res.herkenning.naam, ai_naam_klopt: p.verwacht_model ? String(p.verwacht_model).toLowerCase().split(/[^a-z0-9]+/).filter(w => w.length >= 2).every(w => norm(pr.productnaam).includes(w)) : null, zekerheid: res.herkenning.zekerheid },
-        vergelijkbaar: pr.tweedehands.map(a => ({ titel: a.titel, prijs: a.prijs, soort: a.soort, platform: a.platform, staat: a.staat, datum: a.datum, url: a.url, bevestigd: a.bevestigd, past: a.past })),
+        vergelijkbaar: pr.tweedehands.map(a => ({ titel: a.titel, prijs: a.prijs, soort: a.soort, platform: a.platform, staat: a.staat, datum: a.datum, url: a.url, bevestigd: a.bevestigd, past: a.past, afkeur: a.afkeur || null })),
         waarde: { laag: mp.laag, waarschijnlijk: mp.gemiddeld, hoog: mp.hoog, getoond: gem != null },
         betrouwbaarheid: { niveau: b.niveau, score: b.score, ai_zei: mp.vertrouwen_ai, passend: b.aantal_passend, verkocht: b.aantal_verkocht, aantal_gevonden: b.aantal_gevonden, factoren: b.factoren },
         max_bod: gem ? Math.floor(K.bodVoorTotaal(gem * (1 - DOEL), TARIEF)) : null,

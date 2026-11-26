@@ -34,7 +34,7 @@ t('vijf passende met verkochte items kan hoog zijn', () => {
 t('AI-vertrouwen "hoog" verandert de score niet', () => {
   const a = K.berekenBetrouwbaarheid(pr([ad('DeWalt DCD791', 200)], { marktplaats: { gemiddeld: 200, vertrouwen: 'hoog' } }), pagina, 'x', '', nu);
   const c = K.berekenBetrouwbaarheid(pr([ad('DeWalt DCD791', 200)], { marktplaats: { gemiddeld: 200, vertrouwen: 'laag' } }), pagina, 'x', '', nu);
-  assert.strictEqual(a.score, c.score); assert.strictEqual(a.niveau, 'laag');
+  assert.strictEqual(a.score, c.score); assert.strictEqual(a.niveau, 'onvoldoende');
 });
 t('verwachte prijs ver boven de gevonden prijzen kost punten', () => {
   const ads = [ad('DeWalt DCD791 a', 100), ad('DeWalt DCD791 b', 110), ad('DeWalt DCD791 c', 105)];
@@ -84,5 +84,38 @@ t('herkenning: niets herkend = onvoldoende; opgegeven door gebruiker = bevestigd
 t('herkenning zakt naar onzeker als advertenties niet passen', () => {
   const b = K.berekenBetrouwbaarheid(pr([ad('Makita a', 1), ad('Makita b', 1), ad('Makita c', 1)]), pagina, 'x', '', nu);
   assert.strictEqual(K.bepaalHerkenning(pagina, 'x', '', b).zekerheid, 'onzeker');
+});
+t('partijen van meerdere stuks tellen niet mee voor één stuk', () => {
+  const p = { gevonden: true, merk: 'Pokemon', model: '', variant: '' };
+  const b = K.berekenBetrouwbaarheid(pr([ad('Pokémon - 10 Booster pack - Scarlet & Violet', 8), ad('Pokémon 20 Booster pack mix van 20', 59), ad('Pokemon booster pack sv1s losse pack', 9), ad('Pokemon booster pack 151 pack', 12)]), p, 'Pokemon booster pack', '', nu);
+  assert.strictEqual(b.aantal_passend, 2, JSON.stringify(b.afgekeurd));
+});
+t('partij-kavel mag wel partij-advertenties vergelijken', () => {
+  const b = K.berekenBetrouwbaarheid(pr([ad('DeWalt DCD791 set van 10', 800), ad('DeWalt DCD791 partij 10 stuks', 900)]), Object.assign({}, pagina, { aantal_stuks: 10 }), 'x', '', nu);
+  assert.strictEqual(b.aantal_passend, 2);
+});
+t('defecte advertentie telt niet mee bij een werkend product, en omgekeerd', () => {
+  const ads = [ad('DeWalt DCD791 werkt perfect', 200), ad('DeWalt DCD791 gebarsten behuizing', 80), ad('DeWalt DCD791 accuboor', 190)];
+  assert.strictEqual(K.berekenBetrouwbaarheid(pr(ads), pagina, 'x', '', nu).aantal_passend, 2);
+  const defect = Object.assign({}, pagina, { staat: 'defect' });
+  assert.strictEqual(K.berekenBetrouwbaarheid(pr(ads), defect, 'x', '', nu).aantal_passend, 1);
+});
+t('veilingkavels zijn geen marktprijs', () => {
+  const b = K.berekenBetrouwbaarheid(pr([ad('DeWalt DCD791 (veilingkavel, uitstekende staat)', 900), ad('DeWalt DCD791 boor', 150, 'vraagprijs', { url: 'https://www.hnvi.nl/kavel/1' }), ad('DeWalt DCD791 los', 160)]), pagina, 'x', '', nu);
+  assert.strictEqual(b.aantal_passend, 1);
+});
+t('advertenties ouder dan een jaar tellen niet mee', () => {
+  const oud = new Date(nu - 400 * 864e5).toISOString().slice(0, 10);
+  const b = K.berekenBetrouwbaarheid(pr([ad('DeWalt DCD791 a', 150, 'vraagprijs', { datum: oud }), ad('DeWalt DCD791 b', 160), ad('DeWalt DCD791 c', 170)]), pagina, 'x', '', nu);
+  assert.strictEqual(b.aantal_passend, 2);
+});
+t('minder dan twee passende advertenties = onvoldoende, met uitleg', () => {
+  const b = K.berekenBetrouwbaarheid(pr([ad('DeWalt DCD791 los', 150), ad('DeWalt DCD796', 160)]), pagina, 'x', '', nu);
+  assert.strictEqual(b.niveau, 'onvoldoende'); assert.ok(/maar één advertentie/.test(b.reden));
+});
+t('modelnaam met cijfers als "iPhone 13 128GB" wordt niet als partij gezien', () => {
+  const p = { gevonden: true, merk: 'Apple', model: 'iPhone 13', variant: '128GB' };
+  const b = K.berekenBetrouwbaarheid(pr([ad('iPhone 13 128GB blauw', 250), ad('Apple iPhone 13 128GB zwart', 240)]), p, 'x', '', nu);
+  assert.strictEqual(b.aantal_passend, 2);
 });
 console.log(n + ' tests ok');

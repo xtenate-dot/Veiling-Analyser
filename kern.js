@@ -690,8 +690,9 @@
     return 0.6;
   }
   var VARIANT_WOORDEN = ['pro', 'max', 'plus', 'mini', 'ultra', 'lite', 'xl', 'se', 'air', 'slim', 'digital', 'oled', 'ti', 'super', 'xs', 'xr'];
-  function alfaNum(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ''); }
-  function woorden(s) { return String(s || '').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean); }
+  function zonderAccent(s) { return String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); }
+  function alfaNum(s) { return zonderAccent(s).replace(/[^a-z0-9]+/g, ''); }
+  function woorden(s) { return zonderAccent(s).split(/[^a-z0-9]+/).filter(Boolean); }
   // Wat moet een advertentietitel bevatten om "hetzelfde product" te zijn? Merk, typenummers (bevatten een cijfer) en variantwoorden.
   function matchEisen(pagina, product, extra) {
     var bron = extra ? { merk: '', model: product || extra, variant: '' } : { merk: pagina && pagina.merk, model: pagina && pagina.model, variant: pagina && pagina.variant };
@@ -718,6 +719,29 @@
     }
     return true;
   }
+  // Advertenties die nooit een eerlijke vergelijking zijn voor één stuk in de staat van het kavel
+  var DEFECT_RE = /\b(defect|defecte|kapot|kapotte|gebarsten|barst|gebroken|beschadigd|beschadigde|schade|onderdelen|niet werkend|werkt niet|water ?schade)\b/i;
+  var PARTIJ_RE = /\b(partij|bulk|bundel|lot van|mix van|diverse|collectie|set van|([2-9]|[1-9]\d)\s*(x|stuks|stuk|pcs|packs?|boosters?|pakjes|kaarten|sets))\b/i; // 2 tot 99 stuks; een getal als "151" is vaak een setnaam, geen aantal
+  var VEILING_RE = /\b(veilingkavel|kavel|veiling)\b/i;
+  var VEILING_HOSTS = ['hnvi', 'troostwijk', 'bva-auctions', 'vavato', 'dtz', 'catawiki', 'onlineveilingmeester', 'veilingzaken', 'kavelkoning'];
+  function kavelContext(pagina, product, extra) {
+    var tekst = [extra, product, pagina && pagina.titel, pagina && pagina.staat, pagina && pagina.staat_toelichting].filter(Boolean).join(' ');
+    return {
+      defect: DEFECT_RE.test(tekst) || /defect|beschadigd/i.test((pagina && pagina.staat) || ''),
+      partij: !!(pagina && pagina.aantal_stuks > 1) || PARTIJ_RE.test(String(extra || '') + ' ' + String(product || ''))
+    };
+  }
+  // Geeft de reden waarom een advertentie niet meetelt, of null
+  function afkeurReden(a, ctx, nu) {
+    var tekst = (a.titel || '') + ' ' + (a.staat || '');
+    if (!ctx.partij && PARTIJ_RE.test(a.titel || '')) return 'meerdere stuks';
+    if (VEILING_RE.test(a.titel || '') || VEILING_HOSTS.some(function (h) { return hostVan(a.url || '').indexOf(h) !== -1 || String(a.platform || '').toLowerCase().indexOf(h) !== -1; })) return 'veilingkavel';
+    var defectAd = DEFECT_RE.test(tekst);
+    if (!ctx.defect && defectAd) return 'defect of beschadigd';
+    if (ctx.defect && !defectAd) return 'werkend exemplaar (kavel is defect)';
+    if (a.datum && (nu - Date.parse(a.datum)) / 864e5 > 365) return 'ouder dan een jaar';
+    return null;
+  }
   function mediaanVan(a) {
     if (!a.length) return null;
     var s = a.slice().sort(function (x, y) { return x - y; }), n = s.length;
@@ -729,7 +753,15 @@
     var ads = ((prijzen && prijzen.tweedehands) || []).filter(function (a) { return a && a.prijs > 0; });
     var e = matchEisen(pagina, product, extra);
     var testbaar = !!(e.merk || e.nummers.length || e.varianten.length);
-    ads.forEach(function (a) { a.past = pastBijEisen(a.titel, e); });
+    var ctx = kavelContext(pagina, product, extra);
+    ads.forEach(function (a) {
+      a.past = pastBijEisen(a.titel, e);
+      a.afkeur = a.past === false ? 'ander merk, type of uitvoering' : null;
+      if (a.past !== false) { a.afkeur = afkeurReden(a, ctx, nu); if (a.afkeur) a.past = false; }
+    });
+    var afgekeurd = {};
+    ads.forEach(function (a) { if (a.afkeur) afgekeurd[a.afkeur] = (afgekeurd[a.afkeur] || 0) + 1; });
+    var afgekeurdTxt = Object.keys(afgekeurd).map(function (r) { return afgekeurd[r] + ' x ' + r; }).join(', ');
     var passend = ads.filter(function (a) { return a.past !== false; });
     var verkocht = passend.filter(function (a) { return a.soort === 'verkocht'; });
     var f = [], score = 0;
@@ -740,7 +772,7 @@
     if (!ads.length) voeg('Overeenkomst met merk, model en uitvoering', 0, 25, 'Niets om mee te vergelijken.');
     else if (!testbaar) voeg('Overeenkomst met merk, model en uitvoering', 10, 25, 'Er is geen merk of modelnummer bekend, dus de advertenties zijn niet te toetsen.');
     else voeg('Overeenkomst met merk, model en uitvoering', 25 * passend.length / ads.length, 25,
-      passend.length + ' van de ' + ads.length + ' gevonden advertenties bevatten het merk, modelnummer en de uitvoering van dit product.');
+      passend.length + ' van de ' + ads.length + ' gevonden advertenties passen bij merk, modelnummer, uitvoering en staat van dit product.' + (afgekeurdTxt ? ' Afgekeurd: ' + afgekeurdTxt + '.' : ''));
     var v = verkocht.length;
     voeg('Verkoopprijzen of alleen vraagprijzen', v >= 3 ? 20 : v === 2 ? 15 : v === 1 ? 10 : 3, 20,
       v ? v + (v === 1 ? ' verkocht item' : ' verkochte items') + ' gevonden.' : 'Alleen vraagprijzen gevonden; wat er echt betaald wordt ligt meestal lager.');
@@ -781,11 +813,11 @@
     // Harde grenzen: weinig of alleen vraagprijzen kan nooit "hoog" zijn; zonder passende advertenties of live onderzoek is er geen waardering
     if (n < 5 || !v) { if (niveau === 'hoog') niveau = 'middel'; }
     if (n < 3 && (niveau === 'hoog' || niveau === 'middel')) niveau = 'laag';
-    if (n < 1 || !live) niveau = 'onvoldoende';
+    if (n < 2 || !live) niveau = 'onvoldoende';
     var reden = niveau === 'onvoldoende'
-      ? (!live ? 'De prijzen zijn niet live opgezocht, dus de waardering is niet te onderbouwen.' : !ads.length ? 'Er zijn geen vergelijkbare advertenties of verkochte items gevonden.' : 'Er is geen enkele gevonden advertentie die bij merk, model en uitvoering van dit product past.')
+      ? (!live ? 'De prijzen zijn niet live opgezocht, dus de waardering is niet te onderbouwen.' : !ads.length ? 'Er zijn geen vergelijkbare advertenties of verkochte items gevonden.' : n === 1 ? 'Er is maar één advertentie die echt bij dit product past; dat is te weinig om een prijs op te baseren.' + (afgekeurdTxt ? ' Afgekeurd: ' + afgekeurdTxt + '.' : '') : 'Geen enkele gevonden advertentie past bij merk, model, uitvoering en staat van dit product.' + (afgekeurdTxt ? ' Afgekeurd: ' + afgekeurdTxt + '.' : ''))
       : n + (n === 1 ? ' vergelijkbare advertentie' : ' vergelijkbare advertenties') + (v ? ', waarvan ' + v + ' verkocht' : ', alleen vraagprijzen') + '.';
-    return { score: score, niveau: niveau, factoren: f, reden: reden, aantal_gevonden: ads.length, aantal_passend: n, aantal_verkocht: v, mediaan_passend: mediaanAlle ? Math.round(mediaanAlle) : null, mediaan_verkocht: medV ? Math.round(medV) : null };
+    return { score: score, niveau: niveau, factoren: f, reden: reden, aantal_gevonden: ads.length, aantal_passend: n, aantal_verkocht: v, afgekeurd: afgekeurd, mediaan_passend: mediaanAlle ? Math.round(mediaanAlle) : null, mediaan_verkocht: medV ? Math.round(medV) : null };
   }
   // Hoe zeker is het dat het product goed is herkend? Zekerheid komt uit de code, niet uit de AI.
   function bepaalHerkenning(pagina, product, extra, bet) {

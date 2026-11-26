@@ -56,8 +56,8 @@ for (const id of ids) {
   for (const r of rs.filter(x => !x.fout)) {
     o.push(`\n${r.model}: ${r.vergelijkbaar.length} gevonden, ${r.betrouwbaarheid.passend} passend volgens de code, ${r.betrouwbaarheid.verkocht} verkocht.`);
     if (r.vergelijkbaar.length) {
-      o.push('\n| Titel | Soort | Prijs | Platform | Datum | Link bevestigd | Past (code) |\n|---|---|---|---|---|---|---|');
-      r.vergelijkbaar.forEach(a => o.push(`| ${String(a.titel).replace(/\|/g, '/')} | ${a.soort} | ${eur(a.prijs)} | ${a.platform} | ${a.datum || '?'} | ${a.bevestigd ? 'ja' : 'nee'} | ${a.past === true ? 'ja' : a.past === false ? 'nee' : 'n.v.t.'} |`));
+      o.push('\n| Titel | Soort | Prijs | Platform | Datum | Link bevestigd | Past (code) | Reden afkeuring |\n|---|---|---|---|---|---|---|---|');
+      r.vergelijkbaar.forEach(a => o.push(`| ${String(a.titel).replace(/\|/g, '/')} | ${a.soort} | ${eur(a.prijs)} | ${a.platform} | ${a.datum || '?'} | ${a.bevestigd ? 'ja' : 'nee'} | ${a.past === true ? 'ja' : a.past === false ? 'nee' : 'n.v.t.'} | ${a.afkeur || ''} |`));
     }
   }
   o.push('');
