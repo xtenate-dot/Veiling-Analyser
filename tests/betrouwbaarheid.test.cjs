@@ -43,7 +43,7 @@ t('verwachte prijs ver boven de gevonden prijzen kost punten', () => {
   assert.ok(slecht.score === goed.score - 10, goed.score + ' vs ' + slecht.score);
 });
 t('oude advertenties verlagen de actualiteit', () => {
-  const oud = new Date(nu - 400 * 864e5).toISOString().slice(0, 10);
+  const oud = new Date(nu - 200 * 864e5).toISOString().slice(0, 10);
   const ads = [ad('DeWalt DCD791 a', 200, 'vraagprijs', { datum: oud }), ad('DeWalt DCD791 b', 210, 'vraagprijs', { datum: oud })];
   const b = K.berekenBetrouwbaarheid(pr(ads), pagina, 'x', '', nu);
   assert.strictEqual(b.factoren.find(f => f.naam === 'Actualiteit').punten, 3);
@@ -117,5 +117,68 @@ t('modelnaam met cijfers als "iPhone 13 128GB" wordt niet als partij gezien', ()
   const p = { gevonden: true, merk: 'Apple', model: 'iPhone 13', variant: '128GB' };
   const b = K.berekenBetrouwbaarheid(pr([ad('iPhone 13 128GB blauw', 250), ad('Apple iPhone 13 128GB zwart', 240)]), p, 'x', '', nu);
   assert.strictEqual(b.aantal_passend, 2);
+});
+// ── A: jaartal ──
+const mac = { gevonden: true };
+const macExtra = 'Apple MacBook Pro 14 inch M3 2023, scherm gebarsten, werkt verder';
+t('A: jaartal hoeft niet in de titel te staan', () => {
+  const b = K.berekenBetrouwbaarheid(pr([ad('Apple 14" MacBook Pro M3 / 8 GB / 1 TB SSD', 1250), ad('MacBook Pro 14 inch M3 16GB', 1150)]), mac, 'Apple MacBook Pro 14 inch M3 2023', 'Apple MacBook Pro 14 inch M3 2023', nu);
+  assert.strictEqual(b.aantal_passend, 2, JSON.stringify(b.afgekeurd));
+});
+t('A: aantoonbaar ander modeljaar (2 jaar of meer) wordt uitgesloten, een jaar verschil niet', () => {
+  const p = (titels) => K.berekenBetrouwbaarheid(pr(titels.map(x => ad(x, 900))), mac, 'MacBook Pro 14 M3 2023', 'MacBook Pro 14 M3 2023', nu);
+  const b = p(['MacBook Pro 14 M3 2021', 'MacBook Pro 14 M3 2024', 'MacBook Pro 14 M3 2023', 'MacBook Pro 14 M3']);
+  assert.strictEqual(b.aantal_passend, 3, JSON.stringify(b.afgekeurd));
+  assert.ok(/ander modeljaar/.test(JSON.stringify(b.afgekeurd)));
+});
+t('A: garantiejaar of aankoopjaar in de titel telt niet als modeljaar', () => {
+  const b = K.berekenBetrouwbaarheid(pr([ad('MacBook Pro 14 M3 garantie tot 2027', 900), ad('MacBook Pro 14 M3 gekocht in 2021', 900)]), mac, 'MacBook Pro 14 M3 2023', 'MacBook Pro 14 M3 2023', nu);
+  assert.strictEqual(b.aantal_passend, 2);
+});
+t('A: GPU-typenummer als RTX 2060 is geen jaartal', () => {
+  const b = K.berekenBetrouwbaarheid(pr([ad('Asus RTX 2060 6GB', 150), ad('MSI RTX 2060 Super', 170)]), mac, 'RTX 2060', 'RTX 2060', nu);
+  assert.strictEqual(b.jaar_eis, null); assert.ok(b.aantal_passend >= 1);
+});
+// ── B: staat en afkeurreden ──
+const advMacWerkend = { titel: 'Apple Macbook Pro 2023 14" M3/ 8GB/ 1TB SSD / in Nieuwstaat', staat: 'zo goed als nieuw' };
+t('B: werkende MacBook bij een defect kavel wordt afgekeurd, met duidelijke reden', () => {
+  const pp = pr([ad(advMacWerkend.titel, 1350, 'vraagprijs', { staat: advMacWerkend.staat })]);
+  const b = K.berekenBetrouwbaarheid(pp, null, 'Apple MacBook Pro 14 inch M3 2023', macExtra, nu);
+  const a = pp.tweedehands[0];
+  assert.strictEqual(a.past, false); assert.strictEqual(a.afkeur, 'werkend exemplaar (kavel is defect)');
+  assert.ok(/gebarsten/.test(a.afkeur_detail) && /zo goed als nieuw/.test(a.afkeur_detail), a.afkeur_detail);
+  assert.strictEqual(b.kavel_defect, true); assert.strictEqual(b.kavel_defect_woord, 'gebarsten');
+});
+t('B: defecte advertentie bij een defect kavel telt wel mee; staat-veld met defectwoord ook', () => {
+  const pp = pr([ad('MacBook Pro 14 M3 scherm gebarsten', 600), ad('MacBook Pro 14 M3', 650, 'vraagprijs', { staat: 'defect' })]);
+  const b = K.berekenBetrouwbaarheid(pp, null, 'Apple MacBook Pro 14 inch M3 2023', macExtra, nu);
+  assert.strictEqual(b.aantal_passend, 2, JSON.stringify(pp.tweedehands.map(a => [a.afkeur, a.afkeur_detail])));
+});
+t('B: elke afkeuring heeft een reden en een detail', () => {
+  const pp = pr([ad('DeWalt DCD796', 100), ad('DeWalt DCD791 10 stuks', 900), ad('DeWalt DCD791 veilingkavel', 900), ad('DeWalt DCD791 kapot', 20)]);
+  K.berekenBetrouwbaarheid(pp, pagina, 'x', '', nu);
+  pp.tweedehands.forEach(a => { assert.strictEqual(a.past, false); assert.ok(a.afkeur && a.afkeur_detail, JSON.stringify(a)); });
+});
+// ── C: score en onvoldoende ──
+t('C: alleen passende advertenties tellen mee voor bronnen en actualiteit', () => {
+  const b = K.berekenBetrouwbaarheid(pr([ad('Makita a', 100), ad('Makita b', 100), ad('Makita c', 100)]), pagina, 'x', '', nu);
+  assert.strictEqual(b.factoren.find(f => f.naam === 'Kwaliteit van de bronnen').punten, 0);
+  assert.strictEqual(b.factoren.find(f => f.naam === 'Actualiteit').punten, 0);
+});
+t('C: minder dan twee passende advertenties: score hooguit 24 en altijd onvoldoende (willekeurige invoer)', () => {
+  let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const titels = ['DeWalt DCD791 los', 'DeWalt DCD791 set', 'DeWalt DCD796', 'Makita boor', 'DeWalt DCD791 kapot', 'DeWalt DCD791 10 stuks', 'DeWalt DCD791 veilingkavel', 'DeWalt DCD791 accu'];
+  let gezien = 0;
+  for (let i = 0; i < 400; i++) {
+    const ads = Array.from({ length: Math.floor(rnd() * 12) }, () => ad(titels[Math.floor(rnd() * titels.length)], 50 + Math.floor(rnd() * 300), rnd() < 0.3 ? 'verkocht' : 'vraagprijs', { bevestigd: rnd() < 0.8, datum: rnd() < 0.5 ? new Date(nu - rnd() * 100 * 864e5).toISOString().slice(0, 10) : null }));
+    const b = K.berekenBetrouwbaarheid(pr(ads, { live: rnd() < 0.9 }), pagina, 'x', '', nu);
+    if (b.aantal_passend < 2 || !pr(ads).live) { gezien++; }
+    if (b.aantal_passend < 2) { assert.ok(b.score <= 24, 'score ' + b.score); assert.strictEqual(b.niveau, 'onvoldoende'); }
+  }
+  assert.ok(gezien > 20);
+});
+t('C: de begrenzing staat in de uitleg', () => {
+  const b = K.berekenBetrouwbaarheid(pr([ad('DeWalt DCD791 los', 200)]), pagina, 'x', '', nu);
+  assert.ok(b.score <= 24 && b.begrensd && b.factoren.some(f => f.naam === 'Begrenzing'));
 });
 console.log(n + ' tests ok');

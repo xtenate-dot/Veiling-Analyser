@@ -1322,7 +1322,7 @@ function betrouwbaarheidKaart(d) {
   (b.factoren || []).forEach(function(f) {
     h += '<tr><td>' + esc(f.naam) + '<small>' + esc(f.tekst) + '</small></td><td>' + (f.max ? f.punten + ' / ' + f.max : (f.punten > 0 ? '+' : '') + f.punten) + '</td></tr>';
   });
-  h += '</tbody></table><p class="help">Score: <b>' + b.score + ' van 100</b>. Dit is een indicatie van hoe goed het beschikbare vergelijkingsmateriaal is, <b>geen kans dat de prijs klopt</b>. De app berekent het zelf uit de gevonden advertenties; het oordeel van het AI-model telt niet mee. Ook bij een hoge score kan de werkelijke verkoopprijs afwijken. Advertentiedatums zijn alleen bekend als ze in het zoekresultaat stonden.</p></details></div>';
+  h += '</tbody></table><p class="help">Score: <b>' + b.score + ' van 100</b>' + (b.begrensd ? ' (bij minder dan 2 passende advertenties nooit hoger dan 24)' : '') + '. Dit is een indicatie van hoe goed het beschikbare vergelijkingsmateriaal is, <b>geen kans dat de prijs klopt</b>. De app berekent het zelf uit de gevonden advertenties; het oordeel van het AI-model telt niet mee. Ook bij een hoge score kan de werkelijke verkoopprijs afwijken. Advertentiedatums zijn alleen bekend als ze in het zoekresultaat stonden.</p></details></div>';
   return h;
 }
 

@@ -54,10 +54,22 @@ for (const id of ids) {
   }
   invoer.modellen.filter(m => !rs.some(r => r.model === m)).forEach(m => o.push(`| ${m} | NIET UITGEVOERD | - | - | - | - | - | - | - |`));
   for (const r of rs.filter(x => !x.fout)) {
+    const bt = r.betrouwbaarheid;
+    o.push(`\n${r.model}: kavel als defect gelezen: ${bt.kavel_defect ? 'ja ("' + bt.kavel_defect_woord + '")' : 'nee'}; modeljaar als eis: ${bt.jaar_eis || 'geen'}; score ${bt.score}${bt.begrensd ? ' (minder dan 2 passende advertenties of niet live: maximaal 24)' : ''}.`);
+    // Diagnose van "link bevestigd": welke webadressen heeft het model gezien en hoe verhouden de advertentielinks zich daartoe?
+    const bronnen = (r.ruw && r.ruw.prijzen && r.ruw.prijzen.bronnen) || [];
+    const host = u => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch (e) { return '?'; } };
+    const hosts = {}; bronnen.forEach(b => hosts[host(b.url)] = (hosts[host(b.url)] || 0) + 1);
+    const metUrl = r.vergelijkbaar.filter(a => a.url), zonderUrl = r.vergelijkbaar.length - metUrl.length;
+    o.push(`Links: ${metUrl.filter(a => a.bevestigd).length} van ${metUrl.length} advertenties met link bevestigd; ${zonderUrl} zonder link. Het model zag ${bronnen.length} webadressen: ${Object.entries(hosts).map(([h, n]) => h + ' (' + n + ')').join(', ') || 'geen'}.`);
+    metUrl.filter(a => !a.bevestigd).slice(0, 4).forEach(a => {
+      const zelfde = bronnen.filter(b => host(b.url) === host(a.url));
+      o.push(`- Niet bevestigd: ${a.url} | webadressen van dezelfde site die het model zag: ${zelfde.length}${zelfde.length ? ' (bijvoorbeeld ' + zelfde.slice(0, 2).map(b => b.url).join(' ; ') + ')' : ''}`);
+    });
     o.push(`\n${r.model}: ${r.vergelijkbaar.length} gevonden, ${r.betrouwbaarheid.passend} passend volgens de code, ${r.betrouwbaarheid.verkocht} verkocht.`);
     if (r.vergelijkbaar.length) {
-      o.push('\n| Titel | Soort | Prijs | Platform | Datum | Link bevestigd | Past (code) | Reden afkeuring |\n|---|---|---|---|---|---|---|---|');
-      r.vergelijkbaar.forEach(a => o.push(`| ${String(a.titel).replace(/\|/g, '/')} | ${a.soort} | ${eur(a.prijs)} | ${a.platform} | ${a.datum || '?'} | ${a.bevestigd ? 'ja' : 'nee'} | ${a.past === true ? 'ja' : a.past === false ? 'nee' : 'n.v.t.'} | ${a.afkeur || ''} |`));
+      o.push('\n| Titel | Staat (volgens het model) | Soort | Prijs | Platform | Datum | Link bevestigd | Past (code) | Reden en detail van afkeuring |\n|---|---|---|---|---|---|---|---|---|');
+      r.vergelijkbaar.forEach(a => o.push(`| ${String(a.titel).replace(/\|/g, '/')} | ${String(a.staat || '').replace(/\|/g, '/') || '-'} | ${a.soort} | ${eur(a.prijs)} | ${a.platform} | ${a.datum || '?'} | ${a.bevestigd ? 'ja' : 'nee'} | ${a.past === true ? 'ja' : a.past === false ? 'nee' : 'n.v.t.'} | ${a.afkeur ? a.afkeur + (a.afkeur_detail ? ': ' + String(a.afkeur_detail).replace(/\|/g, '/') : '') : ''} |`));
     }
   }
   o.push('');
