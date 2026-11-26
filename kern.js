@@ -748,6 +748,14 @@
     }
     return uit;
   }
+  // Apple-chips (M1, M2 Pro, M3 Max, M4 Ultra ...) vergelijken we als geheel: "M3" is een andere chip dan "M3 Pro" of "M3 Max",
+  // ook als "Pro" al in de productnaam staat ("MacBook Pro")
+  function chipsVan(tekst) {
+    var t = zonderAccent(String(tekst || '')).toLowerCase(), re = /(?:^|[^a-z0-9])m([1-9])\s?(pro|max|ultra)?(?![a-z0-9])/g, uit = [], m;
+    while ((m = re.exec(t))) { var c = 'm' + m[1] + (m[2] || ''); if (uit.indexOf(c) === -1) uit.push(c); }
+    return uit;
+  }
+  function chipNaam(c) { return c.replace(/^m(\d)(pro|max|ultra)?$/, function (x, n, v) { return 'M' + n + (v ? ' ' + v[0].toUpperCase() + v.slice(1) : ''); }); }
   function matchEisen(pagina, product, extra) {
     var bron = extra ? { merk: '', model: product || extra, variant: '' } : { merk: pagina && pagina.merk, model: pagina && pagina.model, variant: pagina && pagina.variant };
     var tekst = [bron.model, bron.variant].filter(Boolean).join(' ');
@@ -758,7 +766,8 @@
       merk: merk.length >= 2 ? merk : null,
       nummers: w.filter(function (x) { return /\d/.test(x) && x.length >= 2 && !(jaar && Number(x) === jaar); }),
       varianten: w.filter(function (x) { return VARIANT_WOORDEN.indexOf(x) !== -1; }),
-      jaar: jaar
+      jaar: jaar,
+      chip: chipsVan(tekst)[0] || null
     };
   }
   // { past: true | false | null (niet te toetsen), reden }
@@ -768,6 +777,11 @@
     // Veel titels laten het merk weg ("iPhone 13" zonder "Apple"); het merk eisen we dus alleen als er geen typenummer is om op te toetsen
     if (e.merk && !e.nummers.length && norm.indexOf(e.merk) === -1) return { past: false, reden: 'de titel noemt het merk "' + e.merk + '" niet' };
     for (var i = 0; i < e.nummers.length; i++) if (norm.indexOf(e.nummers[i]) === -1) return { past: false, reden: 'de titel mist "' + e.nummers[i] + '"' };
+    if (e.chip) {
+      // Elke andere chip in de titel (of een titel met meerdere chips) is geen eerlijke vergelijking
+      var chips = chipsVan(titel);
+      if (chips.some(function (c) { return c !== e.chip; })) return { past: false, reden: 'andere chip: de titel noemt ' + chips.map(chipNaam).join(' en ') + ', het kavel ' + chipNaam(e.chip) };
+    }
     for (var j = 0; j < VARIANT_WOORDEN.length; j++) {
       var v = VARIANT_WOORDEN[j], inTitel = w.indexOf(v) !== -1, eis = e.varianten.indexOf(v) !== -1;
       if (inTitel !== eis && (eis || inTitel)) return { past: false, reden: eis ? 'de titel mist "' + v + '"' : 'de titel noemt "' + v + '", het kavel niet' };
@@ -798,7 +812,27 @@
     }
     return null;
   }
-  var PARTIJ_RE = /\b(partij|bulk|bundel|lot van|mix van|diverse|collectie|set van|([2-9]|[1-9]\d)\s*(x|stuks|stuk|pcs|packs?|boosters?|pakjes|kaarten|sets))\b/i; // 2 tot 99 stuks; een getal als "151" is vaak een setnaam, geen aantal
+  // Hoeveelheid: onderscheid tussen (1) de inhoud van één product ("booster pack met 5 kaarten"), (2) het aantal producten in een advertentie
+  // ("10 boosterpacks", "3 x iPhone") en (3) een partij ("partij", "bulk", "collectie"). Geeft de tekst die op meerdere stuks wijst, of null.
+  var PARTIJ_WOORD_RE = /\b(partij|bulk|bundel|lot van|mix van|diverse|collectie|set van)\b/;
+  var TELWOORDEN = { twee: 2, drie: 3, vier: 4, vijf: 5, zes: 6, zeven: 7, acht: 8, negen: 9, tien: 10, elf: 11, twaalf: 12 };
+  var INHOUD_EENHEDEN = /^(kaarten|kaart|kaartjes|cards?)$/; // wat IN een verpakking zit: een telling van deze woorden is alleen een aantal als er geen verpakking is
+  var VERPAKKING_RE = /\b(booster|boosters|boosterpack|boosterpacks|pack|packs|pakje|pakjes|box|boxes|doos|doosje|display|deck|tin|blister|etb|elite trainer|starterdeck|structure deck)\b/;
+  var AANTAL_RE = /(?:^|[^a-z0-9])(\d{1,4}|twee|drie|vier|vijf|zes|zeven|acht|negen|tien|elf|twaalf)\s*(x|stuks|stuk|pcs|packs?|booster\s?packs?|boosters?|pakjes|sets|boxes|boosterboxen|boosterbox|dozen|doosjes|displays|tins|blisters|decks|kaarten|kaartjes|cards?)(?![a-z0-9])/g;
+  function partijWoord(tekst) {
+    var t = zonderAccent(String(tekst || '')).toLowerCase();
+    var mw = t.match(PARTIJ_WOORD_RE);
+    if (mw) return mw[0];
+    var verpakking = VERPAKKING_RE.test(t), m;
+    AANTAL_RE.lastIndex = 0;
+    while ((m = AANTAL_RE.exec(t))) {
+      var n = TELWOORDEN[m[1]] || Number(m[1]), eenheid = m[2];
+      if (!(n >= 2 && n <= (INHOUD_EENHEDEN.test(eenheid) ? 9999 : 99))) continue; // 2 tot 99 stuks; een getal als "151" is vaak een setnaam, geen aantal
+      if (INHOUD_EENHEDEN.test(eenheid) && verpakking) continue; // "5 kaarten" in een boosterpack is de inhoud van één product
+      return m[1] + ' ' + eenheid;
+    }
+    return null;
+  }
   var VEILING_RE = /\b(veilingkavel|kavel|veiling)\b/i;
   var VEILING_HOSTS = ['hnvi', 'troostwijk', 'bva-auctions', 'vavato', 'dtz', 'catawiki', 'onlineveilingmeester', 'veilingzaken', 'kavelkoning'];
   function kavelContext(pagina, product, extra) {
@@ -807,14 +841,14 @@
     return {
       defect: !!woord,
       defect_woord: woord,
-      partij: !!(pagina && pagina.aantal_stuks > 1) || PARTIJ_RE.test(String(extra || '') + ' ' + String(product || ''))
+      partij: !!(pagina && pagina.aantal_stuks > 1) || !!partijWoord(String(extra || '') + ' ' + String(product || ''))
     };
   }
   // Geeft { reden, detail } waarom een advertentie niet meetelt, of null
   function afkeurReden(a, ctx, nu) {
     var titel = a.titel || '', staat = a.staat || '';
-    var mp = !ctx.partij && titel.match(PARTIJ_RE);
-    if (mp) return { reden: 'meerdere stuks', detail: 'de titel noemt "' + mp[0] + '" en het kavel is één stuk' };
+    var mp = !ctx.partij && partijWoord(titel);
+    if (mp) return { reden: 'meerdere stuks', detail: 'de titel noemt "' + mp + '" en het kavel is één stuk' };
     var mv = titel.match(VEILING_RE), host = VEILING_HOSTS.filter(function (h) { return hostVan(a.url || '').indexOf(h) !== -1 || String(a.platform || '').toLowerCase().indexOf(h) !== -1; })[0];
     if (mv || host) return { reden: 'veilingkavel', detail: mv ? 'de titel noemt "' + mv[0] + '"' : 'de bron is een veilinghuis (' + host + ')' };
     var dt = defectWoord(titel), ds = defectWoord(staat), defectAd = dt || ds;
@@ -1070,6 +1104,6 @@
     normKenteken: normKenteken, kentekenMetStreepjes: kentekenMetStreepjes, vindKenteken: vindKenteken, normRdw: normRdw, rdwOpzoeken: rdwOpzoeken,
     apiFout: apiFout, isToolFout: isToolFout, vraagClaude: vraagClaude,
     leesKavelpagina: leesKavelpagina, zoekPrijzen: zoekPrijzen, schatPrijzen: schatPrijzen, normPrijzen: normPrijzen,
-    bepaalProduct: bepaalProduct, berekenBetrouwbaarheid: berekenBetrouwbaarheid, defectWoord: defectWoord, bepaalHerkenning: bepaalHerkenning, analyseer: analyseer, defectWaarschuwing: defectWaarschuwing
+    bepaalProduct: bepaalProduct, berekenBetrouwbaarheid: berekenBetrouwbaarheid, defectWoord: defectWoord, partijWoord: partijWoord, chipsVan: chipsVan, toetsEisen: toetsEisen, matchEisen: matchEisen, bepaalHerkenning: bepaalHerkenning, analyseer: analyseer, defectWaarschuwing: defectWaarschuwing
   };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

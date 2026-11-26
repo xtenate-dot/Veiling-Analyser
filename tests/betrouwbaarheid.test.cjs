@@ -225,4 +225,78 @@ t('negatie: echt defect kavel blijft defect', () => {
   const b = K.berekenBetrouwbaarheid(pr([ad('DeWalt DCD791 a', 200)]), pg, 'x', '', nu);
   assert.strictEqual(b.kavel_defect, true);
 });
+
+// Hoeveelheid: inhoud van één product, aantal producten in een advertentie, partij
+t('hoeveelheid: inhoud van één pack is geen aantal producten', () => {
+  ['Pokémon booster pack (5 kaarten)', 'Pokemon Scarlet & Violet booster pack 5 kaarten', 'Japans boosterpack met 5 kaarten', 'Booster pack 10 kaarten per pack',
+   'Pokémon pack - 11 cards', 'Pokemon booster, vijf kaarten', 'Sealed booster pack (5 kaartjes)', 'Pokemon deck 60 kaarten', 'Elite Trainer Box 9 boosters'.replace('9 boosters', ''), 'Pokémon blister 10 kaarten',
+   'Booster pack Wild Force 5 cards inside', 'Pokémon tin met 10 kaarten', 'Magic booster 15 kaarten'].forEach(z => assert.strictEqual(K.partijWoord(z), null, z));
+});
+t('hoeveelheid: meerdere producten in één advertentie blijft partij', () => {
+  ['10 boosterpacks Pokémon', '10 booster packs Scarlet Violet', 'Pokemon 3 boosters', '2x Pokémon booster pack', 'Pokémon booster pack 10x', 'tien boosterpacks Pokémon',
+   '5 packs Pokemon Japans', 'Pokémon 6 pakjes', '24 boosters Pokémon', '3 boxes Pokémon 151', 'Pokémon 2 displays', '4 tins Pokémon', 'Partij Pokémon boosters', 'Pokémon bulk', 'Pokémon collectie',
+   'lot van 12 packs', 'drie packs Pokémon', '10 boosterpacks (5 kaarten per pack)', '8 stuks Pokémon packs'].forEach(z => assert.ok(K.partijWoord(z), z));
+});
+t('hoeveelheid: kaarten zonder verpakking zijn wel een aantal', () => {
+  ['50 kaarten Pokémon', '100 kaarten Pokémon', '1000 kaarten Pokémon', 'Pokemon 20 cards', 'twintig'.replace('twintig', '12 kaarten Pokémon')].forEach(z => assert.ok(K.partijWoord(z), z));
+});
+t('hoeveelheid: modelnamen en setnamen met getallen zijn geen aantal', () => {
+  ['iPhone 13 128GB', 'Pokémon 151 booster pack', 'Scarlet & Violet 151 pack', 'Samsung Galaxy S23', 'DeWalt DCD791 18V 2.0Ah', 'RTX 3060 12GB', 'Nintendo Switch OLED', 'Pokémon SV5 booster pack'].forEach(z => assert.strictEqual(K.partijWoord(z), null, z));
+});
+t('hoeveelheid: advertentie met "5 kaarten" voor een los pack wordt niet afgekeurd, 10 packs wel', () => {
+  const pg = { gevonden: true, merk: 'Pokémon', model: 'Scarlet & Violet booster pack', variant: 'Japans', titel: 'Pokémon booster pack Japans', zoekterm: 'pokemon booster pack' };
+  const ads = [ad('Pokémon Booster pack - Scarlet & Violet - Wild (Japans, ongeopend, 5 kaarten)', 8), ad('Pokemon Scarlet Violet booster pack Japans sealed', 7), ad('10 boosterpacks Pokémon Scarlet Violet Japans', 70), ad('Pokémon Scarlet Violet 3 packs Japans', 24)];
+  const b = K.berekenBetrouwbaarheid(pr(ads), pg, 'Pokemon booster pack Japans', '', nu);
+  assert.strictEqual(b.aantal_passend, 2);
+  assert.ok(ads[2].afkeur === 'meerdere stuks' && ads[3].afkeur === 'meerdere stuks');
+  assert.ok(ads[0].past !== false && ads[1].past !== false);
+});
+t('hoeveelheid: een partij-kavel mag partij-advertenties vergelijken', () => {
+  assert.ok(K.partijWoord('Partij 10 boosterpacks Pokémon'));
+  const pg = { gevonden: true, merk: 'Pokémon', model: 'booster pack', variant: '', titel: '10 boosterpacks Pokémon', aantal_stuks: 10, zoekterm: 'x' };
+  const b = K.berekenBetrouwbaarheid(pr([ad('10 boosterpacks Pokémon', 70), ad('12 booster packs Pokémon', 80)]), pg, 'x', '', nu);
+  assert.strictEqual(b.aantal_passend, 2);
+});
+
+// Chipvergelijking: de volledige chipvariant moet gelijk zijn
+const chips = ['M1', 'M1 Pro', 'M1 Max', 'M1 Ultra', 'M2', 'M2 Pro', 'M2 Max', 'M2 Ultra', 'M3', 'M3 Pro', 'M3 Max', 'M4', 'M4 Pro', 'M4 Max'];
+t('chip: chipsVan leest alle varianten', () => {
+  chips.forEach(c => assert.deepStrictEqual(K.chipsVan('MacBook Pro 14 ' + c + ' 16GB'), [c.toLowerCase().replace(' ', '')], c));
+  assert.deepStrictEqual(K.chipsVan('MacBook Pro M3Pro'), ['m3pro']);
+  assert.deepStrictEqual(K.chipsVan('MacBook Pro 14 M3 pro 18GB'), ['m3pro']);
+  assert.deepStrictEqual(K.chipsVan('MacBook Pro 14 M3 ProMotion scherm'), ['m3']);
+  assert.deepStrictEqual(K.chipsVan('MacBook Pro 14 inch 2023 18GB'), []);
+});
+t('chip: elke chip past alleen bij zichzelf (volledige matrix)', () => {
+  chips.forEach(kavel => {
+    const e = K.matchEisen({ merk: 'Apple', model: 'MacBook Pro 14 inch ' + kavel, variant: '' }, null, '');
+    chips.forEach(adChip => {
+      const r = K.toetsEisen('Apple MacBook Pro 14 inch ' + adChip + ' 512GB', e);
+      assert.strictEqual(r.past, kavel === adChip, 'kavel ' + kavel + ' / advertentie ' + adChip + ' -> ' + JSON.stringify(r));
+    });
+  });
+});
+t('chip: M3 tegenover M3 Pro of M3 Max met "Pro" in de productnaam', () => {
+  const pg = { gevonden: true, merk: 'Apple', model: 'MacBook Pro 14 inch M3', variant: '2023', titel: 'Apple MacBook Pro 14 inch M3 2023', zoekterm: 'macbook pro 14 m3' };
+  const ads = [ad('MacBook Pro 14" M3 Pro 18GB 512GB', 1500), ad('MacBook Pro 14 M3 Max 36GB', 2500), ad('Apple MacBook Pro 14 inch M3 8GB 512GB', 1200), ad('MacBook Pro 14 inch (M3, 2023) 16GB', 1300)];
+  const b = K.berekenBetrouwbaarheid(pr(ads), pg, 'Apple MacBook Pro 14 inch M3 2023', '', nu);
+  assert.strictEqual(b.aantal_passend, 2);
+  assert.ok(/andere chip/.test(ads[0].afkeur_detail) && /andere chip/.test(ads[1].afkeur_detail), ads[0].afkeur_detail);
+  assert.ok(/M3 Pro/.test(ads[0].afkeur_detail) && /M3 Max/.test(ads[1].afkeur_detail));
+});
+t('chip: M3 Pro kavel sluit gewone M3 uit en accepteert M3 Pro in andere schrijfwijze', () => {
+  const pg = { gevonden: true, merk: 'Apple', model: 'MacBook Pro 14 inch M3 Pro', variant: '', titel: 'x', zoekterm: 'x' };
+  const ads = [ad('MacBook Pro 14 M3 8GB', 1200), ad('MacBook Pro 14" M3 Pro 18GB', 1700), ad('MacBook Pro 14 M3Pro 18 GB', 1650), ad('MacBook Pro 14 inch M3 pro', 1600)];
+  K.berekenBetrouwbaarheid(pr(ads), pg, 'Apple MacBook Pro 14 inch M3 Pro', '', nu);
+  assert.deepStrictEqual(ads.map(a => a.past), [false, true, true, true]);
+});
+t('chip: advertentie met meerdere chips is geen eerlijke vergelijking', () => {
+  const e = K.matchEisen({ merk: 'Apple', model: 'MacBook Pro 14 inch M3' }, null, '');
+  assert.strictEqual(K.toetsEisen('MacBook Pro 14 M3 of M3 Pro te koop', e).past, false);
+});
+t('chip: producten zonder chip worden niet geraakt', () => {
+  const e = K.matchEisen({ merk: 'Apple', model: 'iPhone 13', variant: '128GB' }, null, '');
+  assert.strictEqual(e.chip, null);
+  assert.strictEqual(K.toetsEisen('Apple iPhone 13 128GB blauw', e).past, true);
+});
 console.log(n + ' tests ok');
