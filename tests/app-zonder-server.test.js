@@ -14,7 +14,7 @@ const STAP2_JSON = { productnaam: 'Apple iPhone 13 128GB', categorie: 'Telefoons
   tweedehands: [
     { platform: 'Marktplaats', titel: 'iPhone 13 128GB blauw', prijs: 575, soort: 'vraagprijs', staat: 'gebruikt', url: 'https://www.marktplaats.nl/v/telecommunicatie/mobiele-telefoons-apple-iphone/m2000000001-iphone-13' },
     { platform: 'eBay', titel: 'iPhone 13 128GB', prijs: 560, soort: 'verkocht', staat: 'gebruikt', url: 'https://www.ebay.nl/itm/1234567890' },
-    { platform: 'Marktplaats', titel: 'iPhone 13 verzonnen', prijs: 640, soort: 'vraagprijs', staat: 'gebruikt', url: 'https://www.marktplaats.nl/v/verzonnen/m999-nep' } ],
+    { platform: 'Marktplaats', titel: 'iPhone 13 128GB verzonnen', prijs: 640, soort: 'vraagprijs', staat: 'gebruikt', url: 'https://www.marktplaats.nl/v/verzonnen/m999-nep' } ],
   marktplaats: { laag: 500, gemiddeld: 600, hoog: 700, vertrouwen: 'middel', aantal_vergelijkbaar: 3, tip: 'Foto van batterijstatus', verkooptijd: '1-2 weken', zoekwoorden: ['iphone 13'] },
   ebay: { laag: 520, gemiddeld: 560, hoog: 610, vertrouwen: 'middel', tip: '', verkooptijd: '', keywords: [] }, partij: null,
   toelichting: 'Op basis van 2 vraagprijzen en 1 verkocht item.', aandachtspunten: ['Controleer iCloud-slot'] };
@@ -115,7 +115,7 @@ const STAP2_JSON = { productnaam: 'Apple iPhone 13 128GB', categorie: 'Telefoons
   check('Kosten: $0,00225 + $0,0131 + $0,0625 (>100k = hoog tarief) = $0,07785', Math.abs(k.api_usd - 0.07785) < 1e-12, k.api_usd);
   check('Tools: web_fetch_20250910 + web_search_20250305', verzoeken[0].tools.map(t => t.type).join() === 'web_fetch_20250910,web_search_20250305');
   check('Kavel-URL staat in het gebruikersbericht (nodig voor web_fetch)', verzoeken[0].messages[0].content.indexOf('https://www.testveiling.nl/kavel/4711') !== -1);
-  check('eBay- en bol.com-pagina\'s staan in het bericht, Marktplaats niet (alleen via zoeken)', verzoeken[1].messages[0].content.indexOf('ebay.nl/sch/') !== -1 && verzoeken[1].messages[0].content.indexOf('marktplaats.nl/q/') === -1 && verzoeken[1].tools[0].blocked_domains.indexOf('marktplaats.nl') !== -1);
+  check('Zoekpagina\'s van eBay.nl en bol.com staan niet meer in het bericht (robots.txt), Marktplaats ook niet', verzoeken[1].messages[0].content.indexOf('ebay.nl/sch/') === -1 && verzoeken[1].messages[0].content.indexOf('bol.com/nl/nl/s/') === -1 && verzoeken[1].messages[0].content.indexOf('marktplaats.nl/q/') === -1 && verzoeken[1].tools[0].blocked_domains.indexOf('marktplaats.nl') !== -1);
   check('Bod van de pagina gelezen (€300)', k.huidig_bod === 300 && k.bod_van_pagina === true, k.huidig_bod);
   check('Kosten van de pagina: 18% + €2,50, volledig', k.tarief_bron === 'pagina' && k.veiling_tarief.opgeld === 0.18 && k.veiling_tarief.vast === 2.5 && k.veiling_tarief.regeling === 'volledig', k.veiling_tarief);
   check('Totale kosten €431,365', Math.abs(k.kosten.totaal - 431.365) < 1e-9, k.kosten.totaal);

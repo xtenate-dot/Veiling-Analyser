@@ -39,7 +39,7 @@ t('AI-vertrouwen "hoog" verandert de score niet', () => {
 t('verwachte prijs ver boven de gevonden prijzen kost punten', () => {
   const ads = [ad('DeWalt DCD791 a', 100), ad('DeWalt DCD791 b', 110), ad('DeWalt DCD791 c', 105)];
   const goed = K.berekenBetrouwbaarheid(pr(ads, { marktplaats: { gemiddeld: 100 } }), pagina, 'x', '', nu);
-  const slecht = K.berekenBetrouwbaarheid(pr(ads, { marktplaats: { gemiddeld: 300 } }), pagina, 'x', '', nu);
+  const slecht = K.berekenBetrouwbaarheid(pr(ads, { marktplaats: { gemiddeld: 140 } }), pagina, 'x', '', nu);
   assert.ok(slecht.score === goed.score - 10, goed.score + ' vs ' + slecht.score);
 });
 t('oude advertenties verlagen de actualiteit', () => {
@@ -298,5 +298,123 @@ t('chip: producten zonder chip worden niet geraakt', () => {
   const e = K.matchEisen({ merk: 'Apple', model: 'iPhone 13', variant: '128GB' }, null, '');
   assert.strictEqual(e.chip, null);
   assert.strictEqual(K.toetsEisen('Apple iPhone 13 128GB blauw', e).past, true);
+});
+
+// ── Veilinghuizen, minimum van 3 passende advertenties en weigerregels ──────────────────────────────────────────────
+const T19 = 'Pokemon booster pack Japans, Scarlet & Violet, nieuw';
+const T29 = 'Apple MacBook Pro 14 inch M3 2023, scherm gebarsten, werkt verder';
+const eb = (titel, prijs, extra) => ad(titel, prijs, 'vraagprijs', Object.assign({ platform: 'eBay' }, extra));
+t('veilinghuis: Catawiki in titel, staat, bron of link wordt afgekeurd met reden', () => {
+  const ads = [
+    ad('Pokémon Booster pack - Scarlet & Violet - Wild (Japans, ongeopend, Catawiki-advertentie)', 8),
+    ad('Pokemon booster pack Japans Scarlet Violet', 7, 'vraagprijs', { staat: 'via Catawiki, ongeopend' }),
+    ad('Pokemon booster pack Japans Scarlet Violet sealed', 9, 'vraagprijs', { platform: 'Catawiki' }),
+    ad('Pokemon booster pack Japans Scarlet Violet nieuw', 9, 'vraagprijs', { url: 'https://www.catawiki.com/nl/l/123-pokemon' }),
+    ad('Pokemon booster pack Japans Scarlet Violet BVA Auctions kavel 12', 9), ad('Pokemon booster pack Japans Troostwijk', 9), ad('Pokemon booster pack Japans Scarlet Violet los pack', 7)
+  ];
+  const b = K.berekenBetrouwbaarheid(pr(ads), null, T19, T19, nu);
+  assert.strictEqual(b.aantal_passend, 1);
+  ads.slice(0, 6).forEach((a, i) => { assert.strictEqual(a.past, false, 'ad ' + i); assert.strictEqual(a.afkeur, 'veilingkavel', 'ad ' + i); assert.ok(/veilinghuis|veiling/.test(a.afkeur_detail), a.afkeur_detail); });
+  assert.ok(/catawiki/i.test(ads[0].afkeur_detail) && /titel/.test(ads[0].afkeur_detail));
+  assert.ok(/staat/.test(ads[1].afkeur_detail) && /bron/.test(ads[2].afkeur_detail));
+  assert.strictEqual(ads[6].past !== false, true);
+});
+t('veilinghuis: gewone advertenties met een toevallig vergelijkbaar woord worden niet afgekeurd', () => {
+  const ads = [ad('Pokemon booster pack Japans Scarlet Violet', 8), ad('Pokemon booster pack Japans Scarlet Violet, catalogus nieuw', 8)];
+  K.berekenBetrouwbaarheid(pr(ads), null, T19, T19, nu);
+  assert.ok(ads.every(a => a.past !== false));
+});
+t('veilinghuis: een veilingprijs telt niet mee voor de passende advertenties en niet voor de mediaan', () => {
+  const pg = { gevonden: true, merk: 'DeWalt', model: 'DCD791', variant: '', titel: 'DeWalt DCD791', zoekterm: 'x' };
+  const ads = [ad('DeWalt DCD791 a', 200), ad('DeWalt DCD791 b', 210), ad('DeWalt DCD791 c', 220), ad('DeWalt DCD791 Catawiki hamerprijs', 20), ad('DeWalt DCD791 Troostwijk kavel', 30)];
+  const b = K.berekenBetrouwbaarheid(pr(ads, { marktplaats: { gemiddeld: 205 } }), pg, 'x', '', nu);
+  assert.strictEqual(b.aantal_passend, 3); assert.strictEqual(b.mediaan_passend, 210);
+});
+t('T19 Pokémon: twee passende advertenties geven geen biedadvies, ook niet zonder veilingkavel', () => {
+  const ads = [ad('Pokemon Scarlet & Violet booster pack Japans sealed', 7), ad('Pokémon Booster pack Scarlet & Violet Japans ongeopend (5 kaarten)', 8)];
+  const b = K.berekenBetrouwbaarheid(pr(ads, { marktplaats: { gemiddeld: 7 } }), null, T19, T19, nu);
+  assert.strictEqual(b.aantal_passend, 2); assert.strictEqual(b.niveau, 'onvoldoende'); assert.ok(b.score <= 24 && b.begrensd);
+  assert.ok(/minstens 3/.test(b.reden) && /onvoldoende/.test(b.reden), b.reden);
+});
+t('T19 Pokémon: veilingkavel + één passende advertentie = onvoldoende, reden bij elke afkeuring', () => {
+  const ads = [ad('Pokémon Booster pack - Scarlet & Violet - Wild (Japans, ongeopend, Catawiki-advertentie)', 8), eb('Pokemon Card Scarlet & Violet Booster pack Japanese', 9)];
+  const b = K.berekenBetrouwbaarheid(pr(ads, { marktplaats: { gemiddeld: 8 } }), null, T19, T19, nu);
+  assert.strictEqual(b.niveau, 'onvoldoende'); assert.strictEqual(ads[0].afkeur, 'veilingkavel'); assert.ok(ads[0].afkeur_detail);
+  assert.strictEqual(b.afgekeurd.veilingkavel, 1);
+});
+t('T19 Pokémon: een te algemeen product (niet te toetsen) heeft minstens 5 passende advertenties nodig', () => {
+  const drie = [ad('Pokemon Scarlet Violet booster pack Japans', 7), ad('Pokémon booster pack Japans Scarlet Violet', 8), ad('Pokemon Japans Scarlet Violet booster pack sealed', 9)];
+  const b3 = K.berekenBetrouwbaarheid(pr(drie, { marktplaats: { gemiddeld: 8 } }), null, T19, T19, nu);
+  assert.strictEqual(b3.aantal_passend, 3); assert.strictEqual(b3.niveau, 'onvoldoende'); assert.ok(/te algemeen/.test(b3.weigerreden), b3.reden);
+  const vijf = drie.concat([ad('Pokemon booster pack Japans Scarlet Violet nieuw', 8), ad('Japans Pokemon Scarlet Violet booster pack', 9)]);
+  const b5 = K.berekenBetrouwbaarheid(pr(vijf, { marktplaats: { gemiddeld: 8 } }), null, T19, T19, nu);
+  assert.notStrictEqual(b5.niveau, 'onvoldoende');
+});
+const mb = (titel, prijs, staat) => eb(titel, prijs, { staat: staat || 'Beschadigd scherm, parts only' });
+t('T29 MacBook: twee passende advertenties geven geen biedadvies', () => {
+  const ads = [mb('Apple MacBook Pro 14" 2023 M3 8-Core 16GB 512GB A2918 - Damaged Display', 475), mb('Apple MacBook Pro 14" 2023 A2918 / M3 schermprobleem for parts', 520, 'Defect scherm, voor onderdelen')];
+  const b = K.berekenBetrouwbaarheid(pr(ads, { marktplaats: { gemiddeld: 480 } }), null, T29, T29, nu);
+  assert.strictEqual(b.aantal_passend, 2); assert.strictEqual(b.niveau, 'onvoldoende'); assert.strictEqual(b.kavel_defect, true);
+});
+t('T29 MacBook: drie vergelijkbare defecte-scherm-advertenties kunnen wel een (voorzichtig) advies geven', () => {
+  const ads = [mb('Apple MacBook Pro 14" 2023 M3 8-Core 16GB 512GB A2918 - Damaged Display', 475), mb('Apple MacBook Pro 14" 2023 A2918 / M3 schermprobleem for parts', 520, 'Defect scherm, voor onderdelen'), mb('MacBook Pro 14 inch M3 2023 cracked screen werkt verder', 560, 'Gebarsten scherm, rest werkt')];
+  const b = K.berekenBetrouwbaarheid(pr(ads, { marktplaats: { gemiddeld: 480, laag: 400, hoog: 600 } }), null, T29, T29, nu);
+  assert.strictEqual(b.aantal_passend, 3); assert.notStrictEqual(b.niveau, 'onvoldoende', JSON.stringify(b)); assert.ok(['laag', 'middel'].includes(b.niveau));
+});
+t('T29 MacBook: M3 Pro, werkende exemplaren en veilingkavels tellen niet mee, ook niet als er drie "passend" lijken', () => {
+  const ads = [mb('Apple MacBook Pro 14" 2023 A2918 M3 Damaged Display', 475), mb('MacBook Pro 14" 2023 M3 Pro 18GB Cracked Screen', 640), mb('MacBook Pro 14 2023 M3 Max cracked screen', 900),
+    ad('Macbook Pro 14 2023 M3 8GB 1TB in nieuwstaat', 1350, 'vraagprijs', { staat: 'Werkend, zo goed als nieuw' }), mb('MacBook Pro 14 M3 2023 Catawiki cracked screen', 300)];
+  const b = K.berekenBetrouwbaarheid(pr(ads, { marktplaats: { gemiddeld: 480 } }), null, T29, T29, nu);
+  assert.strictEqual(b.aantal_passend, 1); assert.strictEqual(b.niveau, 'onvoldoende');
+  assert.deepStrictEqual(ads.map(a => a.afkeur), [null, 'ander merk, type of uitvoering', 'ander merk, type of uitvoering', 'werkend exemplaar (kavel is defect)', 'veilingkavel']);
+});
+t('T01 iPhone 13: bestaand advies blijft werken', () => {
+  const pg = { gevonden: true, merk: 'Apple', model: 'iPhone 13', variant: '128GB', titel: 'Apple iPhone 13 128GB', staat: 'gebruikt', zoekterm: 'apple iphone 13 128gb' };
+  const prijzen = [200, 160, 190, 225, 230, 239, 250, 250, 250, 300];
+  const ads = prijzen.map((p, i) => ad('Apple iPhone 13 128GB variant ' + i, p));
+  const b = K.berekenBetrouwbaarheid(pr(ads, { marktplaats: { gemiddeld: 220 } }), pg, 'Apple iPhone 13 128GB', '', nu);
+  assert.strictEqual(b.aantal_passend, 10); assert.strictEqual(b.niveau, 'middel'); assert.strictEqual(b.weigerreden, null);
+  const vier = K.berekenBetrouwbaarheid(pr(ads.slice(0, 4), { marktplaats: { gemiddeld: 190 } }), pg, 'Apple iPhone 13 128GB', '', nu);
+  assert.ok(['laag', 'middel'].includes(vier.niveau), vier.niveau);
+});
+t('weigeren ondanks drie advertenties: prijzen lopen te ver uiteen', () => {
+  const pg = { gevonden: true, merk: 'Apple', model: 'iPhone 13', variant: '128GB' };
+  const ads = [ad('Apple iPhone 13 128GB a', 100), ad('Apple iPhone 13 128GB b', 250), ad('Apple iPhone 13 128GB c', 450)];
+  const b = K.berekenBetrouwbaarheid(pr(ads, { marktplaats: { gemiddeld: 250 } }), pg, 'x', '', nu);
+  assert.strictEqual(b.aantal_passend, 3); assert.strictEqual(b.niveau, 'onvoldoende'); assert.ok(/lopen te ver uiteen/.test(b.weigerreden)); assert.ok(b.score <= 24);
+});
+t('weigeren ondanks drie advertenties: de verwachte prijs wordt niet door de advertenties gedragen', () => {
+  const pg = { gevonden: true, merk: 'Apple', model: 'iPhone 13', variant: '128GB' };
+  const ads = [ad('Apple iPhone 13 128GB a', 200), ad('Apple iPhone 13 128GB b', 210), ad('Apple iPhone 13 128GB c', 220)];
+  assert.strictEqual(K.berekenBetrouwbaarheid(pr(ads, { marktplaats: { gemiddeld: 400 } }), pg, 'x', '', nu).niveau, 'onvoldoende');
+  assert.strictEqual(K.berekenBetrouwbaarheid(pr(ads, { marktplaats: { gemiddeld: 90 } }), pg, 'x', '', nu).niveau, 'onvoldoende');
+  assert.notStrictEqual(K.berekenBetrouwbaarheid(pr(ads, { marktplaats: { gemiddeld: 190 } }), pg, 'x', '', nu).niveau, 'onvoldoende');
+});
+t('verkochte prijs zonder bevestigde link telt niet als verkocht en niet voor "hoog"', () => {
+  const pg = { gevonden: true, merk: 'DeWalt', model: 'DCD791', variant: '' };
+  const ads = [1, 2, 3, 4, 5].map(i => ad('DeWalt DCD791 ' + i, 200 + i, 'verkocht', { platform: 'eBay', bevestigd: false }));
+  const b = K.berekenBetrouwbaarheid(pr(ads, { marktplaats: { gemiddeld: 205 } }), pg, 'x', '', nu);
+  assert.strictEqual(b.aantal_verkocht, 0); assert.notStrictEqual(b.niveau, 'hoog');
+  assert.ok(b.factoren.some(f => /zonder bevestigde link/.test(f.tekst)));
+  const goed = ads.map(a => Object.assign({}, a, { bevestigd: true }));
+  const b2 = K.berekenBetrouwbaarheid(pr(goed, { marktplaats: { gemiddeld: 205 } }), pg, 'x', '', nu);
+  assert.strictEqual(b2.aantal_verkocht, 5); assert.strictEqual(b2.niveau, 'hoog');
+});
+t('"hoog" blijft minstens één bevestigd verkocht item én vijf passende advertenties vragen', () => {
+  const pg = { gevonden: true, merk: 'DeWalt', model: 'DCD791', variant: '' };
+  const vraag = [1, 2, 3, 4, 5, 6].map(i => ad('DeWalt DCD791 ' + i, 200 + i));
+  assert.notStrictEqual(K.berekenBetrouwbaarheid(pr(vraag, { marktplaats: { gemiddeld: 203 } }), pg, 'x', '', nu).niveau, 'hoog');
+  const vier = [1, 2, 3, 4].map(i => ad('DeWalt DCD791 ' + i, 200 + i, 'verkocht', { platform: 'eBay' }));
+  assert.notStrictEqual(K.berekenBetrouwbaarheid(pr(vier, { marktplaats: { gemiddeld: 203 } }), pg, 'x', '', nu).niveau, 'hoog');
+});
+t('onvoldoende bij minder dan 3: willekeurige invoer geeft nooit advies (eigenschap)', () => {
+  const pg = { gevonden: true, merk: 'DeWalt', model: 'DCD791', variant: '' };
+  for (let i = 0; i < 300; i++) {
+    const n = Math.floor(Math.random() * 7);
+    const ads = Array.from({ length: n }, (_, j) => ad(Math.random() < 0.4 ? 'DeWalt DCD796 x' + j : 'DeWalt DCD791 x' + j, 50 + Math.floor(Math.random() * 400), Math.random() < 0.3 ? 'verkocht' : 'vraagprijs', { bevestigd: Math.random() < 0.7 }));
+    const b = K.berekenBetrouwbaarheid(pr(ads, { marktplaats: { gemiddeld: 50 + Math.floor(Math.random() * 400) } }), pg, 'x', '', nu);
+    if (b.aantal_passend < 3) { assert.strictEqual(b.niveau, 'onvoldoende'); assert.ok(b.score <= 24); }
+    if (b.niveau !== 'onvoldoende') assert.ok(b.aantal_passend >= 3 && b.weigerreden === null);
+  }
 });
 console.log(n + ' tests ok');

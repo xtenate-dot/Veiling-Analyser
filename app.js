@@ -1322,17 +1322,19 @@ function betrouwbaarheidKaart(d) {
   (b.factoren || []).forEach(function(f) {
     h += '<tr><td>' + esc(f.naam) + '<small>' + esc(f.tekst) + '</small></td><td>' + (f.max ? f.punten + ' / ' + f.max : (f.punten > 0 ? '+' : '') + f.punten) + '</td></tr>';
   });
-  h += '</tbody></table><p class="help">Score: <b>' + b.score + ' van 100</b>' + (b.begrensd ? ' (bij minder dan 2 passende advertenties nooit hoger dan 24)' : '') + '. Dit is een indicatie van hoe goed het beschikbare vergelijkingsmateriaal is, <b>geen kans dat de prijs klopt</b>. De app berekent het zelf uit de gevonden advertenties; het oordeel van het AI-model telt niet mee. Ook bij een hoge score kan de werkelijke verkoopprijs afwijken. Advertentiedatums zijn alleen bekend als ze in het zoekresultaat stonden.</p></details></div>';
+  h += '</tbody></table><p class="help">Score: <b>' + b.score + ' van 100</b>' + (b.begrensd ? ' (zonder genoeg passend bewijs nooit hoger dan 24)' : '') + '. Dit is een indicatie van hoe goed het beschikbare vergelijkingsmateriaal is, <b>geen kans dat de prijs klopt</b>. De app berekent het zelf uit de gevonden advertenties; het oordeel van het AI-model telt niet mee. Ook bij een hoge score kan de werkelijke verkoopprijs afwijken. Advertentiedatums zijn alleen bekend als ze in het zoekresultaat stonden.</p></details></div>';
   return h;
 }
 
 function platformKaart(naam, p, tagsLabel, tags, ctl) {
   var c = vertrouwenInfo(p.vertrouwen);
   var h = '<div class="card"><div class="plat-h"><h3>' + naam + '</h3>' + (ctl ? '<span class="conf pos"><i></i>Gecontroleerd</span>' : '<span class="conf ' + c.cls + '"><i></i>Betrouwbaarheid ' + c.label.toLowerCase() + '</span>') + '</div>';
-  if (!ctl && p.vertrouwen === 'onvoldoende') h += '<div class="tip">Onvoldoende onderbouwd: deze prijzen zijn alleen een indicatie van het AI-model en worden niet voor het advies gebruikt.</div>';
+  if (!ctl && p.vertrouwen === 'onvoldoende') h += '<div class="tip">Onvoldoende onderbouwd: er zijn te weinig passende advertenties. De schatting van het AI-model wordt niet getoond en niet voor het advies gebruikt.</div>';
   if (ctl) {
     h += '<div class="range">' + (ctl.mp_laag ? '<span>' + fmt(ctl.mp_laag) + '</span>' : '') + '<b>' + fmt(p.gemiddeld) + '</b></div>';
     h += '<div class="kc-meta">' + (ctl.mp_laag ? 'Laagste &middot; gemiddeld &middot; ' : 'Gemiddeld &middot; ') + 'door jou gecontroleerd op ' + new Date(ctl.op).toLocaleDateString('nl-NL') + '. Verkooptijd (schatting): ' + esc(p.verkooptijd || '-') + '</div>';
+  } else if (p.vertrouwen === 'onvoldoende') {
+    h += '<div class="kc-meta">Geen prijs getoond: het bewijsmateriaal is onvoldoende.</div>';
   } else {
     h += '<div class="range"><span>' + fmt(p.laag) + '</span><b>' + fmt(p.gemiddeld) + '</b><span>' + fmt(p.hoog) + '</span></div>';
     h += '<div class="kc-meta">Laag &middot; gemiddeld &middot; hoog &middot; verkooptijd ' + esc(p.verkooptijd || '-') + '</div>';
@@ -1637,7 +1639,9 @@ function toonAnalyseResultaat(d, behoudScroll) {
     h += '<div class="prices-strip">';
     h += '<div class="ps"><div class="ps-l">Nieuwprijs</div><div class="ps-v">' + (pr.nieuwprijs ? fmt(pr.nieuwprijs) : '-') + '</div><div class="ps-s">' +
       (pr.nieuwprijs_url ? bronLink(pr.nieuwprijs_url, pr.nieuwprijs_bron || domeinVan(pr.nieuwprijs_url), pr.live ? pr.nieuwprijs_bevestigd : undefined) : esc(pr.nieuwprijs_bron || '')) + '</div></div>';
-    if (mp) h += '<div class="ps"><div class="ps-l">' + (pr.voertuig ? 'Verkoop aan particulier' : 'Tweedehands (Marktplaats / 2dehands)') + '</div><div class="ps-v">' + fmt(mp.gemiddeld) + '</div><div class="ps-s">' + (d.controle ? 'Door jou gecontroleerd' : (mp.laag ? fmt(mp.laag) + ' tot ' + fmt(mp.hoog) : 'Verwachte verkoopprijs')) + '</div></div>';
+    var onvBew = waarderingOnvoldoende(d);
+    if (mp && onvBew) h += '<div class="ps"><div class="ps-l">' + (pr.voertuig ? 'Verkoop aan particulier' : 'Tweedehands (Marktplaats / 2dehands)') + '</div><div class="ps-v">–</div><div class="ps-s">Bewijsmateriaal onvoldoende</div></div>';
+    else if (mp) h += '<div class="ps"><div class="ps-l">' + (pr.voertuig ? 'Verkoop aan particulier' : 'Tweedehands (Marktplaats / 2dehands)') + '</div><div class="ps-v">' + fmt(mp.gemiddeld) + '</div><div class="ps-s">' + (d.controle ? 'Door jou gecontroleerd' : (mp.laag ? fmt(mp.laag) + ' tot ' + fmt(mp.hoog) : 'Verwachte verkoopprijs')) + '</div></div>';
     if (pr.handelaar) h += '<div class="ps"><div class="ps-l">Vraagprijs autobedrijven</div><div class="ps-v">' + fmt(pr.handelaar.laag) + (pr.handelaar.hoog > pr.handelaar.laag ? ' – ' + fmt(pr.handelaar.hoog) : '') + '</div><div class="ps-s">Incl. garantie en afleverkosten' + (pr.handelaar.aantal ? ' &middot; ' + pr.handelaar.aantal + ' gevonden' : '') + '</div></div>';
     if (eb) h += '<div class="ps"><div class="ps-l">eBay</div><div class="ps-v">' + fmt(eb.gemiddeld) + '</div><div class="ps-s">' + (eb.laag ? fmt(eb.laag) + ' tot ' + fmt(eb.hoog) : '') + '</div></div>';
     h += '</div>';
@@ -1645,10 +1649,13 @@ function toonAnalyseResultaat(d, behoudScroll) {
     if (pr.voertuig) h += '<div class="note" style="margin:12px 0 0">' + ic('info') + '<span>Een autobedrijf vraagt meer omdat het garantie, aflevering en onderhoud meelevert. Verkoop je zelf aan een particulier, dan krijg je meestal 8 tot 15% minder dan de vraagprijs bij een autobedrijf. Verkoop je aan een handelaar of als inruil, dan nog minder. Het advies rekent met de verkoop aan een particulier.</span></div>';
     h += '<div class="help" style="margin-top:10px"><a href="https://veilinganalyser.nl/hoe-we-rekenen" target="_blank" rel="noopener">Zo rekent de app: wat wel en niet is meegerekend</a></div>';
     if (pr.tweedehands && pr.tweedehands.length) {
-      h += '<h3 style="font-size:15px;margin:18px 0 6px">Gevonden advertenties</h3><table class="ctable adv"><tbody>';
+      h += '<h3 style="font-size:15px;margin:18px 0 6px">Gevonden advertenties</h3>';
+      if (onvBew) h += '<div class="note" style="margin:0 0 10px">' + ic('alert') + '<span>Het bewijsmateriaal is onvoldoende voor een prijs of biedadvies' + (d.prijzen.betrouwbaarheid && d.prijzen.betrouwbaarheid.reden ? ': ' + esc(d.prijzen.betrouwbaarheid.reden) : '.') + ' Hieronder staat wat er is gevonden, met per advertentie of die meetelt.</span></div>';
+      h += '<table class="ctable adv"><tbody>';
       pr.tweedehands.forEach(function(x) {
+        var telt = x.past === false ? '<br><span class="neg-tekst">Telt niet mee: ' + esc(x.afkeur_detail || x.afkeur || '') + '</span>' : '';
         h += '<tr><td>' + bronLink(x.url, x.titel || x.platform || 'Advertentie', pr.live ? x.bevestigd : undefined) +
-          '<small>' + esc([x.platform, x.soort === 'verkocht' ? 'verkocht' : 'vraagprijs', x.staat].filter(Boolean).join(' · ')) + '</small></td><td>' + fmt(x.prijs) + '</td></tr>';
+          '<small>' + esc([x.platform, x.soort === 'verkocht' ? (x.verkocht_onbevestigd ? 'verkocht (niet bevestigd)' : 'verkocht') : 'vraagprijs', x.staat].filter(Boolean).join(' · ')) + telt + '</small></td><td>' + fmt(x.prijs) + '</td></tr>';
       });
       h += '</tbody></table>';
       if (pr.mediaan_advertenties) h += '<div class="help">Mediaan van deze advertenties: ' + fmt(pr.mediaan_advertenties) + '. Vraagprijzen liggen meestal hoger dan wat er echt betaald wordt.</div>';

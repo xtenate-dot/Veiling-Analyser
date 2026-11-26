@@ -70,7 +70,7 @@ async function bevestig(tk, email) { return api('POST', '/api/verifieer', { code
 const STAP1 = { gevonden: true, titel: 'Apple iPhone 13 128GB', veilinghuis: 'Testveiling', kavelnummer: '4711', product: { zoekterm: 'iPhone 13 128GB' }, staat: 'gebruikt',
   aantal_stuks: 1, huidig_bod: 300, aantal_biedingen: 7, sluit: 'do 30 okt 20:00', sluit_iso: '2026-10-30T20:00:00+01:00',
   kosten: { opgeld_pct: 18, vaste_kosten: 2.5, btw_pct: 21, btw_regeling: 'volledig', bron: 'Opgeld 18%' }, opmerkingen: [] };
-const STAP2 = { productnaam: 'Apple iPhone 13 128GB', nieuwprijs: 899, tweedehands: [{ platform: 'Marktplaats', titel: 'iPhone 13 128GB', prijs: 575, soort: 'vraagprijs', url: 'https://www.marktplaats.nl/v/x/m1-iphone' }, { platform: 'Marktplaats', titel: 'iPhone 13 128GB blauw', prijs: 560, soort: 'vraagprijs', url: 'https://www.marktplaats.nl/v/x/m2-iphone' }],
+const STAP2 = { productnaam: 'Apple iPhone 13 128GB', nieuwprijs: 899, tweedehands: [{ platform: 'Marktplaats', titel: 'iPhone 13 128GB', prijs: 575, soort: 'vraagprijs', url: 'https://www.marktplaats.nl/v/x/m1-iphone' }, { platform: 'Marktplaats', titel: 'iPhone 13 128GB blauw', prijs: 560, soort: 'vraagprijs', url: 'https://www.marktplaats.nl/v/x/m2-iphone' }, { platform: 'Marktplaats', titel: 'iPhone 13 128GB zwart', prijs: 590, soort: 'vraagprijs', url: 'https://www.marktplaats.nl/v/x/m3-iphone' }],
   marktplaats: { laag: 500, gemiddeld: 600, hoog: 700, vertrouwen: 'middel' }, ebay: null, toelichting: 'test' };
 let anthropicBodies = [];
 anthropicAntwoord = (b) => {
@@ -433,7 +433,7 @@ const s1 = anthropicBodies[0], s2 = anthropicBodies[1];
 check('Foto\'s gaan als afbeelding mee naar stap 1 (ongeldige eruit)', r.status === 200 && Array.isArray(s1.messages[0].content) && s1.messages[0].content.filter(c => c.type === 'image').length === 2, r.data && r.data.fout);
 check('Gezien op de foto\'s komt terug in de uitslag', r.data.pagina.foto && r.data.pagina.foto.gebreken[0] === 'kras op het scherm' && r.data.pagina.foto.aantal === 2, r.data.pagina.foto);
 check('Marktplaats en 2dehands staan op de blokkadelijst van web_fetch (stap 1 en 2)', s1.tools[0].blocked_domains.includes('marktplaats.nl') && s2.tools[0].blocked_domains.includes('2dehands.be'));
-check('Stap 2 noemt geen Marktplaats-pagina om te openen, wel eBay en bol.com', !/marktplaats\.nl\/q\//.test(s2.messages[0].content) && /ebay\.nl/.test(s2.messages[0].content) && /bol\.com/.test(s2.messages[0].content));
+check('Stap 2 noemt geen Marktplaats-pagina om te openen en ook geen eBay.nl- of bol.com-zoekpagina (robots.txt)', !/marktplaats\.nl\/q\//.test(s2.messages[0].content) && !/ebay\.nl\/sch/.test(s2.messages[0].content) && !/bol\.com\/nl\/nl\/s\//.test(s2.messages[0].content) && /robots\.txt/.test(s2.system));
 anthropicBodies.length = 0;
 r = await api('POST', '/api/analyse', { fotos: [foto] }, tkK);
 check('Alleen foto\'s, zonder link: analyse lukt zonder webtools in stap 1', r.status === 200 && !anthropicBodies[0].tools, r.data && r.data.fout);

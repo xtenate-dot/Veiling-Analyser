@@ -282,6 +282,7 @@ h1,h2,h3,h4{font-family:var(--ff-d);letter-spacing:-.015em;font-weight:650}
 .conf{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2)}
 .conf i{width:8px;height:8px;border-radius:50%;background:var(--ink-3)}
 .conf.pos i{background:var(--pos)}.conf.warn i{background:var(--warn)}.conf.neg i{background:var(--neg)}
+.neg-tekst{color:var(--neg);font-weight:500}
 
 /* ── Empty states ──────────────────────────────────────────────── */
 .empty{text-align:center;padding:56px 24px;background:var(--surface);border:1px dashed var(--line-2);border-radius:var(--r-lg)}

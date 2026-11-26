@@ -74,7 +74,7 @@ let n = 0; const t = async (naam, f) => { await f(); n++; console.log('ok -', na
     assert.strictEqual(r.zoeklog[0].fout, 'url_not_accessible'); assert.strictEqual(r.zoeklog[0].url, 'https://x.nl/p');
   });
 
-  await t('tweede ronde bij <2 passend, ongeacht wat de AI als vertrouwen opgeeft', async () => {
+  await t('tweede ronde bij <3 passend, ongeacht wat de AI als vertrouwen opgeeft', async () => {
     let i = 0; const bodies = [];
     const res = await K.analyseer({ extra: 'iPhone 13 128GB' }, basis(async (b) => { bodies.push(b); return i++ === 0 ? antwoord(prijsJson(SLECHT), usage(1000, 500, 1), zoekBlokken(1)) : antwoord(prijsJson(GOED), usage(1000, 500, 2), zoekBlokken(2)); }));
     assert.strictEqual(bodies.length, 2);
@@ -85,7 +85,7 @@ let n = 0; const t = async (naam, f) => { await f(); n++; console.log('ok -', na
     assert.strictEqual(res.usd, res.boekhouding.usd);
   });
 
-  await t('geen tweede ronde bij 2 of meer passende advertenties', async () => {
+  await t('geen tweede ronde bij 3 of meer passende advertenties', async () => {
     let calls = 0;
     const res = await K.analyseer({ extra: 'iPhone 13 128GB' }, basis(async () => { calls++; return antwoord(prijsJson(GOED), usage(1000, 500, 1), zoekBlokken(1)); }));
     assert.strictEqual(calls, 1); assert.strictEqual(res.prijzen.tweede_ronde, false);
@@ -123,6 +123,29 @@ let n = 0; const t = async (naam, f) => { await f(); n++; console.log('ok -', na
     const res = await K.analyseer({ extra: 'iPhone 13 128GB' }, basis(async () => { calls++; return antwoord(prijsJson(SLECHT), usage(1000, 500, 1), zoekBlokken(1)); }));
     assert.strictEqual(calls, 2); assert.ok(/gekozen: eerste/.test(res.prijzen.tweede_ronde_info));
     assert.ok(Math.abs(res.usd - 2 * kost(1000, 500, 1)) < 1e-9);
+  });
+
+
+  await t('tweede ronde ook bij precies 2 passende advertenties (minimum is 3)', async () => {
+    const TWEE = GOED.slice(0, 2); let calls = 0;
+    const res = await K.analyseer({ extra: 'iPhone 13 128GB' }, basis(async () => { calls++; return antwoord(prijsJson(calls === 1 ? TWEE : GOED), usage(1000, 500, 1), zoekBlokken(1)); }));
+    assert.strictEqual(calls, 2); assert.strictEqual(res.prijzen.betrouwbaarheid.aantal_passend, 3);
+    assert.notStrictEqual(res.prijzen.betrouwbaarheid.niveau, 'onvoldoende');
+  });
+
+  await t('twee passende na beide rondes: onvoldoende, geen prijs voor het advies, advertenties blijven zichtbaar', async () => {
+    const TWEE = GOED.slice(0, 2);
+    const res = await K.analyseer({ extra: 'iPhone 13 128GB' }, basis(async () => antwoord(prijsJson(TWEE), usage(1000, 500, 1), zoekBlokken(1))));
+    assert.strictEqual(res.prijzen.betrouwbaarheid.niveau, 'onvoldoende'); assert.strictEqual(res.prijzen.tweedehands.length, 2);
+    assert.ok(/minstens 3/.test(res.prijzen.betrouwbaarheid.reden));
+  });
+
+  await t('de opdracht bevat geen eBay.nl- of bol.com-zoekpagina meer en verbiedt veilingprijzen en onbevestigd "verkocht"', async () => {
+    const bodies = [];
+    await K.analyseer({ extra: 'iPhone 13 128GB' }, basis(async (b) => { bodies.push(b); return antwoord(prijsJson(GOED), usage(10, 10, 1), zoekBlokken(1)); }));
+    const tekst = JSON.stringify(bodies);
+    assert.ok(!/ebay\.nl\/sch/.test(tekst) && !/bol\.com\/nl\/nl\/s\//.test(tekst) && !/LH_Sold/.test(tekst), 'zoekpagina-URL staat nog in de opdracht');
+    assert.ok(/robots\.txt/.test(tekst) && /Catawiki/.test(tekst) && /Twijfel je, dan/.test(tekst));
   });
 
   console.log(n + ' tests ok');

@@ -33,7 +33,7 @@ globalThis.fetch = async (url, opt = {}) => {
     const b = JSON.parse(opt.body);
     const tekst = b.system.startsWith('Je leest veilingkavels')
       ? { gevonden: true, titel: 'Bosch boormachine GSB 18V', veilinghuis: 'Testveiling', kavelnummer: '88', product: { zoekterm: 'Bosch GSB 18V' }, staat: 'gebruikt', huidig_bod: 40, aantal_biedingen: 3, sluit: 'vr 31 okt 19:00', sluit_iso: '2099-10-31T19:00:00+01:00', kosten: { opgeld_pct: 17, vaste_kosten: null, btw_pct: 21, btw_regeling: 'volledig', bron: '17% opgeld' } }
-      : { productnaam: 'Bosch GSB 18V-21', nieuwprijs: 129, tweedehands: [{ platform: 'Marktplaats', titel: 'Bosch GSB 18V', prijs: 85, soort: 'vraagprijs', url: null }], marktplaats: { laag: 65, gemiddeld: 80, hoog: 95, vertrouwen: 'middel' }, toelichting: 'test' };
+      : { productnaam: 'Bosch GSB 18V-21', nieuwprijs: 129, tweedehands: [{ platform: 'Marktplaats', titel: 'Bosch GSB 18V-21 accuboor', prijs: 85, soort: 'vraagprijs', url: null }, { platform: 'Marktplaats', titel: 'Bosch GSB 18V-21 klopboor', prijs: 80, soort: 'vraagprijs', url: null }, { platform: 'Marktplaats', titel: 'Bosch GSB 18V-21 los', prijs: 75, soort: 'vraagprijs', url: null }], marktplaats: { laag: 65, gemiddeld: 80, hoog: 95, vertrouwen: 'middel' }, toelichting: 'test' };
     return new Response(JSON.stringify({ content: [{ type: 'text', text: JSON.stringify(tekst) }], stop_reason: 'end_turn', usage: { input_tokens: 9000, output_tokens: 500 } }), { status: 200 });
   }
   if (url.startsWith('https://api.resend.com/')) { laatsteCode = (JSON.parse(opt.body).subject.match(/^(\d{6})/) || [])[1] || null; return new Response('{"id":"e"}', { status: 200 }); }
