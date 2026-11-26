@@ -1315,14 +1315,14 @@ function betrouwbaarheidKaart(d) {
   var b = d.prijzen && d.prijzen.betrouwbaarheid;
   if (!b || d.controle) return '';
   var c = vertrouwenInfo(b.niveau);
-  var h = '<div class="card"><div class="card-h"><h2>Betrouwbaarheid van de waardering</h2><span class="conf ' + c.cls + '"><i></i>' + c.label + ' &middot; ' + b.score + ' / 100</span></div>';
+  var h = '<div class="card"><div class="card-h"><h2>Kwaliteit van het vergelijkingsmateriaal</h2><span class="conf ' + c.cls + '"><i></i>' + c.label + '</span></div>';
   h += '<p style="margin:0 0 8px">' + esc(b.reden) + '</p>';
   if (b.niveau === 'onvoldoende') h += '<p class="help">Er is geen verwachte verkoopprijs of maximaal bod getoond omdat die niet te onderbouwen zijn. Controleer het herkende product, of vul zelf de verkoopprijs in onder Prijzen controleren.</p>';
-  h += '<details style="margin-top:8px"><summary style="cursor:pointer;font-weight:600">Waar komt dit cijfer vandaan?</summary><table class="ctable" style="margin-top:8px"><tbody>';
+  h += '<details style="margin-top:8px"><summary style="cursor:pointer;font-weight:600">Waar komt dit vandaan?</summary><table class="ctable" style="margin-top:8px"><tbody>';
   (b.factoren || []).forEach(function(f) {
     h += '<tr><td>' + esc(f.naam) + '<small>' + esc(f.tekst) + '</small></td><td>' + (f.max ? f.punten + ' / ' + f.max : (f.punten > 0 ? '+' : '') + f.punten) + '</td></tr>';
   });
-  h += '</tbody></table><p class="help">Het cijfer wordt door de app zelf berekend uit de gevonden advertenties. Het oordeel van het AI-model telt hierin niet mee. Advertentiedatums zijn alleen bekend als ze in het zoekresultaat stonden.</p></details></div>';
+  h += '</tbody></table><p class="help">Score: <b>' + b.score + ' van 100</b>. Dit is een indicatie van hoe goed het beschikbare vergelijkingsmateriaal is, <b>geen kans dat de prijs klopt</b>. De app berekent het zelf uit de gevonden advertenties; het oordeel van het AI-model telt niet mee. Ook bij een hoge score kan de werkelijke verkoopprijs afwijken. Advertentiedatums zijn alleen bekend als ze in het zoekresultaat stonden.</p></details></div>';
   return h;
 }
 

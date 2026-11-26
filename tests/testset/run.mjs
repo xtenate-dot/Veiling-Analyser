@@ -30,6 +30,7 @@ async function anthropic(body) {
   throw new Error('API niet bereikbaar');
 }
 
+const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
 const uit = [];
 for (const naam of lijst) {
   for (const p of set) {
@@ -42,7 +43,9 @@ for (const naam of lijst) {
       const ref = p.referentie && p.referentie.verkoopprijs_eur;
       Object.assign(rec, {
         // 1 herkenning, 2 vergelijkbare producten, 3 waardebereik, 4 betrouwbaarheid, 5 maximaal bod, 6 kosten, 7 onderbouwing, 8 afwijking van de referentie
-        herkend: { naam: res.herkenning.naam, zekerheid: res.herkenning.zekerheid, merk_klopt: p.verwacht_merk ? (res.product + ' ' + (res.herkenning.merk || '')).toLowerCase().includes(p.verwacht_merk.toLowerCase()) : null },
+        ai_productnaam: pr.productnaam,
+        ruw: res,
+        herkend: { naam: res.herkenning.naam, ai_naam_klopt: p.verwacht_model ? norm(pr.productnaam).includes(norm(p.verwacht_model)) : null, zekerheid: res.herkenning.zekerheid, merk_klopt: p.verwacht_merk ? (res.product + ' ' + (res.herkenning.merk || '')).toLowerCase().includes(p.verwacht_merk.toLowerCase()) : null },
         vergelijkbaar: pr.tweedehands.map(a => ({ titel: a.titel, prijs: a.prijs, soort: a.soort, platform: a.platform, datum: a.datum, url: a.url, bevestigd: a.bevestigd, past: a.past })),
         waarde: { laag: mp.laag, waarschijnlijk: mp.gemiddeld, hoog: mp.hoog, getoond: gem != null },
         betrouwbaarheid: { niveau: b.niveau, score: b.score, ai_zei: mp.vertrouwen_ai, passend: b.aantal_passend, verkocht: b.aantal_verkocht },

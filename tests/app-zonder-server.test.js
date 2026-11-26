@@ -122,7 +122,7 @@ const STAP2_JSON = { productnaam: 'Apple iPhone 13 128GB', categorie: 'Telefoons
   check('Code bepaalt de betrouwbaarheid (AI zei "middel", code rekent zelf)', k.prijzen.betrouwbaarheid && typeof k.prijzen.betrouwbaarheid.score === 'number' && k.prijzen.marktplaats.vertrouwen_ai === 'middel' && ['laag', 'middel', 'hoog', 'onvoldoende'].includes(k.prijzen.marktplaats.vertrouwen), k.prijzen.betrouwbaarheid);
   check('Herkenning: Apple iPhone 13 zeker herkend (modelnummer in titel)', k.herkenning && k.herkenning.zekerheid === 'zeker' && k.herkenning.merk === 'Apple', k.herkenning);
   const tekstRes = await page.textContent('#analyse-result');
-  check('Resultaat toont herkend product en betrouwbaarheid met uitleg', /Herkend product/.test(tekstRes) && /Zeker herkend/.test(tekstRes) && /Waar komt dit cijfer vandaan/.test(tekstRes) && /Aantal vergelijkbare producten/.test(tekstRes));
+  check('Resultaat toont herkend product en betrouwbaarheid met uitleg', /Herkend product/.test(tekstRes) && /Zeker herkend/.test(tekstRes) && /Waar komt dit vandaan/.test(tekstRes) && /Aantal vergelijkbare producten/.test(tekstRes) && /geen kans dat de prijs klopt/.test(tekstRes));
   check('Marge €168,635 → Aanrader', Math.abs(k.kosten.marge - 168.635) < 1e-9 && k.advies === 'kopen', [k.kosten.marge, k.advies]);
   check('Max bod €334, quitte €418', k.maxBod === 334 && k.breakEvenBod === 418, [k.maxBod, k.breakEvenBod]);
   const t334 = await page.evaluate(() => { const t = tariefVan(kavels[0]); return [berekenKosten(334, t).totaal, berekenKosten(335, t).totaal]; });

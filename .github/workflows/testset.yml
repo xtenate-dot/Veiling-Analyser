@@ -1,0 +1,32 @@
+# Handmatig te starten (Actions > Testset prijskwaliteit > Run workflow).
+# De Anthropic-sleutel staat alleen als GitHub-secret ANTHROPIC_API_KEY en wordt nooit in de uitvoer of repository gezet.
+name: Testset prijskwaliteit
+on:
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: 'Aantal producten (1-30)'
+        default: '30'
+permissions:
+  contents: read
+jobs:
+  testset:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Draai testset met Haiku en Sonnet
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: node tests/testset/run.mjs --model both --limit "${{ inputs.limit }}" --uit resultaat.json
+      - name: Maak rapport
+        run: node tests/testset/rapport.mjs resultaat.json > rapport.md
+      - uses: actions/upload-artifact@v4
+        with:
+          name: testset-resultaat
+          path: |
+            resultaat.json
+            rapport.md
