@@ -1,8 +1,14 @@
-// Meetscript: draait de testset door de echte analyse en legt per product de 8 gevraagde gegevens vast.
-// Gebruik:  ANTHROPIC_API_KEY=sk-ant-... node tests/testset/run.mjs --model haiku|sonnet|both [--limit 5] [--uit uitvoer.json]
-//           node tests/testset/run.mjs --mock      (droogloop met nagebootst antwoord, kost niets)
-// De kosten die hier staan zijn GEMETEN: ze komen uit de usage-gegevens van de API-antwoorden en de officiële prijslijst (kern.js).
-import { readFileSync, writeFileSync } from 'node:fs';
+// Meetscript: draait de testset door de echte analyse en legt per product de gevraagde gegevens vast.
+//
+// LET OP: dit is een test met alleen een PRODUCTNAAM als invoer. Dat is niet hetzelfde als herkenning vanaf een echte
+// veilingpagina of foto. Het meet waardering, vergelijkingen, betrouwbaarheid en kosten, niet of een kavelpagina of foto goed wordt gelezen.
+//
+// Gebruik:  ANTHROPIC_API_KEY=... node tests/testset/run.mjs --model haiku|sonnet|both [--ids T01,T05 | --limit 3] [--uit bestand.json] [--max-usd 8]
+//           node tests/testset/run.mjs --mock      (droogloop met nagebootst antwoord, kost niets, niet bruikbaar voor kwaliteitsbeoordeling)
+// Kosten zijn GEMETEN: tokens en zoekopdrachten uit de usage-gegevens van elk API-antwoord × de officiële prijslijst (kern.js).
+// Ze komen niet uit een schatting, maar zijn ook niet de factuur van Anthropic.
+// Het script telt elk API-verzoek en elke zoekopdracht per analyse, zodat extra verzoeken (vervolgbeurten, tweede zoekronde) zichtbaar zijn.
+import { readFileSync, writeFileSync, appendFileSync, existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 globalThis.global = globalThis;
@@ -12,64 +18,107 @@ const arg = (n, d) => { const i = process.argv.indexOf('--' + n); return i < 0 ?
 const MODELLEN = { haiku: 'claude-haiku-5-5', sonnet: 'claude-sonnet-5-5' };
 const mock = !!arg('mock', false);
 const keuze = mock ? 'haiku' : arg('model', 'both');
+if (!mock && keuze !== 'both' && !MODELLEN[keuze]) { console.error('--model moet haiku, sonnet of both zijn'); process.exit(1); }
 const lijst = keuze === 'both' ? ['haiku', 'sonnet'] : [keuze];
-const set = JSON.parse(readFileSync(new URL('./producten.json', import.meta.url))).producten.slice(0, Number(arg('limit', 30)));
+const alle = JSON.parse(readFileSync(new URL('./producten.json', import.meta.url))).producten;
+let set;
+if (arg('ids', false) && arg('ids') !== true && arg('ids') !== 'alle') {
+  const ids = String(arg('ids')).split(',').map(s => s.trim()).filter(Boolean);
+  const onbekend = ids.filter(i => !alle.some(p => p.id === i));
+  if (onbekend.length) { console.error('Onbekende producten: ' + onbekend.join(', ')); process.exit(1); }
+  set = ids.map(i => alle.find(p => p.id === i));
+} else {
+  const n = Number(arg('limit', 30));
+  if (!Number.isInteger(n) || n < 1 || n > 30) { console.error('--limit moet een geheel getal van 1 tot 30 zijn'); process.exit(1); }
+  set = alle.slice(0, n);
+}
 const TARIEF = { opgeld: 0.18, btw: 0.21, vast: 0, regeling: 'volledig' }; // rekenaanname voor het maximaal bod
 const DOEL = 0.20;
-if (!mock && !process.env.ANTHROPIC_API_KEY) { console.error('Zet ANTHROPIC_API_KEY, of gebruik --mock voor een droogloop.'); process.exit(1); }
+const MAX_USD = Number(arg('max-usd', 8));
+const SLEUTEL = process.env.ANTHROPIC_API_KEY || '';
+if (!mock && !SLEUTEL) { console.error('Zet ANTHROPIC_API_KEY, of gebruik --mock voor een droogloop.'); process.exit(1); }
+// Nooit een sleutel in uitvoer, logbestanden of resultaten
+const schoon = t => { let s = String(t); if (SLEUTEL) s = s.split(SLEUTEL).join('[sleutel verborgen]'); return s.replace(/sk-ant-[A-Za-z0-9_-]{8,}/g, '[sleutel verborgen]'); };
+const log = (...a) => console.log(schoon(a.join(' ')));
 
+const bestand = arg('uit', mock ? '/tmp/testset-mock.json' : 'tests/testset/resultaat-' + new Date().toISOString().replace(/[:.]/g, '-') + '.json');
+if (existsSync(bestand) || existsSync(bestand + 'l')) { console.error('Uitvoerbestand bestaat al; ik overschrijf geen bestaande resultaten: ' + bestand); process.exit(1); }
+const regels = bestand + 'l'; // .jsonl: elk resultaat direct bewaard, ook als de run halverwege stopt
+
+// Tellers per analyse: echte verzoeken, zoekopdrachten, tokens en pogingen na een fout
+let tel;
+const nieuweTel = () => ({ verzoeken: 0, zoekopdrachten: 0, fetches: 0, invoer: 0, uitvoer: 0, herhalingen: 0, usd: 0 });
 async function anthropic(body) {
-  if (mock) return { id: 'm', type: 'message', role: 'assistant', stop_reason: 'end_turn', usage: { input_tokens: 20000, output_tokens: 800, server_tool_use: { web_search_requests: 1 } }, content: [{ type: 'text', text: JSON.stringify({ productnaam: 'Mock', tweedehands: [{ platform: 'Marktplaats', titel: 'Mock 100', prijs: 100, soort: 'vraagprijs', url: null }], marktplaats: { laag: 80, gemiddeld: 100, hoog: 120, vertrouwen: 'hoog' }, toelichting: 'mock' }) }] };
+  if (mock) {
+    tel.verzoeken++; tel.zoekopdrachten++;
+    if (process.env.MOCK_FOUT) throw new Error('mock fout met ' + (SLEUTEL || 'sk-ant-api03-geheimgeheim'));
+    return { id: 'm', type: 'message', role: 'assistant', stop_reason: 'end_turn', usage: { input_tokens: 20000, output_tokens: 800, server_tool_use: { web_search_requests: 1 } }, content: [{ type: 'text', text: JSON.stringify({ productnaam: 'Mock', tweedehands: [{ platform: 'Marktplaats', titel: 'Mock 100', prijs: 100, soort: 'vraagprijs', url: null }], marktplaats: { laag: 80, gemiddeld: 100, hoog: 120, vertrouwen: 'hoog' }, toelichting: 'mock' }) }] };
+  }
   for (let poging = 0; poging < 3; poging++) {
-    const r = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' }, body: JSON.stringify(body) });
+    const r = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', signal: AbortSignal.timeout(240000), headers: { 'content-type': 'application/json', 'x-api-key': SLEUTEL, 'anthropic-version': '2023-06-01' }, body: JSON.stringify(body) });
     const j = await r.json().catch(() => null);
-    if (r.ok && j && !j.error) return j;
-    if (r.status === 429 || r.status >= 500) { await new Promise(s => setTimeout(s, 4000 * (poging + 1))); continue; }
+    if (r.ok && j && !j.error) {
+      tel.verzoeken++; tel.usd += K.apiKostenVan(body.model, j.usage);
+      const u = j.usage || {}, s = u.server_tool_use || {};
+      tel.zoekopdrachten += s.web_search_requests || 0; tel.fetches += s.web_fetch_requests || 0;
+      tel.invoer += (u.input_tokens || 0) + (u.cache_creation_input_tokens || 0) + (u.cache_read_input_tokens || 0); tel.uitvoer += u.output_tokens || 0;
+      return j;
+    }
+    if (r.status === 429 || r.status >= 500) { tel.herhalingen++; await new Promise(s => setTimeout(s, 4000 * (poging + 1))); continue; }
     throw K.apiFout(j, r.status);
   }
-  throw new Error('API niet bereikbaar');
+  throw new Error('API niet bereikbaar na 3 pogingen');
 }
 
 const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+log('TESTSET: alleen productnamen als invoer. Dit is NIET hetzelfde als herkenning vanaf een echte veilingpagina of foto.');
+log('Modellen: ' + lijst.map(n => MODELLEN[n]).join(', ') + ' | producten: ' + set.map(p => p.id).join(',') + ' | zoeken: standaard max 1 opdracht per analyse, tweede ronde alleen als de eerste niets vindt | budgetgrens $' + MAX_USD);
 const uit = [];
-for (const naam of lijst) {
+let totaal = 0, gestopt = null;
+buiten: for (const naam of lijst) {
   for (const p of set) {
-    const t0 = Date.now();
-    let rec = { id: p.id, categorie: p.categorie, invoer: p.invoer, model: MODELLEN[naam] };
+    if (totaal >= MAX_USD) { gestopt = 'Budgetgrens van $' + MAX_USD + ' bereikt; de resterende analyses zijn niet uitgevoerd.'; break buiten; }
+    const t0 = Date.now(); tel = nieuweTel();
+    let rec = { id: p.id, categorie: p.categorie, invoer: p.invoer, model: MODELLEN[naam], mock: mock || undefined };
     try {
       const res = await K.analyseer({ url: '', extra: p.invoer, hergebruik: false }, { anthropic, modelPagina: MODELLEN.haiku, modelPrijzen: MODELLEN[naam], cacheLees: null, cacheSchrijf: null });
       const pr = res.prijzen, b = pr.betrouwbaarheid, mp = pr.marktplaats;
       const gem = b.niveau === 'onvoldoende' ? null : mp.gemiddeld;
       const ref = p.referentie && p.referentie.verkoopprijs_eur;
       Object.assign(rec, {
-        // 1 herkenning, 2 vergelijkbare producten, 3 waardebereik, 4 betrouwbaarheid, 5 maximaal bod, 6 kosten, 7 onderbouwing, 8 afwijking van de referentie
+        live: pr.live !== false, // false = zoeken lukte niet en het model schatte zonder internet: niet bruikbaar voor de kwaliteitsbeoordeling
         ai_productnaam: pr.productnaam,
-        ruw: res,
-        herkend: { naam: res.herkenning.naam, ai_naam_klopt: p.verwacht_model ? norm(pr.productnaam).includes(norm(p.verwacht_model)) : null, zekerheid: res.herkenning.zekerheid, merk_klopt: p.verwacht_merk ? (res.product + ' ' + (res.herkenning.merk || '')).toLowerCase().includes(p.verwacht_merk.toLowerCase()) : null },
-        vergelijkbaar: pr.tweedehands.map(a => ({ titel: a.titel, prijs: a.prijs, soort: a.soort, platform: a.platform, datum: a.datum, url: a.url, bevestigd: a.bevestigd, past: a.past })),
+        herkend: { naam: res.herkenning.naam, ai_naam_klopt: p.verwacht_model ? norm(pr.productnaam).includes(norm(p.verwacht_model)) : null, zekerheid: res.herkenning.zekerheid },
+        vergelijkbaar: pr.tweedehands.map(a => ({ titel: a.titel, prijs: a.prijs, soort: a.soort, platform: a.platform, staat: a.staat, datum: a.datum, url: a.url, bevestigd: a.bevestigd, past: a.past })),
         waarde: { laag: mp.laag, waarschijnlijk: mp.gemiddeld, hoog: mp.hoog, getoond: gem != null },
-        betrouwbaarheid: { niveau: b.niveau, score: b.score, ai_zei: mp.vertrouwen_ai, passend: b.aantal_passend, verkocht: b.aantal_verkocht },
+        betrouwbaarheid: { niveau: b.niveau, score: b.score, ai_zei: mp.vertrouwen_ai, passend: b.aantal_passend, verkocht: b.aantal_verkocht, aantal_gevonden: b.aantal_gevonden, factoren: b.factoren },
         max_bod: gem ? Math.floor(K.bodVoorTotaal(gem * (1 - DOEL), TARIEF)) : null,
-        kosten_usd: res.usd, tweede_ronde: !!pr.tweede_ronde, zoekopdrachten: (pr.zoekvragen || []).length,
-        onderbouwing: pr.toelichting,
+        kosten_usd: res.usd, // gemeten uit de usage van alle verzoeken van deze analyse (berekend door de analyse zelf)
+        kosten_controle_usd: tel.usd, // tweede, onafhankelijke optelling per verzoek in dit script; moet gelijk zijn
+        telling: Object.assign({}, tel), tweede_ronde: !!pr.tweede_ronde, hersteld: !!pr.hersteld,
+        onderbouwing: pr.toelichting, waarschuwingen: res.waarschuwingen,
         referentie: ref || null, afwijking_pct: ref && mp.gemiddeld ? Math.round((mp.gemiddeld - ref) / ref * 100) : null,
-        seconden: Math.round((Date.now() - t0) / 100) / 10
+        seconden: Math.round((Date.now() - t0) / 100) / 10,
+        ruw: res
       });
-    } catch (e) { rec.fout = String(e.message || e).slice(0, 200); rec.kosten_usd = e.usd || null; }
-    uit.push(rec);
-    console.log(naam, p.id, rec.fout ? 'FOUT ' + rec.fout : rec.betrouwbaarheid.niveau + ' ' + (rec.waarde.waarschijnlijk || '-') + ' $' + (rec.kosten_usd || 0).toFixed(4));
+    } catch (e) { rec.fout = schoon(e.message || e).slice(0, 300); rec.kosten_usd = tel.usd || e.usd || null; rec.telling = Object.assign({}, tel); }
+    if (rec.kosten_controle_usd != null && Math.abs(rec.kosten_controle_usd - rec.kosten_usd) > 0.0005) { rec.waarschuwing_kosten = 'De twee kostenoptellingen verschillen: ' + rec.kosten_usd + ' tegenover ' + rec.kosten_controle_usd; }
+    totaal += Math.max(rec.kosten_usd || 0, tel.usd || 0);
+    const tekst = schoon(JSON.stringify(rec));
+    appendFileSync(regels, tekst + '\n');
+    uit.push(JSON.parse(tekst));
+    log(naam, p.id, rec.fout ? 'FOUT ' + rec.fout : (rec.live ? '' : 'ZONDER LIVE ZOEKEN ') + rec.betrouwbaarheid.niveau + ' ' + (rec.waarde.waarschijnlijk || '-') + ' $' + (rec.kosten_usd || 0).toFixed(4) + ' verzoeken ' + rec.telling.verzoeken + ' zoekopdrachten ' + rec.telling.zoekopdrachten);
   }
 }
-const bestand = arg('uit', mock ? '/tmp/testset-mock.json' : 'tests/testset/resultaat-' + new Date().toISOString().slice(0, 10) + '.json');
-writeFileSync(bestand, JSON.stringify(uit, null, 1));
-// Samenvatting per model
+const verwacht = lijst.length * set.length;
+writeFileSync(bestand, JSON.stringify({ gemaakt: new Date().toISOString(), modellen: lijst.map(n => MODELLEN[n]), producten: set.map(p => p.id), verwacht_aantal: verwacht, uitgevoerd: uit.length, gestopt, mock: mock || undefined, resultaten: uit }, null, 1));
 for (const naam of lijst) {
-  const r = uit.filter(x => x.model === MODELLEN[naam] && !x.fout);
-  const kosten = r.map(x => x.kosten_usd || 0), met = r.filter(x => x.referentie);
+  const alles = uit.filter(x => x.model === MODELLEN[naam]), r = alles.filter(x => !x.fout), kosten = r.map(x => x.kosten_usd || 0);
   const niv = {}; r.forEach(x => niv[x.betrouwbaarheid.niveau] = (niv[x.betrouwbaarheid.niveau] || 0) + 1);
-  console.log('\n' + MODELLEN[naam] + ': ' + r.length + ' gelukt, ' + (uit.filter(x => x.model === MODELLEN[naam]).length - r.length) + ' mislukt');
-  console.log('  gemeten kosten gemiddeld $' + (kosten.reduce((a, b) => a + b, 0) / (kosten.length || 1)).toFixed(4) + ', hoogste $' + Math.max(0, ...kosten).toFixed(4));
-  console.log('  betrouwbaarheid door de code: ' + JSON.stringify(niv));
-  console.log('  met referentieprijs: ' + met.length + (met.length ? ', mediane afwijking ' + Math.round(met.map(x => Math.abs(x.afwijking_pct)).sort((a, b) => a - b)[Math.floor(met.length / 2)]) + '%' : ' (nog niets te vergelijken: vul referenties in)'));
+  log('\n' + MODELLEN[naam] + ': ' + r.length + ' gelukt, ' + (alles.length - r.length) + ' mislukt, ' + (set.length - alles.length) + ' niet uitgevoerd; zonder live zoeken: ' + r.filter(x => !x.live).length);
+  log('  gemeten kosten gemiddeld $' + (kosten.reduce((a, b) => a + b, 0) / (kosten.length || 1)).toFixed(4) + ', hoogste $' + Math.max(0, ...kosten).toFixed(4));
+  log('  betrouwbaarheid door de code: ' + JSON.stringify(niv));
 }
-console.log('\nUitvoer: ' + bestand);
+if (gestopt) log('\n' + gestopt);
+log('\nUitvoer: ' + bestand);
+if (!mock && (uit.length < verwacht || uit.some(x => x.fout) || uit.some(x => x.live === false))) process.exitCode = 2; // zichtbaar als "mislukt" in GitHub, de resultaten blijven bewaard

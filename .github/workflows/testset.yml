@@ -1,32 +1,62 @@
-# Handmatig te starten (Actions > Testset prijskwaliteit > Run workflow).
-# De Anthropic-sleutel staat alleen als GitHub-secret ANTHROPIC_API_KEY en wordt nooit in de uitvoer of repository gezet.
+# Handmatig te starten (Actions > Testset prijskwaliteit > Run workflow). Raakt de live-app niet.
+# De Anthropic-sleutel staat alleen als GitHub-secret ANTHROPIC_API_KEY. Hij wordt alleen aan de stap "Draai testset" meegegeven,
+# GitHub maskeert hem in logs, en het script verwijdert hem bovendien uit alle uitvoer en resultaatbestanden.
+# Elke run bewaart zijn resultaten onder een eigen naam (run-nummer en poging); eerdere resultaten worden nooit overschreven.
 name: Testset prijskwaliteit
 on:
   workflow_dispatch:
     inputs:
-      limit:
-        description: 'Aantal producten (1-30)'
-        default: '30'
+      producten:
+        description: 'Producten: kommalijst met id (bijv. T01,T19,T29) of "alle" voor alle 30'
+        default: 'T01,T19,T29'
+      modellen:
+        description: 'Model: both, haiku of sonnet'
+        default: 'both'
+      max_usd:
+        description: 'Stop als de gemeten kosten dit bedrag (USD) bereiken'
+        default: '3'
 permissions:
   contents: read
+concurrency:
+  group: testset
+  cancel-in-progress: false
 jobs:
   testset:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Draai testset met Haiku en Sonnet
+      - name: Draai testset
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: node tests/testset/run.mjs --model both --limit "${{ inputs.limit }}" --uit resultaat.json
+          PRODUCTEN: ${{ inputs.producten }}
+          MODELLEN: ${{ inputs.modellen }}
+          MAX_USD: ${{ inputs.max_usd }}
+          UITVOER: resultaat-${{ github.run_id }}-${{ github.run_attempt }}.json
+        run: |
+          [ -n "$ANTHROPIC_API_KEY" ] || { echo "Secret ANTHROPIC_API_KEY ontbreekt"; exit 1; }
+          [[ "$MODELLEN" =~ ^(both|haiku|sonnet)$ ]] || { echo "Ongeldig model"; exit 1; }
+          [[ "$MAX_USD" =~ ^[0-9]+(\.[0-9]+)?$ ]] || { echo "Ongeldig bedrag"; exit 1; }
+          [[ "$PRODUCTEN" =~ ^(alle|T[0-9]{2}(,T[0-9]{2})*)$ ]] || { echo "Ongeldige producten"; exit 1; }
+          node tests/testset/run.mjs --model "$MODELLEN" --ids "$PRODUCTEN" --max-usd "$MAX_USD" --uit "$UITVOER"
       - name: Maak rapport
-        run: node tests/testset/rapport.mjs resultaat.json > rapport.md
+        if: always()
+        env:
+          UITVOER: resultaat-${{ github.run_id }}-${{ github.run_attempt }}.json
+        run: |
+          if [ -f "$UITVOER" ]; then node tests/testset/rapport.mjs "$UITVOER" > "rapport-${{ github.run_id }}-${{ github.run_attempt }}.md"; head -c 900000 "rapport-${{ github.run_id }}-${{ github.run_attempt }}.md" >> "$GITHUB_STEP_SUMMARY";
+          else echo "Geen resultaatbestand: de run is voortijdig gestopt. Zie ${UITVOER}l voor de analyses die wel klaar waren." >> "$GITHUB_STEP_SUMMARY"; fi
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: testset-resultaat
+          name: testset-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
-            resultaat.json
-            rapport.md
+            resultaat-*.json
+            resultaat-*.jsonl
+            rapport-*.md
+          if-no-files-found: warn
