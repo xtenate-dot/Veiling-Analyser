@@ -50,7 +50,7 @@ let tel;
 const nieuweTel = () => ({ verzoeken: 0, zoekopdrachten: 0, fetches: 0, invoer: 0, uitvoer: 0, herhalingen: 0, usd: 0 });
 async function anthropic(body) {
   if (mock) {
-    tel.verzoeken++; tel.zoekopdrachten++;
+    tel.verzoeken++; tel.zoekopdrachten++; tel.usd += K.apiKostenVan(body.model, { input_tokens: 20000, output_tokens: 800, server_tool_use: { web_search_requests: 1 } });
     if (process.env.MOCK_FOUT) throw new Error('mock fout met ' + (SLEUTEL || 'sk-ant-api03-geheimgeheim'));
     return { id: 'm', type: 'message', role: 'assistant', stop_reason: 'end_turn', usage: { input_tokens: 20000, output_tokens: 800, server_tool_use: { web_search_requests: 1 } }, content: [{ type: 'text', text: JSON.stringify({ productnaam: 'Mock', tweedehands: [{ platform: 'Marktplaats', titel: 'Mock 100', prijs: 100, soort: 'vraagprijs', url: null }], marktplaats: { laag: 80, gemiddeld: 100, hoog: 120, vertrouwen: 'hoog' }, toelichting: 'mock' }) }] };
   }
