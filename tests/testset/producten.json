@@ -1,0 +1,425 @@
+{
+ "_uitleg": "Invoer van de testset. De referentieprijzen zijn bewust leeg (null): vul ze alleen met prijzen die echt zijn waargenomen (eigen verkoop of een verkocht item), met bron en datum. Verzonnen of geschatte referentieprijzen zijn niet toegestaan. verwacht_merk en verwacht_model volgen uit de productnaam.",
+ "producten": [
+  {
+   "id": "T01",
+   "categorie": "elektronica",
+   "invoer": "Apple iPhone 13 128GB, gebruikt",
+   "verwacht_merk": "Apple",
+   "verwacht_model": "iPhone 13",
+   "referentie": {
+    "verkoopprijs_eur": null,
+    "soort": null,
+    "bron": null,
+    "datum": null,
+    "opmerking": null
+   }
+  },
+  {
+   "id": "T02",
+   "categorie": "elektronica",
+   "invoer": "Sony WH-1000XM4 koptelefoon, gebruikt",
+   "verwacht_merk": "Sony",
+   "verwacht_model": "WH-1000XM4",
+   "referentie": {
+    "verkoopprijs_eur": null,
+    "soort": null,
+    "bron": null,
+    "datum": null,
+    "opmerking": null
+   }
+  },
+  {
+   "id": "T03",
+   "categorie": "elektronica",
+   "invoer": "Samsung QE55Q60B 55 inch QLED televisie, gebruikt",
+   "verwacht_merk": "Samsung",
+   "verwacht_model": "QE55Q60B",
+   "referentie": {
+    "verkoopprijs_eur": null,
+    "soort": null,
+    "bron": null,
+    "datum": null,
+    "opmerking": null
+   }
+  },
+  {
+   "id": "T04",
+   "categorie": "elektronica",
+   "invoer": "Apple MacBook Air M1 256GB 2020, gebruikt",
+   "verwacht_merk": "Apple",
+   "verwacht_model": "MacBook Air M1",
+   "referentie": {
+    "verkoopprijs_eur": null,
+    "soort": null,
+    "bron": null,
+    "datum": null,
+    "opmerking": null
+   }
+  },
+  {
+   "id": "T05",
+   "categorie": "gereedschap",
+   "invoer": "DeWalt DCD791 accuboormachine 18V, gebruikt",
+   "verwacht_merk": "DeWalt",
+   "verwacht_model": "DCD791",
+   "referentie": {
+    "verkoopprijs_eur": null,
+    "soort": null,
+    "bron": null,
+    "datum": null,
+    "opmerking": null
+   }
+  },
+  {
+   "id": "T06",
+   "categorie": "gereedschap",
+   "invoer": "Makita DHP484 accu klopboormachine 18V, gebruikt",
+   "verwacht_merk": "Makita",
+   "verwacht_model": "DHP484",
+   "referentie": {
+    "verkoopprijs_eur": null,
+    "soort": null,
+    "bron": null,
+    "datum": null,
+    "opmerking": null
+   }
+  },
+  {
+   "id": "T07",
+   "categorie": "gereedschap",
+   "invoer": "Bosch Professional GSR 18V-55 accuboormachine, gebruikt",
+   "verwacht_merk": "Bosch",
+   "verwacht_model": "GSR 18V-55",
+   "referentie": {
+    "verkoopprijs_eur": null,
+    "soort": null,
+    "bron": null,
+    "datum": null,
+    "opmerking": null
+   }
+  },
+  {
+   "id": "T08",
+   "categorie": "gereedschap",
+   "invoer": "Hilti TE 6-A22 accu boorhamer, gebruikt",
+   "verwacht_merk": "Hilti",
+   "verwacht_model": "TE 6-A22",
+   "referentie": {
+    "verkoopprijs_eur": null,
+    "soort": null,
+    "bron": null,
+    "datum": null,
+    "opmerking": null
+   }
+  },
+  {
+   "id": "T09",
+   "categorie": "huishouden",
+   "invoer": "Dyson V11 Absolute steelstofzuiger, gebruikt",
+   "verwacht_merk": "Dyson",
+   "verwacht_model": "V11 Absolute",
+   "referentie": {
+    "verkoopprijs_eur": null,
+    "soort": null,
+    "bron": null,
+    "datum": null,
+    "opmerking": null
+   }
+  },
+  {
+   "id": "T10",
+   "categorie": "huishouden",
+   "invoer": "Nespresso Vertuo Next koffiemachine, gebruikt",
+   "verwacht_merk": "Nespresso",
+   "verwacht_model": "Vertuo Next",
+   "referentie": {
+    "verkoopprijs_eur": null,
+    "soort": null,
+    "bron": null,
+    "datum": null,
+    "opmerking": null
+   }
+  },
+  {
+   "id": "T11",
+   "categorie": "huishouden",
+   "invoer": "Philips Airfryer XXL HD9650, gebruikt",
+   "verwacht_merk": "Philips",
+   "verwacht_model": "HD9650",
+   "referentie": {
+    "verkoopprijs_eur": null,
+    "soort": null,
+    "bron": null,
+    "datum": null,
+    "opmerking": null
+   }
+  },
+  {
+   "id": "T12",
+   "categorie": "huishouden",
+   "invoer": "Miele Complete C3 stofzuiger, gebruikt",
+   "verwacht_merk": "Miele",
+   "verwacht_model": "Complete C3",
+   "referentie": {
+    "verkoopprijs_eur": null,
+    "soort": null,
+    "bron": null,
+    "datum": null,
+    "opmerking": null
+   }
+  },
+  {
+   "id": "T13",
+   "categorie": "gaming",
+   "invoer": "Sony PlayStation 5 Disc Edition, gebruikt",
+   "verwacht_merk": "Sony",
+   "verwacht_model": "PlayStation 5 Disc Edition",
+   "referentie": {
+    "verkoopprijs_eur": null,
+    "soort": null,
+    "bron": null,
+    "datum": null,
+    "opmerking": null
+   }
+  },
+  {
+   "id": "T14",
+   "categorie": "gaming",
+   "invoer": "Nintendo Switch OLED, gebruikt",
+   "verwacht_merk": "Nintendo",
+   "verwacht_model": "Switch OLED",
+   "referentie": {
+    "verkoopprijs_eur": null,
+    "soort": null,
+    "bron": null,
+    "datum": null,
+    "opmerking": null
+   }
+  },
+  {
+   "id": "T15",
+   "categorie": "gaming",
+   "invoer": "Microsoft Xbox Series S 512GB, gebruikt",
+   "verwacht_merk": "Microsoft",
+   "verwacht_model": "Xbox Series S",
+   "referentie": {
+    "verkoopprijs_eur": null,
+    "soort": null,
+    "bron": null,
+    "datum": null,
+    "opmerking": null
+   }
+  },
+  {
+   "id": "T16",
+   "categorie": "gaming",
+   "invoer": "Sony DualSense draadloze controller voor PS5, gebruikt",
+   "verwacht_merk": "Sony",
+   "verwacht_model": "DualSense",
+   "referentie": {
+    "verkoopprijs_eur": null,
+    "soort": null,
+    "bron": null,
+    "datum": null,
+    "opmerking": null
+   }
+  },
+  {
+   "id": "T17",
+   "categorie": "speelgoed",
+   "invoer": "LEGO Star Wars 75192 Millennium Falcon, nieuw in doos",
+   "verwacht_merk": "LEGO",
+   "verwacht_model": "75192",
+   "referentie": {
+    "verkoopprijs_eur": null,
+    "soort": null,
+    "bron": null,
+    "datum": null,
+    "opmerking": null
+   }
+  },
+  {
+   "id": "T18",
+   "categorie": "speelgoed",
+   "invoer": "LEGO Technic 42115 Lamborghini Sian FKP 37, nieuw in doos",
+   "verwacht_merk": "LEGO",
+   "verwacht_model": "42115",
+   "referentie": {
+    "verkoopprijs_eur": null,
+    "soort": null,
+    "bron": null,
+    "datum": null,
+    "opmerking": null
+   }
+  },
+  {
+   "id": "T19",
+   "categorie": "speelgoed",
+   "invoer": "Pokemon booster pack Japans, Scarlet & Violet, nieuw",
+   "verwacht_merk": "Pokemon",
+   "verwacht_model": null,
+   "referentie": {
+    "verkoopprijs_eur": null,
+    "soort": null,
+    "bron": null,
+    "datum": null,
+    "opmerking": null
+   }
+  },
+  {
+   "id": "T20",
+   "categorie": "speelgoed",
+   "invoer": "Playmobil 70114 Piratenschip, gebruikt compleet",
+   "verwacht_merk": "Playmobil",
+   "verwacht_model": "70114",
+   "referentie": {
+    "verkoopprijs_eur": null,
+    "soort": null,
+    "bron": null,
+    "datum": null,
+    "opmerking": null
+   }
+  },
+  {
+   "id": "T21",
+   "categorie": "meubels",
+   "invoer": "IKEA PAX kledingkast 100x58x201 cm, gebruikt",
+   "verwacht_merk": "IKEA",
+   "verwacht_model": "PAX",
+   "referentie": {
+    "verkoopprijs_eur": null,
+    "soort": null,
+    "bron": null,
+    "datum": null,
+    "opmerking": null
+   }
+  },
+  {
+   "id": "T22",
+   "categorie": "meubels",
+   "invoer": "Herman Miller Aeron bureaustoel maat B, gebruikt",
+   "verwacht_merk": "Herman Miller",
+   "verwacht_model": "Aeron",
+   "referentie": {
+    "verkoopprijs_eur": null,
+    "soort": null,
+    "bron": null,
+    "datum": null,
+    "opmerking": null
+   }
+  },
+  {
+   "id": "T23",
+   "categorie": "meubels",
+   "invoer": "Eikenhouten eettafel 180x90 cm, merk onbekend, gebruikt",
+   "verwacht_merk": null,
+   "verwacht_model": null,
+   "referentie": {
+    "verkoopprijs_eur": null,
+    "soort": null,
+    "bron": null,
+    "datum": null,
+    "opmerking": null
+   }
+  },
+  {
+   "id": "T24",
+   "categorie": "meubels",
+   "invoer": "Eames-stijl eetkamerstoel, merk onbekend, gebruikt",
+   "verwacht_merk": null,
+   "verwacht_model": null,
+   "referentie": {
+    "verkoopprijs_eur": null,
+    "soort": null,
+    "bron": null,
+    "datum": null,
+    "opmerking": null
+   }
+  },
+  {
+   "id": "T25",
+   "categorie": "fietsen",
+   "invoer": "Gazelle Chamonix C7 herenfiets, gebruikt",
+   "verwacht_merk": "Gazelle",
+   "verwacht_model": "Chamonix C7",
+   "referentie": {
+    "verkoopprijs_eur": null,
+    "soort": null,
+    "bron": null,
+    "datum": null,
+    "opmerking": null
+   }
+  },
+  {
+   "id": "T26",
+   "categorie": "fietsen",
+   "invoer": "Giant Defy Advanced 2 racefiets maat M, gebruikt",
+   "verwacht_merk": "Giant",
+   "verwacht_model": "Defy Advanced 2",
+   "referentie": {
+    "verkoopprijs_eur": null,
+    "soort": null,
+    "bron": null,
+    "datum": null,
+    "opmerking": null
+   }
+  },
+  {
+   "id": "T27",
+   "categorie": "partij",
+   "invoer": "Partij van 10 stuks Bosch Professional GSR 12V-15 accuboormachines, gebruikt",
+   "verwacht_merk": "Bosch",
+   "verwacht_model": "GSR 12V-15",
+   "referentie": {
+    "verkoopprijs_eur": null,
+    "soort": null,
+    "bron": null,
+    "datum": null,
+    "opmerking": null
+   }
+  },
+  {
+   "id": "T28",
+   "categorie": "partij",
+   "invoer": "Partij van 20 stuks Philips Hue White E27 lampen, nieuw",
+   "verwacht_merk": "Philips",
+   "verwacht_model": "Hue White E27",
+   "referentie": {
+    "verkoopprijs_eur": null,
+    "soort": null,
+    "bron": null,
+    "datum": null,
+    "opmerking": null
+   }
+  },
+  {
+   "id": "T29",
+   "categorie": "beschadigd",
+   "invoer": "Apple MacBook Pro 14 inch M3 2023, scherm gebarsten, werkt verder",
+   "verwacht_merk": "Apple",
+   "verwacht_model": "MacBook Pro 14 M3",
+   "referentie": {
+    "verkoopprijs_eur": null,
+    "soort": null,
+    "bron": null,
+    "datum": null,
+    "opmerking": null
+   }
+  },
+  {
+   "id": "T30",
+   "categorie": "beschadigd",
+   "invoer": "Samsung QE55Q60B 55 inch televisie, beeldscherm kapot, defect",
+   "verwacht_merk": "Samsung",
+   "verwacht_model": "QE55Q60B",
+   "referentie": {
+    "verkoopprijs_eur": null,
+    "soort": null,
+    "bron": null,
+    "datum": null,
+    "opmerking": null
+   }
+  }
+ ]
+}
