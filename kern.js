@@ -217,6 +217,9 @@
       var vorige = messages[messages.length - 1];
       if (vorige.role === 'assistant') vorige.content = vorige.content.concat(nieuw);
       else messages.push({ role: 'assistant', content: nieuw });
+      // Nieuwere modellen (o.a. Haiku 5.5) weigeren een gesprek dat op een assistent-beurt eindigt als de vorige beurt niet gepauzeerd was:
+      // bij een afgebroken antwoord vragen we daarom met een gebruikersbericht om het JSON-object opnieuw, korter
+      if (afgebroken) messages.push({ role: 'user', content: 'Je antwoord werd afgebroken omdat het te lang werd. Geef nu alleen het volledige JSON-object opnieuw, korter: hooguit 6 advertenties en korte teksten, zonder uitleg ervoor of erna.' });
     }
     var tekst = laatste.content.filter(function (b) { return b.type === 'text'; }).map(function (b) { return b.text; }).join('');
     var json = parseJSON(tekst) || parseJSON(alleTekst) || (doorgeschreven ? parseJSON(alleTekst.slice(alleTekst.indexOf('{'))) : null);

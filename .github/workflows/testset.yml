@@ -49,7 +49,7 @@ jobs:
         env:
           UITVOER: resultaat-${{ github.run_id }}-${{ github.run_attempt }}.json
         run: |
-          if [ -f "$UITVOER" ]; then node tests/testset/rapport.mjs "$UITVOER" > "rapport-${{ github.run_id }}-${{ github.run_attempt }}.md"; head -c 900000 "rapport-${{ github.run_id }}-${{ github.run_attempt }}.md" >> "$GITHUB_STEP_SUMMARY";
+          if [ -f "$UITVOER" ]; then node tests/testset/rapport.mjs "$UITVOER" > "rapport-${{ github.run_id }}-${{ github.run_attempt }}.md"; head -c 900000 "rapport-${{ github.run_id }}-${{ github.run_attempt }}.md" >> "$GITHUB_STEP_SUMMARY"; echo "=== RAPPORT ==="; head -c 900000 "rapport-${{ github.run_id }}-${{ github.run_attempt }}.md";
           else echo "Geen resultaatbestand: de run is voortijdig gestopt. Zie ${UITVOER}l voor de analyses die wel klaar waren." >> "$GITHUB_STEP_SUMMARY"; fi
       - uses: actions/upload-artifact@v4
         if: always()
