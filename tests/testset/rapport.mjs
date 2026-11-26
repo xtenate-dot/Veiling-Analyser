@@ -65,7 +65,8 @@ for (const id of ids) {
   invoer.modellen.filter(m => !rs.some(r => r.model === m)).forEach(m => o.push(`| ${m} | NIET UITGEVOERD | - | - | - | - | - | - | - |`));
   for (const r of rs.filter(x => !x.fout)) {
     const bt = r.betrouwbaarheid;
-    o.push(`\n${r.model}: kavel als defect gelezen: ${bt.kavel_defect ? 'ja ("' + bt.kavel_defect_woord + '")' : 'nee'}; modeljaar als eis: ${bt.jaar_eis || 'geen'}; score ${bt.score}${bt.begrensd ? ' (minder dan 2 passende advertenties of niet live: maximaal 24)' : ''}.`);
+    o.push(`\n${r.model}: kavel als defect gelezen: ${bt.kavel_defect ? 'ja ("' + bt.kavel_defect_woord + '")' : 'nee'}; modeljaar als eis: ${bt.jaar_eis || 'geen'}; score ${bt.score}${bt.begrensd ? ' (te weinig of niet bruikbaar bewijs: maximaal 24)' : ''}.`);
+    if (bt.niveau === 'onvoldoende') o.push(`Reden onvoldoende: ${bt.reden || '-'}${bt.weigerreden ? ' [weigerregel: ' + bt.weigerreden + ']' : ''}`);
     // Diagnose van "link bevestigd": welke webadressen heeft het model gezien en hoe verhouden de advertentielinks zich daartoe?
     const bronnen = (r.ruw && r.ruw.prijzen && r.ruw.prijzen.bronnen) || [];
     const host = u => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch (e) { return '?'; } };

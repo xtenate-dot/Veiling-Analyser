@@ -92,7 +92,7 @@ buiten: for (const naam of lijst) {
         herkend: { naam: res.herkenning.naam, ai_naam_klopt: p.verwacht_model ? String(p.verwacht_model).toLowerCase().split(/[^a-z0-9]+/).filter(w => w.length >= 2).every(w => norm(pr.productnaam).includes(w)) : null, zekerheid: res.herkenning.zekerheid },
         vergelijkbaar: pr.tweedehands.map(a => ({ titel: a.titel, prijs: a.prijs, soort: a.soort, platform: a.platform, staat: a.staat, datum: a.datum, url: a.url, bevestigd: a.bevestigd, past: a.past, afkeur: a.afkeur || null, afkeur_detail: a.afkeur_detail || null })),
         waarde: { laag: mp.laag, waarschijnlijk: mp.gemiddeld, hoog: mp.hoog, getoond: gem != null },
-        betrouwbaarheid: { niveau: b.niveau, score: b.score, ai_zei: mp.vertrouwen_ai, passend: b.aantal_passend, verkocht: b.aantal_verkocht, aantal_gevonden: b.aantal_gevonden, begrensd: b.begrensd, kavel_defect: b.kavel_defect, kavel_defect_woord: b.kavel_defect_woord, jaar_eis: b.jaar_eis, factoren: b.factoren },
+        betrouwbaarheid: { niveau: b.niveau, score: b.score, ai_zei: mp.vertrouwen_ai, passend: b.aantal_passend, verkocht: b.aantal_verkocht, aantal_gevonden: b.aantal_gevonden, begrensd: b.begrensd, reden: b.reden, weigerreden: b.weigerreden, afgekeurd: b.afgekeurd, kavel_defect: b.kavel_defect, kavel_defect_woord: b.kavel_defect_woord, jaar_eis: b.jaar_eis, factoren: b.factoren },
         max_bod: gem ? Math.floor(K.bodVoorTotaal(gem * (1 - DOEL), TARIEF)) : null,
         kosten_usd: res.usd, // gemeten uit de usage van alle verzoeken van deze analyse (berekend door de analyse zelf)
         kosten_controle_usd: tel.usd, // tweede, onafhankelijke optelling per verzoek in dit script; moet gelijk zijn
