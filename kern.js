@@ -706,7 +706,8 @@
   function pastBijEisen(titel, e) {
     if (!e.merk && !e.nummers.length && !e.varianten.length) return null;
     var norm = alfaNum(titel), w = woorden(titel);
-    if (e.merk && norm.indexOf(e.merk) === -1) return false;
+    // Veel titels laten het merk weg ("iPhone 13" zonder "Apple"); het merk eisen we dus alleen als er geen typenummer is om op te toetsen
+    if (e.merk && !e.nummers.length && norm.indexOf(e.merk) === -1) return false;
     for (var i = 0; i < e.nummers.length; i++) if (norm.indexOf(e.nummers[i]) === -1) return false;
     for (var j = 0; j < VARIANT_WOORDEN.length; j++) {
       var v = VARIANT_WOORDEN[j], inTitel = w.indexOf(v) !== -1, eis = e.varianten.indexOf(v) !== -1;

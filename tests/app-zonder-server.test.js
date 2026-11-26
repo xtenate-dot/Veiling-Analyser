@@ -119,6 +119,10 @@ const STAP2_JSON = { productnaam: 'Apple iPhone 13 128GB', categorie: 'Telefoons
   check('Bod van de pagina gelezen (€300)', k.huidig_bod === 300 && k.bod_van_pagina === true, k.huidig_bod);
   check('Kosten van de pagina: 18% + €2,50, volledig', k.tarief_bron === 'pagina' && k.veiling_tarief.opgeld === 0.18 && k.veiling_tarief.vast === 2.5 && k.veiling_tarief.regeling === 'volledig', k.veiling_tarief);
   check('Totale kosten €431,365', Math.abs(k.kosten.totaal - 431.365) < 1e-9, k.kosten.totaal);
+  check('Code bepaalt de betrouwbaarheid (AI zei "middel", code rekent zelf)', k.prijzen.betrouwbaarheid && typeof k.prijzen.betrouwbaarheid.score === 'number' && k.prijzen.marktplaats.vertrouwen_ai === 'middel' && ['laag', 'middel', 'hoog', 'onvoldoende'].includes(k.prijzen.marktplaats.vertrouwen), k.prijzen.betrouwbaarheid);
+  check('Herkenning: Apple iPhone 13 zeker herkend (modelnummer in titel)', k.herkenning && k.herkenning.zekerheid === 'zeker' && k.herkenning.merk === 'Apple', k.herkenning);
+  const tekstRes = await page.textContent('#analyse-result');
+  check('Resultaat toont herkend product en betrouwbaarheid met uitleg', /Herkend product/.test(tekstRes) && /Zeker herkend/.test(tekstRes) && /Waar komt dit cijfer vandaan/.test(tekstRes) && /Aantal vergelijkbare producten/.test(tekstRes));
   check('Marge €168,635 → Aanrader', Math.abs(k.kosten.marge - 168.635) < 1e-9 && k.advies === 'kopen', [k.kosten.marge, k.advies]);
   check('Max bod €334, quitte €418', k.maxBod === 334 && k.breakEvenBod === 418, [k.maxBod, k.breakEvenBod]);
   const t334 = await page.evaluate(() => { const t = tariefVan(kavels[0]); return [berekenKosten(334, t).totaal, berekenKosten(335, t).totaal]; });
@@ -183,8 +187,9 @@ const STAP2_JSON = { productnaam: 'Apple iPhone 13 128GB', categorie: 'Telefoons
   await page.waitForSelector('#analyse-result .hero', { timeout: 10000 });
   const k4 = await page.evaluate(() => kavels[0]);
   check('Terugval: schatting zonder internet, met waarschuwing', k4.live === false && k4.waarschuwingen.some(w => /niet beschikbaar/.test(w)), k4.waarschuwingen);
-  check('Terugval: vertrouwen max "middel"', k4.prijzen.marktplaats.vertrouwen === 'middel');
-  check('Terugval: geen hard koop/skip-advies, wel een maximaal bod', k4.advies === 'twijfel' && k4.maxBod != null && /schatting zonder gevonden advertenties/.test(k4.adviesReden), [k4.advies, k4.maxBod, k4.adviesReden]);
+  check('Terugval: waardering onvoldoende (niet live), dus geen prijs, geen maximaal bod en geen koop/skip-advies', k4.prijzen.marktplaats.vertrouwen === 'onvoldoende' && k4.advies === 'twijfel' && k4.maxBod == null && /onvoldoende betrouwbaar/.test(k4.adviesReden), [k4.prijzen.marktplaats.vertrouwen, k4.advies, k4.maxBod, k4.adviesReden]);
+  check('Terugval: scherm meldt dat het maximaal bod nog onbekend is', /Nog onbekend/.test(await page.textContent('#analyse-result')) && /Onvoldoende/.test(await page.textContent('#analyse-result')));
+  check('Terugval: eigen prijs invullen herstelt het advies', await page.evaluate(() => { var k = kavels[0]; k.controle = { op: Date.now(), mp_gem: 1500 }; herberekenKosten(k); var ok = k.maxBod != null && k.advies !== 'wacht'; delete k.controle; herberekenKosten(k); return ok && k.maxBod == null; }));
   const setTest = await page.evaluate(() => [partijAantal({ titel: 'Klauke persmatrijzen set kunststoffen koffer', pagina: { aantal_stuks: 11 }, url: '' }), partijAantal({ titel: 'Partij 20 stuks boormachines', pagina: { aantal_stuks: 20 }, url: '' })]);
   check('Set in koffer telt als één artikel, echte partij niet', setTest[0] === null && setTest[1] === 20, setTest);
   check('Terugval: HNVI-tarief 19% gebruikt', k4.veiling_tarief.opgeld === 0.19 && k4.tarief_bron === 'huis', k4.veiling_tarief);

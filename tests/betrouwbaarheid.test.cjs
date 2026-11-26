@@ -66,6 +66,11 @@ t('door gebruiker opgegeven naam telt als eis', () => {
   const b = K.berekenBetrouwbaarheid(pr([ad('Sony WH-1000XM4 koptelefoon', 150), ad('Sony WH-1000XM5', 250)]), { gevonden: true }, 'Sony WH-1000XM4', 'Sony WH-1000XM4', nu);
   assert.strictEqual(b.aantal_passend, 1);
 });
+t('titel zonder merk maar met modelnummer past; zonder typenummer is het merk nodig', () => {
+  assert.strictEqual(K.berekenBetrouwbaarheid(pr([ad('DCD791 accuboor 18V', 150)]), pagina, 'x', '', nu).aantal_passend, 1);
+  const p2 = { gevonden: true, merk: 'Bosch', model: 'boormachine', variant: '' };
+  assert.strictEqual(K.berekenBetrouwbaarheid(pr([ad('Bosch boormachine groen', 40), ad('Makita boormachine', 45)]), p2, 'x', '', nu).aantal_passend, 1);
+});
 t('herkenning: merk + modelnummer in titel = zeker', () => {
   assert.strictEqual(K.bepaalHerkenning(pagina, 'DeWalt DCD791', '', null).zekerheid, 'zeker');
 });

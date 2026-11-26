@@ -479,7 +479,14 @@ function regelingOpties() {
 function verkoopkostenVan(k) {
   return (typeof k.verkoopkosten === 'number' && isFinite(k.verkoopkosten) && k.verkoopkosten >= 0) ? k.verkoopkosten : getInst().verkoopkosten;
 }
+// De code beoordeelt de betrouwbaarheid van de gevonden prijzen. Is die onvoldoende en heeft de gebruiker de prijs niet zelf gecontroleerd,
+// dan tonen we geen verwachte verkoopprijs, maximaal bod of koopadvies: liever geen getal dan een onjuist getal.
+function waarderingOnvoldoende(k) {
+  var b = k && !k.controle && k.prijzen && k.prijzen.betrouwbaarheid;
+  return !!b && b.niveau === 'onvoldoende';
+}
 function verkoopprijsVan(k) {
+  if (waarderingOnvoldoende(k)) return null;
   var n = partijGeschat(k);
   if (n) { var per = partijPerStuk(k); return per > 0 ? Math.round(per * n * PARTIJ_FACTOR) : null; }
   var mp = k.prijzen && k.prijzen.marktplaats ? k.prijzen.marktplaats : null;
@@ -492,7 +499,7 @@ function prijsZonderBewijs(k) {
   var p = k && k.prijzen;
   if (!p || p.live === false) return false;
   var mp = p.marktplaats || {};
-  return (!p.tweedehands || p.tweedehands.length === 0) && (mp.vertrouwen || 'laag') === 'laag';
+  return (!p.tweedehands || p.tweedehands.length === 0) && ['laag', 'onvoldoende'].indexOf(mp.vertrouwen || 'laag') !== -1;
 }
 // Datum van de gebruikte prijzen: 'van vandaag' alleen als dat klopt
 function prijsDatumTxt(pr) {
@@ -513,7 +520,7 @@ function herberekenKosten(k) {
   var bod = k.huidig_bod > 0 ? k.huidig_bod : (k.kosten && k.kosten.bod > 0 ? k.kosten.bod : null);
   if (!bod) {
     k.kosten = null; k.advies = 'twijfel'; k.roi = 50;
-    k.adviesReden = k.maxBod == null ? 'Vul het bod in voor de margeberekening.'
+    k.adviesReden = waarderingOnvoldoende(k) ? 'De waardering is onvoldoende betrouwbaar (' + k.prijzen.betrouwbaarheid.reden + ') Controleer het product hieronder, of vul zelf de verkoopprijs in onder Prijzen controleren.' : k.maxBod == null ? 'Vul het bod in voor de margeberekening.'
       : k.maxBod > 0 ? 'Bied maximaal ' + fmt(k.maxBod) + ' voor ' + pctTxt(doel * 100) + '% marge (break-even bij ' + fmt(k.breakEvenBod) + ').'
       : 'Zelfs bij een heel laag bod blijft er na kosten te weinig marge over.';
     return;
@@ -528,7 +535,9 @@ function herberekenKosten(k) {
   k.kosten = kk;
   if (kk.marge == null) {
     k.advies = 'twijfel'; k.roi = 50;
-    k.adviesReden = 'Totale kosten ' + fmt(kk.totaal) + '. Er is geen marktwaarde bekend, dus de marge is niet te berekenen.';
+    k.adviesReden = waarderingOnvoldoende(k)
+      ? 'Totale kosten ' + fmt(kk.totaal) + '. De waardering is onvoldoende betrouwbaar (' + k.prijzen.betrouwbaarheid.reden + ') Controleer het product hieronder, of vul zelf de verkoopprijs in onder Prijzen controleren; dan reken ik het advies uit.'
+      : 'Totale kosten ' + fmt(kk.totaal) + '. Er is geen marktwaarde bekend, dus de marge is niet te berekenen.';
     return;
   }
   var m = kk.marge, pctExact = m / gem * 100, pct = Math.round(pctExact), advies = 'twijfel', roi;
@@ -1062,6 +1071,7 @@ function bouwKavel(res, inv) {
       aantal_biedingen: pagina.aantal_biedingen, sluit: pagina.sluit, sluit_iso: pagina.sluit_iso, veiling_naam: pagina.veiling_naam || null, locatie: pagina.locatie, opmerkingen: pagina.opmerkingen, foto: pagina.foto || null,
       voertuig: !!pagina.voertuig, kenteken: pagina.kenteken || null, kilometerstand: pagina.kilometerstand || null, bouwjaar: pagina.bouwjaar || null, rdw: pagina.rdw || null } : null,
     zoekterm: (pagina && pagina.zoekterm) || null,
+    herkenning: res.herkenning || null,
     waarschuwingen: res.waarschuwingen || [],
     api_usd: typeof res.usd === 'number' ? res.usd : null,
     eigen_bod: type === 'eigen', toegevoegd: Date.now(), status: 'klaar'
@@ -1168,6 +1178,7 @@ function adviesInfo(a) {
 function vertrouwenInfo(v) {
   if (v === 'hoog') return { label: 'Hoog', cls: 'pos' };
   if (v === 'middel') return { label: 'Gemiddeld', cls: 'warn' };
+  if (v === 'onvoldoende') return { label: 'Onvoldoende', cls: 'neg' };
   return { label: 'Laag', cls: 'neg' };
 }
 function veilingVan(k) { return k.veiling || (k.kosten && k.kosten.site) || 'Onbekend'; }
@@ -1213,7 +1224,8 @@ function adviesRedenen(d) {
     r.push(['ok', 'De verkoopprijs komt uit jouw controle van vergelijkbare advertenties (' + new Date(d.controle.op).toLocaleDateString('nl-NL') + ').']);
     if (d.prijzen && d.prijzen.nieuwprijs && gem >= d.prijzen.nieuwprijs) r.push(['warn', 'De tweedehands prijs ligt niet onder de nieuwprijs. Controleer beide bedragen.']);
   } else if (mp) {
-    if (mp.vertrouwen === 'hoog') r.push(['ok', 'Er zijn genoeg vergelijkbare advertenties gevonden; de verkoopprijs is goed onderbouwd.']);
+    if (mp.vertrouwen === 'onvoldoende') r.push(['bad', 'De waardering is onvoldoende betrouwbaar' + (d.prijzen.betrouwbaarheid ? ': ' + d.prijzen.betrouwbaarheid.reden : '.') + ' Daarom toont de app geen verwachte verkoopprijs en geen maximaal bod.']);
+    else if (mp.vertrouwen === 'hoog') r.push(['ok', 'Er zijn genoeg vergelijkbare advertenties gevonden; de verkoopprijs is goed onderbouwd.']);
     else if (mp.vertrouwen === 'middel') r.push(['warn', 'De verkoopprijs is indicatief: er zijn maar enkele vergelijkbare advertenties.']);
     else r.push(['warn', 'De verkoopprijs is onzeker: er is weinig vergelijkbaar aanbod gevonden.']);
     if (mp.hoog && mp.laag && mp.gemiddeld && (mp.hoog - mp.laag) / mp.gemiddeld > 0.6) r.push(['warn', 'De prijzen lopen sterk uiteen (' + fmt(mp.laag) + ' tot ' + fmt(mp.hoog) + ').']);
@@ -1255,9 +1267,69 @@ function kostenBalk(k, mpGem) {
   return h;
 }
 
+
+// ── Productherkenning en betrouwbaarheid (berekend door de code) ──
+function herkenningKaart(d, idx) {
+  var hk = d.herkenning;
+  if (!hk) return '';
+  var zeker = hk.zekerheid === 'zeker' || hk.zekerheid === 'bevestigd';
+  var label = { zeker: 'Zeker herkend', bevestigd: 'Door jou bevestigd', onzeker: 'Controleer dit product', onvoldoende: 'Niet herkend' }[hk.zekerheid] || 'Controleer dit product';
+  var cls = zeker ? 'pos' : hk.zekerheid === 'onzeker' ? 'warn' : 'neg';
+  var id = String(d.id);
+  var h = '<div class="card"><div class="card-h"><h2>Herkend product</h2><span class="conf ' + cls + '"><i></i>' + label + '</span></div>';
+  h += '<p style="margin:0 0 8px"><b>' + esc(hk.naam || d.titel || 'Onbekend product') + '</b></p>';
+  if (hk.redenen && hk.redenen.length) h += '<ul class="attn">' + hk.redenen.map(function(r) { return '<li>' + esc(r) + '</li>'; }).join('') + '</ul>';
+  if (!zeker) h += '<p class="help" style="margin-top:6px">De waardering klopt alleen als dit het juiste product is. Pas de gegevens aan als iets niet klopt en laat het opnieuw waarderen.</p>';
+  if (idx >= 0) {
+    h += '<details' + (zeker ? '' : ' open') + ' style="margin-top:10px"><summary style="cursor:pointer;font-weight:600">' + (zeker ? 'Product wijzigen' : 'Product controleren of corrigeren') + '</summary>';
+    h += '<div style="display:grid;gap:8px;margin-top:10px">';
+    h += '<label class="opt" for="hk-merk-' + esc(id) + '">Merk</label><input class="input" id="hk-merk-' + esc(id) + '" value="' + esc(hk.merk || '') + '" maxlength="60">';
+    h += '<label class="opt" for="hk-model-' + esc(id) + '">Model of type</label><input class="input" id="hk-model-' + esc(id) + '" value="' + esc(hk.model || '') + '" maxlength="80">';
+    h += '<label class="opt" for="hk-uitv-' + esc(id) + '">Uitvoering (opslag, kleur, maat, generatie)</label><input class="input" id="hk-uitv-' + esc(id) + '" value="' + esc(hk.variant || '') + '" maxlength="80">';
+    h += '<div class="kc-actions">';
+    h += '<button class="btn btn-primary btn-sm" onclick="herwaardeerMetProduct(\'' + esc(id) + '\')">' + ic('refresh') + 'Opnieuw waarderen met deze gegevens</button>';
+    if (!zeker) h += '<button class="btn btn-secondary btn-sm" onclick="bevestigHerkenning(\'' + esc(id) + '\')">Dit klopt</button>';
+    h += '</div><p class="help">Opnieuw waarderen is een nieuwe analyse en gebruikt één analyse van je tegoed.</p></div></details>';
+  }
+  return h + '</div>';
+}
+function bevestigHerkenning(id) {
+  var i = kIdx(id); if (i < 0) return;
+  var k = kavels[i];
+  if (k.herkenning) { k.herkenning.zekerheid = 'bevestigd'; k.herkenning.redenen = (k.herkenning.redenen || []).concat(['Je hebt bevestigd dat dit het juiste product is.']); }
+  slaKavelsOp(); toonAnalyseResultaat(k, true);
+  toast('Herkenning bevestigd');
+}
+function herwaardeerMetProduct(id) {
+  var i = kIdx(id); if (i < 0) return;
+  var g = function(p) { var e = document.getElementById('hk-' + p + '-' + id); return e ? e.value.trim() : ''; };
+  var naam = [g('merk'), g('model'), g('uitv')].filter(Boolean).join(' ');
+  if (!naam) { toast('Vul minstens een merk of model in'); return; }
+  bevestig('Opnieuw waarderen?', 'De app zoekt opnieuw prijzen voor "' + naam + '". Dit gebruikt één analyse van je tegoed.', 'Opnieuw waarderen', false, function() {
+    heranalyseer(i);
+    document.getElementById('extra-txt').value = naam;
+    analyseer();
+  });
+}
+function betrouwbaarheidKaart(d) {
+  var b = d.prijzen && d.prijzen.betrouwbaarheid;
+  if (!b || d.controle) return '';
+  var c = vertrouwenInfo(b.niveau);
+  var h = '<div class="card"><div class="card-h"><h2>Betrouwbaarheid van de waardering</h2><span class="conf ' + c.cls + '"><i></i>' + c.label + ' &middot; ' + b.score + ' / 100</span></div>';
+  h += '<p style="margin:0 0 8px">' + esc(b.reden) + '</p>';
+  if (b.niveau === 'onvoldoende') h += '<p class="help">Er is geen verwachte verkoopprijs of maximaal bod getoond omdat die niet te onderbouwen zijn. Controleer het herkende product, of vul zelf de verkoopprijs in onder Prijzen controleren.</p>';
+  h += '<details style="margin-top:8px"><summary style="cursor:pointer;font-weight:600">Waar komt dit cijfer vandaan?</summary><table class="ctable" style="margin-top:8px"><tbody>';
+  (b.factoren || []).forEach(function(f) {
+    h += '<tr><td>' + esc(f.naam) + '<small>' + esc(f.tekst) + '</small></td><td>' + (f.max ? f.punten + ' / ' + f.max : (f.punten > 0 ? '+' : '') + f.punten) + '</td></tr>';
+  });
+  h += '</tbody></table><p class="help">Het cijfer wordt door de app zelf berekend uit de gevonden advertenties. Het oordeel van het AI-model telt hierin niet mee. Advertentiedatums zijn alleen bekend als ze in het zoekresultaat stonden.</p></details></div>';
+  return h;
+}
+
 function platformKaart(naam, p, tagsLabel, tags, ctl) {
   var c = vertrouwenInfo(p.vertrouwen);
   var h = '<div class="card"><div class="plat-h"><h3>' + naam + '</h3>' + (ctl ? '<span class="conf pos"><i></i>Gecontroleerd</span>' : '<span class="conf ' + c.cls + '"><i></i>Betrouwbaarheid ' + c.label.toLowerCase() + '</span>') + '</div>';
+  if (!ctl && p.vertrouwen === 'onvoldoende') h += '<div class="tip">Onvoldoende onderbouwd: deze prijzen zijn alleen een indicatie van het AI-model en worden niet voor het advies gebruikt.</div>';
   if (ctl) {
     h += '<div class="range">' + (ctl.mp_laag ? '<span>' + fmt(ctl.mp_laag) + '</span>' : '') + '<b>' + fmt(p.gemiddeld) + '</b></div>';
     h += '<div class="kc-meta">' + (ctl.mp_laag ? 'Laagste &middot; gemiddeld &middot; ' : 'Gemiddeld &middot; ') + 'door jou gecontroleerd op ' + new Date(ctl.op).toLocaleDateString('nl-NL') + '. Verkooptijd (schatting): ' + esc(p.verkooptijd || '-') + '</div>';
@@ -1496,6 +1568,9 @@ function toonAnalyseResultaat(d, behoudScroll) {
   }
   h += '</div>';
 
+  h += herkenningKaart(d, idx);
+  h += betrouwbaarheidKaart(d);
+
   // Financiële analyse
   var vkst = verkoopkostenVan(d);
   h += '<div class="card"><div class="card-h"><h2>Financiële analyse</h2>';
@@ -1714,6 +1789,8 @@ function maakKavelKaart(k, i, opts) {
 
   if (ond) {
     h += '<div class="kc-result"><span class="kc-meta">Partij van meerdere stuks: controleer eerst de opbrengst per stuk.</span></div>';
+  } else if (waarderingOnvoldoende(k)) {
+    h += '<div class="kc-result"><span class="kc-meta">Waardering onvoldoende betrouwbaar: controleer het product of vul zelf de prijs in</span><span class="conf neg"><i></i>Betrouwbaarheid onvoldoende</span></div>';
   } else if (k.kosten && k.kosten.marge != null) {
     var gemK = verkoopprijsVan(k);
     var pct = gemK ? Math.round(k.kosten.marge / gemK * 100) : null;
